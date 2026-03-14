@@ -4,6 +4,7 @@ interface ToolUseBlockProps {
   toolName: string;
   toolInput: Record<string, any>;
   toolId: string;
+  onPreviewFile?: (absolutePath: string) => void;
 }
 
 // Color mapping for MCP server tools
@@ -34,16 +35,12 @@ function getToolBadge(name: string): { label: string; color: string } | null {
 }
 
 function getToolDisplayName(name: string): string {
-  // Strip MCP prefix for cleaner display
   return name
     .replace(/^mcp__(trend[-_]pulse|cf[-_]browser|notebooklm)__/, "")
     .replace(/_/g, " ");
 }
 
 function getToolSummary(name: string, input: Record<string, any>): string {
-  const displayName = getToolDisplayName(name);
-
-  // Built-in tools
   switch (name) {
     case "Read":
       return input.file_path || "";
@@ -62,7 +59,6 @@ function getToolSummary(name: string, input: Record<string, any>): string {
       return input.url || "";
   }
 
-  // MCP tools - show key params
   if (input.topic) return input.topic;
   if (input.query) return input.query;
   if (input.url) return input.url;
@@ -72,10 +68,25 @@ function getToolSummary(name: string, input: Record<string, any>): string {
   return JSON.stringify(input).slice(0, 60);
 }
 
-export function ToolUseBlock({ toolName, toolInput, toolId }: ToolUseBlockProps) {
+const PREVIEWABLE_EXTS = [
+  "png", "jpg", "jpeg", "gif", "webp", "svg",
+  "pdf", "md", "txt", "json", "ts", "tsx", "js", "jsx", "py", "html", "css",
+  "mp3", "wav", "m4a", "mp4", "webm",
+];
+
+function isPreviewable(filePath: string): boolean {
+  const ext = filePath.split(".").pop()?.toLowerCase() || "";
+  return PREVIEWABLE_EXTS.includes(ext);
+}
+
+export function ToolUseBlock({ toolName, toolInput, toolId, onPreviewFile }: ToolUseBlockProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const colorClass = getToolColor(toolName);
   const badge = getToolBadge(toolName);
+
+  const filePath = toolInput.file_path as string | undefined;
+  const canPreview = onPreviewFile && filePath && isPreviewable(filePath) &&
+    (toolName === "Write" || toolName === "Read" || toolName === "Edit");
 
   return (
     <div className={`my-2 border rounded ${colorClass}`}>
@@ -96,9 +107,22 @@ export function ToolUseBlock({ toolName, toolInput, toolId }: ToolUseBlockProps)
             {getToolSummary(toolName, toolInput)}
           </span>
         </div>
-        <span className="text-xs text-gray-400 shrink-0 ml-2">
-          {isExpanded ? "v" : ">"}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+          {canPreview && (
+            <span
+              onClick={(e) => {
+                e.stopPropagation();
+                onPreviewFile!(filePath!);
+              }}
+              className="text-[10px] px-2 py-0.5 rounded bg-blue-100 text-blue-600 hover:bg-blue-200 cursor-pointer transition-colors"
+            >
+              Preview
+            </span>
+          )}
+          <span className="text-xs text-gray-400">
+            {isExpanded ? "▼" : "▶"}
+          </span>
+        </div>
       </button>
       {isExpanded && (
         <div className="p-2 border-t border-gray-200/50">

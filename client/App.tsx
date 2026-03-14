@@ -3,6 +3,7 @@ import useWebSocket, { ReadyState } from "react-use-websocket";
 import { Sidebar } from "./components/Sidebar";
 import { ChatWindow } from "./components/ChatWindow";
 import { FileExplorer } from "./components/FileExplorer";
+import { FilePreviewModal } from "./components/FilePreviewModal";
 import { PublishDialog } from "./components/PublishDialog";
 import { SettingsPage } from "./components/SettingsPage";
 
@@ -47,6 +48,7 @@ export default function App() {
   const [showFiles, setShowFiles] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showPublish, setShowPublish] = useState(false);
+  const [previewFile, setPreviewFile] = useState<{ relativePath: string; sessionId: string } | null>(null);
   const [defaultWorkspace, setDefaultWorkspace] = useState("");
   const [language, setLanguage] = useState<Language>("zh-TW");
 
@@ -282,6 +284,23 @@ export default function App() {
     setIsLoading(false);
   };
 
+  // Preview a file — accepts absolute or relative path
+  const handlePreviewFile = (filePath: string) => {
+    if (!selectedSessionId) return;
+    const session = sessions.find((s) => s.id === selectedSessionId);
+    let relativePath = filePath;
+    if (session && filePath.startsWith(session.workspace_path)) {
+      relativePath = filePath.slice(session.workspace_path.length).replace(/^\//, "");
+    }
+    setPreviewFile({ relativePath, sessionId: selectedSessionId });
+  };
+
+  // Preview from file explorer (already relative)
+  const handleExplorerPreview = (relativePath: string) => {
+    if (!selectedSessionId) return;
+    setPreviewFile({ relativePath, sessionId: selectedSessionId });
+  };
+
   useEffect(() => {
     fetchSessions();
     fetchSettings();
@@ -325,6 +344,7 @@ export default function App() {
             onShowFiles={() => setShowFiles(!showFiles)}
             onShowPublish={() => setShowPublish(true)}
             onNewSession={createSession}
+            onPreviewFile={handlePreviewFile}
             showFilesActive={showFiles}
             language={language}
           />
@@ -333,8 +353,18 @@ export default function App() {
             sessionId={selectedSessionId}
             isVisible={showFiles}
             onToggle={() => setShowFiles(!showFiles)}
+            onPreviewFile={handleExplorerPreview}
           />
         </>
+      )}
+
+      {/* File preview modal */}
+      {previewFile && (
+        <FilePreviewModal
+          sessionId={previewFile.sessionId}
+          filePath={previewFile.relativePath}
+          onClose={() => setPreviewFile(null)}
+        />
       )}
 
       {/* Publish dialog */}

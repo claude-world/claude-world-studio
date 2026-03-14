@@ -28,6 +28,7 @@ interface ChatWindowProps {
   onShowFiles: () => void;
   onShowPublish: () => void;
   onNewSession: () => void;
+  onPreviewFile?: (absolutePath: string) => void;
   showFilesActive: boolean;
   language: Language;
 }
@@ -464,6 +465,7 @@ export function ChatWindow({
   onShowFiles,
   onShowPublish,
   onNewSession,
+  onPreviewFile,
   showFilesActive,
   language,
 }: ChatWindowProps) {
@@ -600,6 +602,7 @@ export function ChatWindow({
                   toolName={toolName}
                   toolId={toolId}
                   toolInput={toolInput}
+                  onPreviewFile={onPreviewFile}
                 />
               );
             }
