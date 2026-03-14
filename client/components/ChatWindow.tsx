@@ -258,9 +258,46 @@ const UI_TEXT: Record<Language, {
 const STEP_TOOLS = ["trend-pulse", "cf-browser + notebooklm", "publish_to_threads"];
 const STEP_COLORS = ["bg-emerald-500", "bg-blue-500", "bg-pink-500"];
 
-function MessageBubble({ message }: { message: Message }) {
+// Detect if text inside backticks looks like a file path with a previewable extension
+const PREVIEW_EXT_RE = /\.(png|jpg|jpeg|gif|webp|svg|pdf|mp3|wav|m4a|mp4|webm|md|txt|json|html|css|py|ts|tsx|js|jsx)$/i;
+function isPreviewablePath(text: string): boolean {
+  return text.startsWith("/") && PREVIEW_EXT_RE.test(text) && !text.includes(" ");
+}
+
+function MessageBubble({
+  message,
+  onPreviewFile,
+}: {
+  message: Message;
+  onPreviewFile?: (path: string) => void;
+}) {
   const isUser = message.role === "user";
   const content = message.content || "";
+
+  // Custom renderer: make file paths in inline `code` clickable
+  const codeComponent = React.useMemo(() => {
+    if (!onPreviewFile) return undefined;
+    return function InlineCode(props: any) {
+      const { children, className } = props;
+      // Only handle inline code (no className = not a code block)
+      if (className) {
+        return <code className={className}>{children}</code>;
+      }
+      const text = String(children);
+      if (isPreviewablePath(text)) {
+        return (
+          <code
+            className="text-blue-600 bg-blue-50 px-1 py-0.5 rounded text-xs cursor-pointer hover:bg-blue-100 hover:underline transition-colors"
+            onClick={() => onPreviewFile(text)}
+            title="Click to preview"
+          >
+            {children}
+          </code>
+        );
+      }
+      return <code>{children}</code>;
+    };
+  }, [onPreviewFile]);
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
@@ -275,7 +312,9 @@ function MessageBubble({ message }: { message: Message }) {
           <p className="whitespace-pre-wrap break-words">{content}</p>
         ) : (
           <div className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-2 prose-code:text-pink-600 prose-code:bg-pink-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-pre:bg-gray-800 prose-pre:text-gray-100 prose-pre:rounded-lg prose-a:text-blue-600">
-            <Markdown>{content}</Markdown>
+            <Markdown components={codeComponent ? { code: codeComponent } : undefined}>
+              {content}
+            </Markdown>
           </div>
         )}
       </div>
@@ -610,7 +649,7 @@ export function ChatWindow({
               return <ResultBlock key={msg.id} message={msg} />;
             }
             if (msg.role === "user" || msg.role === "assistant") {
-              return <MessageBubble key={msg.id} message={msg} />;
+              return <MessageBubble key={msg.id} message={msg} onPreviewFile={onPreviewFile} />;
             }
             return null;
           })}

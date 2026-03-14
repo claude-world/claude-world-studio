@@ -127,6 +127,7 @@ Today is ${new Date().toISOString().split("T")[0]}. Always be aware of the curre
 - For research requests: combine trend-pulse + cf-browser (browser_markdown) + WebSearch for comprehensive results.
 - **Publishing flow**: ALWAYS use trend-pulse's publish_to_threads (it has built-in quality gate score ≥ 70). Steps: get_scoring_guide → score content → get_review_checklist → publish_to_threads.
 - When writing social posts: use get_content_brief(topic) first for strategy, get_platform_specs("threads") for specs, then get_scoring_guide() to self-score before publishing.
+- **File paths**: When you create, download, or save ANY file (screenshots, PDFs, audio, images, artifacts), ALWAYS include the **full absolute file path** in your response. Format it clearly so the user can find and preview the file, e.g.: "已儲存至 \`/path/to/file.pdf\`". This is critical for UX — the user's UI can detect and make these paths clickable for preview.
 
 ## Full Pipeline Workflow
 1. **Discover**: get_trending(sources="", geo, count=20) — ALL 20 sources
