@@ -6,6 +6,7 @@
   "main": "electron/main.cjs",
   "bin": {
     "claude-world-studio": "bin/cli.js",
+    "studio": "bin/cli.js",
     "setup-mcp": "bin/setup-mcp.sh"
   },
   "files": [
@@ -44,7 +45,9 @@
     "start": "tsx server/server.ts",
     "build": "vite build",
     "electron:dev": "npm run build && electron .",
-    "electron:build": "npm run build && electron-builder --mac"
+    "electron:build": "npm run build && electron-builder --mac",
+    "typecheck": "tsc --noEmit",
+    "test:cli": "node bin/cli.js help > /dev/null"
   },
   "build": {
     "appId": "com.claude-world.studio",

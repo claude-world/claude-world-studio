@@ -1,66 +1,123 @@
 ---
-description: Claude World Studio CLI — publish to Threads, check accounts, view history
-triggers:
-  - publish to threads
-  - post to threads
-  - social media
-  - studio publish
-  - studio status
-  - studio accounts
-  - publish history
+name: studio
+description: Claude World Studio CLI - full command reference for all CLI operations
+user_invocable: false
 ---
 
 # Claude World Studio CLI
 
-## Prerequisites
+Full CLI for Claude World Studio. Maps 1:1 to the REST API + WebSocket.
 
-Studio server must be running (`claude-world-studio` or `npm run dev`).
-Check with: `claude-world-studio status`
+## Quick Reference
 
-## Commands
-
-### Check Status
 ```bash
-claude-world-studio status
+# Server
+studio serve                    # Start web UI
+studio status                   # Check if running
+
+# Sessions
+studio session list
+studio session create --title "Research" --workspace /path
+studio session get <ID>
+studio session rename <ID> --title "New Title"
+studio session delete <ID>
+studio session messages <ID> --limit 20
+
+# Chat (WebSocket streaming)
+studio chat --message "Find trends" --json
+studio chat --session <ID> --message "Publish the best"
+echo "What's trending?" | studio chat --json
+studio interrupt <ID>
+
+# Accounts
+studio account list
+studio account create --name "Main" --handle "@me" --platform threads --token TOKEN
+studio account update <ID> --token NEW_TOKEN
+studio account delete <ID>
+
+# Settings
+studio settings get
+studio settings detect          # Scan system for MCP tools
+studio settings apply           # Apply detected values
+studio settings set --language en --default-workspace /path
+
+# Publishing
+studio publish --account <ID> --text "Hello!" --score 85
+studio publish --account <ID> --text "Vote!" --poll "Option A|Option B"
+studio history --limit 10
+
+# Files
+studio file list <SESSION_ID> --depth 2
+studio file read <SESSION_ID> src/index.ts
 ```
 
-### List Accounts
-```bash
-claude-world-studio accounts
+## Global Flags
+
+| Flag | Env Var | Default | Description |
+|------|---------|---------|-------------|
+| `--json` | — | false | JSON output for all commands |
+| `--port N` | `STUDIO_PORT` | 3001 | Server port |
+| `--host H` | `STUDIO_HOST` | 127.0.0.1 | Server host |
+
+## Chat Command
+
+The `chat` command connects via WebSocket for real-time streaming.
+
+**Auto-create session**: Omit `--session` to auto-create. Session ID is printed to stderr.
+
+**Input sources** (priority order):
+1. `--message "text"` flag
+2. stdin pipe: `echo "text" | studio chat`
+
+**Output modes**:
+- Default: assistant text → stdout, tool calls → stderr (with `--verbose`)
+- `--json`: NDJSON — one JSON object per event line
+
+**NDJSON event types**:
+```jsonl
+{"type":"assistant_message","content":"Here are the trends..."}
+{"type":"tool_use","toolName":"get_trending","toolId":"..."}
+{"type":"tool_result","content":"..."}
+{"type":"result","success":true,"cost_usd":0.03}
 ```
-Returns account IDs needed for publishing.
 
-### Publish to Threads
+**Ctrl+C** sends an interrupt to the session and exits with code 130.
+
+## Headless Pipeline Example
+
 ```bash
-claude-world-studio publish \
-  --account ACCOUNT_ID \
-  --text "Post content here" \
-  --score 75
+# Full pipeline: create session → chat → publish
+SESSION=$(studio session create --title "Auto Pipeline" --json | jq -r '.id')
+
+# Research
+studio chat --session $SESSION --message "Find top 3 trending AI topics in Taiwan" --json > trends.jsonl
+
+# Get the assistant's final response
+RESPONSE=$(grep '"type":"assistant_message"' trends.jsonl | tail -1 | jq -r '.content')
+
+# Publish
+studio publish --account acc123 --text "$RESPONSE" --score 80 --json
 ```
 
-Options:
-- `--account ID` — Account ID from `accounts` command (required)
-- `--text TEXT` — Post content, max 500 chars (required)
-- `--score N` — Quality score, must be >= 70 (required by quality gate)
-- `--image-url URL` — Public image URL to attach
-- `--poll "Option A|Option B|Option C"` — Poll (2-4 options, pipe-separated)
-- `--link-comment URL` — Auto-reply with link (keeps URL out of post body)
-- `--tag TOPIC` — Topic tag, no # prefix
+## Settings Keys
 
-### View History
-```bash
-claude-world-studio history --limit 20
-```
+| CLI Flag | API Key | Description |
+|----------|---------|-------------|
+| `--language` | language | UI language (en, zh-TW, ja) |
+| `--trend-pulse-python` | trendPulseVenvPython | trend-pulse venv python path |
+| `--cf-browser-python` | cfBrowserVenvPython | cf-browser venv python path |
+| `--notebooklm-path` | notebooklmServerPath | NotebookLM server.py path |
+| `--cf-browser-url` | cfBrowserUrl | CF Browser worker URL |
+| `--cf-browser-key` | cfBrowserApiKey | CF Browser API key |
+| `--default-workspace` | defaultWorkspace | Default workspace path |
 
-## Workflow
+## Instructions for Claude Code
 
-1. `claude-world-studio status` — ensure server running
-2. `claude-world-studio accounts` — get account ID
-3. Write content (max 500 chars, score >= 70)
-4. `claude-world-studio publish --account ID --text "..." --score N`
+When operating Studio via CLI:
 
-## Quality Rules
-- Score must be >= 70
-- Text must be <= 500 chars
-- No URLs in post body (use `--link-comment` instead)
-- Polls use `--poll` flag, never text-based A/B/C in body
+1. **Always use `--json`** for programmatic access
+2. **Check status first**: `studio status --json` before other commands
+3. **Chat auto-creates sessions** — no need to manually create unless reusing
+4. **Parse NDJSON** line by line for chat output
+5. **Use stdin pipe** for long messages or multi-line content
+6. **Interrupt via CLI** rather than killing the process: `studio interrupt <ID>`
