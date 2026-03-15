@@ -80,11 +80,18 @@ export default function App() {
       case "connected":
         break;
 
-      case "history":
-        // Only apply history if we haven't already started sending messages
-        // (prevents late history from overwriting optimistic local messages)
-        setMessages((prev) => prev.length === 0 ? (message.messages || []) : prev);
+      case "history": {
+        const history = message.messages || [];
+        // Merge: use history as base, append any optimistic local messages not in history
+        setMessages((prev) => {
+          if (prev.length === 0) return history;
+          // Find messages added locally after the last history entry
+          const historyIds = new Set(history.map((m: { id: string }) => m.id));
+          const localOnly = prev.filter((m) => !historyIds.has(m.id));
+          return [...history, ...localOnly];
+        });
         break;
+      }
 
       case "user_message":
         // Render user messages from other tabs/subscribers

@@ -8,14 +8,11 @@ interface FilePreviewModalProps {
 
 const IMAGE_EXTS = ["png", "jpg", "jpeg", "gif", "webp", "svg"];
 
-/** Normalize path: resolve ".." by popping parent segments, strip "." */
-function sanitizePath(p: string): string {
-  const parts: string[] = [];
-  for (const seg of p.split("/")) {
-    if (seg === ".." ) { parts.pop(); }
-    else if (seg !== "." && seg !== "") { parts.push(seg); }
-  }
-  return parts.join("/");
+/** Reject paths containing ".." traversal segments; strip "." */
+function sanitizePath(p: string): string | null {
+  const segs = p.split("/").filter((s) => s !== "" && s !== ".");
+  if (segs.some((s) => s === "..")) return null; // reject traversal
+  return segs.join("/");
 }
 
 export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewModalProps) {
@@ -24,6 +21,19 @@ export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewMo
   const [fileType, setFileType] = useState<"image" | "pdf" | "audio" | "video" | "text" | "binary">("text");
 
   const safePath = sanitizePath(filePath);
+
+  // Reject traversal paths immediately
+  if (!safePath) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6" onClick={onClose}>
+        <div role="dialog" aria-modal="true" className="bg-white rounded-xl shadow-2xl p-8 text-center">
+          <p className="text-red-600 font-medium">Invalid file path (traversal rejected)</p>
+          <button onClick={onClose} className="mt-4 px-4 py-2 bg-gray-200 rounded-lg text-sm">Close</button>
+        </div>
+      </div>
+    );
+  }
+
   const ext = safePath.split(".").pop()?.toLowerCase() || "";
   const encodedPath = safePath.split("/").map(encodeURIComponent).join("/");
   const fileUrl = `/api/sessions/${encodeURIComponent(sessionId)}/files/${encodedPath}`;
