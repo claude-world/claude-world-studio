@@ -289,8 +289,11 @@ export default function App() {
     if (!selectedSessionId) return;
     const session = sessions.find((s) => s.id === selectedSessionId);
     let relativePath = filePath;
-    if (session && filePath.startsWith(session.workspace_path)) {
-      relativePath = filePath.slice(session.workspace_path.length).replace(/^\//, "");
+    if (session) {
+      const wsBase = session.workspace_path.replace(/\/$/, "");
+      if (filePath.startsWith(wsBase + "/")) {
+        relativePath = filePath.slice(wsBase.length + 1);
+      }
     }
     setPreviewFile({ relativePath, sessionId: selectedSessionId });
   };

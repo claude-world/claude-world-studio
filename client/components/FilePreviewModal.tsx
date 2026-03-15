@@ -7,15 +7,20 @@ interface FilePreviewModalProps {
 }
 
 const IMAGE_EXTS = ["png", "jpg", "jpeg", "gif", "webp", "svg"];
-const MEDIA_EXTS = ["mp3", "wav", "m4a", "ogg", "mp4", "webm"];
+
+/** Sanitize path: strip ".." and "." segments to prevent traversal */
+function sanitizePath(p: string): string {
+  return p.split("/").filter((seg) => seg !== ".." && seg !== "." && seg !== "").join("/");
+}
 
 export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewModalProps) {
   const [content, setContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [fileType, setFileType] = useState<"image" | "pdf" | "audio" | "video" | "text" | "binary">("text");
 
-  const ext = filePath.split(".").pop()?.toLowerCase() || "";
-  const encodedPath = filePath.split("/").map(encodeURIComponent).join("/");
+  const safePath = sanitizePath(filePath);
+  const ext = safePath.split(".").pop()?.toLowerCase() || "";
+  const encodedPath = safePath.split("/").map(encodeURIComponent).join("/");
   const fileUrl = `/api/sessions/${encodeURIComponent(sessionId)}/files/${encodedPath}`;
 
   useEffect(() => {
@@ -52,15 +57,23 @@ export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewMo
 
       try {
         const res = await fetch(fileUrl);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          setFileType("text");
+          setContent(`[Error: ${err.error || res.statusText}]`);
+          setLoading(false);
+          return;
+        }
         if (res.headers.get("content-type")?.includes("json")) {
           const data = await res.json();
           setFileType("text");
-          setContent(data.content);
+          setContent(data.content ?? "[No content]");
         } else {
           setFileType("binary");
           setContent(fileUrl);
         }
       } catch {
+        setFileType("text");
         setContent("[Error loading file]");
       }
       setLoading(false);
@@ -77,7 +90,7 @@ export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewMo
     return () => window.removeEventListener("keydown", handleEsc);
   }, [onClose]);
 
-  const fileName = filePath.split("/").pop() || filePath;
+  const fileName = safePath.split("/").pop() || safePath;
 
   return (
     <div
@@ -92,7 +105,7 @@ export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewMo
               {ext}
             </span>
             <span className="text-sm font-medium text-gray-700 truncate">{fileName}</span>
-            <span className="text-xs text-gray-400 truncate hidden sm:inline">{filePath}</span>
+            <span className="text-xs text-gray-400 truncate hidden sm:inline">{safePath}</span>
           </div>
           <button
             onClick={onClose}

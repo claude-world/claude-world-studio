@@ -141,7 +141,7 @@ router.get("/:sessionId/files/*", (req, res) => {
 
   // For binary files, send raw; for text, send JSON
   const ext = path.extname(fullPath).toLowerCase();
-  const binaryExts = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".mp3", ".mp4", ".wav", ".m4a"];
+  const binaryExts = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".mp3", ".mp4", ".wav", ".m4a", ".webm", ".ogg"];
 
   if (binaryExts.includes(ext)) {
     res.sendFile(fullPath);

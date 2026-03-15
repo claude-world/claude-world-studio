@@ -109,15 +109,16 @@ export function ToolUseBlock({ toolName, toolInput, toolId, onPreviewFile }: Too
         </div>
         <div className="flex items-center gap-1.5 shrink-0 ml-2">
           {canPreview && (
-            <span
+            <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 onPreviewFile!(filePath!);
               }}
-              className="text-[10px] px-2 py-0.5 rounded bg-blue-100 text-blue-600 hover:bg-blue-200 cursor-pointer transition-colors"
+              className="text-[10px] px-2 py-0.5 rounded bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors"
             >
               Preview
-            </span>
+            </button>
           )}
           <span className="text-xs text-gray-400">
             {isExpanded ? "▼" : "▶"}
