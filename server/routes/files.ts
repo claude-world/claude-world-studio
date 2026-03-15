@@ -1,5 +1,6 @@
 import { Router } from "express";
 import fs from "fs";
+import fsp from "fs/promises";
 import path from "path";
 import store from "../db.js";
 
@@ -35,16 +36,16 @@ interface FileEntry {
   children?: FileEntry[];
 }
 
-function buildFileTree(
+async function buildFileTree(
   dirPath: string,
   basePath: string,
   depth = 0,
   maxDepth = 3
-): FileEntry[] {
+): Promise<FileEntry[]> {
   if (depth >= maxDepth) return [];
 
   try {
-    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    const entries = await fsp.readdir(dirPath, { withFileTypes: true });
     const result: FileEntry[] = [];
 
     for (const entry of entries) {
@@ -65,11 +66,11 @@ function buildFileTree(
           name: entry.name,
           path: relativePath,
           type: "directory",
-          children: buildFileTree(fullPath, basePath, depth + 1, maxDepth),
+          children: await buildFileTree(fullPath, basePath, depth + 1, maxDepth),
         });
       } else {
         try {
-          const stat = fs.statSync(fullPath);
+          const stat = await fsp.stat(fullPath);
           result.push({
             name: entry.name,
             path: relativePath,
@@ -94,7 +95,7 @@ function buildFileTree(
 }
 
 // List workspace file tree
-router.get("/:sessionId/files", (req, res) => {
+router.get("/:sessionId/files", async (req, res) => {
   const session = store.getSession(req.params.sessionId);
   if (!session) {
     return res.status(404).json({ error: "Session not found" });
@@ -102,7 +103,7 @@ router.get("/:sessionId/files", (req, res) => {
 
   const rawDepth = parseInt(req.query.depth as string) || 3;
   const depth = Math.min(Math.max(rawDepth, 1), MAX_DEPTH);
-  const tree = buildFileTree(session.workspace_path, session.workspace_path, 0, depth);
+  const tree = await buildFileTree(session.workspace_path, session.workspace_path, 0, depth);
 
   res.json({
     workspace: session.workspace_path,
@@ -111,32 +112,27 @@ router.get("/:sessionId/files", (req, res) => {
 });
 
 // Read file content
-router.get("/:sessionId/files/*", (req, res) => {
+router.get("/:sessionId/files/*", async (req, res) => {
   const session = store.getSession(req.params.sessionId);
   if (!session) {
     return res.status(404).json({ error: "Session not found" });
   }
 
   // Extract the file path from the wildcard params
-  const filePath = (req.params as any)[0] as string | undefined;
+  const filePath = (req.params as Record<string, string>)[0] as string | undefined;
   if (!filePath) {
     return res.status(400).json({ error: "File path required" });
   }
 
   const fullPath = path.resolve(session.workspace_path, filePath);
 
-  // Security: both paths must exist and resolve through symlinks
-  if (!fs.existsSync(fullPath)) {
-    return res.status(404).json({ error: "File not found" });
-  }
-
+  // Security: resolve symlinks and verify path is within workspace
   if (!isWithinWorkspace(session.workspace_path, fullPath)) {
     return res.status(403).json({ error: "Path traversal not allowed" });
   }
 
-  // Wrap all fs ops in try-catch for TOCTOU (file may disappear between checks)
   try {
-    const stat = fs.statSync(fullPath);
+    const stat = await fsp.stat(fullPath);
     if (stat.isDirectory()) {
       return res.status(400).json({ error: "Path is a directory" });
     }
@@ -150,17 +146,17 @@ router.get("/:sessionId/files/*", (req, res) => {
     } else {
       // Text file - limit by byte size, then decode
       if (stat.size > MAX_TEXT_BYTES) {
-        const buf = Buffer.alloc(MAX_TEXT_BYTES);
-        const fd = fs.openSync(fullPath, "r");
+        const fh = await fsp.open(fullPath, "r");
         try {
-          fs.readSync(fd, buf, 0, MAX_TEXT_BYTES, 0);
+          const buf = Buffer.alloc(MAX_TEXT_BYTES);
+          await fh.read(buf, 0, MAX_TEXT_BYTES, 0);
+          const content = buf.toString("utf-8");
+          res.json({ path: filePath, content, truncated: true, size: stat.size });
         } finally {
-          fs.closeSync(fd);
+          await fh.close();
         }
-        const content = buf.toString("utf-8");
-        res.json({ path: filePath, content, truncated: true, size: stat.size });
       } else {
-        const content = fs.readFileSync(fullPath, "utf-8");
+        const content = await fsp.readFile(fullPath, "utf-8");
         res.json({ path: filePath, content, truncated: false, size: stat.size });
       }
     }

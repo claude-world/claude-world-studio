@@ -372,6 +372,33 @@ function ResultBlock({ message }: { message: Message }) {
   );
 }
 
+function ToolResultBlock({ message }: { message: Message }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const content = message.content || "";
+  const preview = content.length > 120 ? content.slice(0, 120) + "..." : content;
+
+  return (
+    <div className="my-1">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setIsExpanded(!isExpanded)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setIsExpanded(!isExpanded); } }}
+        className="text-[11px] text-gray-400 hover:text-gray-500 cursor-pointer flex items-center gap-1 px-1"
+      >
+        <span>{isExpanded ? "▼" : "▶"}</span>
+        <span className="font-medium">result</span>
+        {!isExpanded && <span className="truncate max-w-xs">{preview}</span>}
+      </div>
+      {isExpanded && (
+        <pre className="text-[11px] text-gray-500 bg-gray-50 rounded p-2 mt-1 mx-1 max-h-48 overflow-auto whitespace-pre-wrap break-words">
+          {content}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 function TypingIndicator({ language }: { language: Language }) {
   const t = UI_TEXT[language];
   return (
@@ -674,6 +701,9 @@ export function ChatWindow({
                   onPreviewFile={onPreviewFile}
                 />
               );
+            }
+            if (msg.role === "tool_result") {
+              return <ToolResultBlock key={msg.id} message={msg} />;
             }
             if (msg.role === "result") {
               return <ResultBlock key={msg.id} message={msg} />;

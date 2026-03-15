@@ -79,6 +79,9 @@ function FileTreeNode({
   return (
     <div>
       <div
+        role="treeitem"
+        tabIndex={0}
+        aria-expanded={entry.type === "directory" ? isOpen : undefined}
         className="flex items-center gap-1.5 py-1 px-1.5 hover:bg-gray-100 rounded cursor-pointer text-xs group"
         style={{ paddingLeft: depth * 14 + 6 }}
         onClick={() => {
@@ -86,6 +89,13 @@ function FileTreeNode({
             setIsOpen(!isOpen);
           } else {
             onSelect(entry.path);
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            if (entry.type === "directory") setIsOpen(!isOpen);
+            else onSelect(entry.path);
           }
         }}
       >

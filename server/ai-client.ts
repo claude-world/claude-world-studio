@@ -19,18 +19,23 @@ All conversations, explanations, summaries, and tool usage descriptions must be 
 コード内の変数名やコメントは英語で構いませんが、ユーザー向けのテキストはすべて日本語にしてください。`,
 };
 
+/** Escape markdown-breaking chars and newlines in user-supplied strings */
+function escMd(s: string): string {
+  return s.replace(/[|\\`*_{}[\]()#+\-!~>]/g, "\\$&").replace(/\n/g, " ");
+}
+
 function buildAccountsBlock(accounts: SocialAccount[]): string {
   if (accounts.length === 0) {
     return "No social accounts configured. User needs to add accounts in Settings first.";
   }
 
   const rows = accounts.map((a) =>
-    `| ${a.id} | ${a.name} | ${a.handle} | ${a.platform} | ${a.style || "-"} |`
+    `| ${escMd(a.id)} | ${escMd(a.name)} | ${escMd(a.handle)} | ${escMd(a.platform)} | ${escMd(a.style || "-")} |`
   ).join("\n");
 
   const personas = accounts
     .filter((a) => a.persona_prompt)
-    .map((a) => `**${a.name}** (${a.handle}, ${a.platform}): ${a.persona_prompt}`)
+    .map((a) => `**${escMd(a.name)}** (${escMd(a.handle)}, ${escMd(a.platform)}): ${escMd(a.persona_prompt)}`)
     .join("\n");
 
   return `| ID | Name | Handle | Platform | Style |

@@ -25,12 +25,24 @@ interface Message {
   timestamp?: string;
   toolName?: string;
   tool_name?: string;
-  toolInput?: Record<string, any>;
+  toolInput?: Record<string, unknown>;
   tool_input?: string;
   toolId?: string;
   tool_id?: string;
   cost_usd?: number;
 }
+
+/** Discriminated union for server→client WebSocket messages */
+type ServerWSMessage =
+  | { type: "connected" }
+  | { type: "history"; messages: Message[]; sessionId: string }
+  | { type: "user_message"; content: string; sessionId: string }
+  | { type: "assistant_message"; content: string; sessionId: string }
+  | { type: "tool_use"; toolName: string; toolId: string; toolInput: Record<string, unknown>; sessionId: string }
+  | { type: "tool_result"; toolId: string; content: string; sessionId: string }
+  | { type: "result"; success: boolean; cost?: number; duration?: number; sessionId: string }
+  | { type: "interrupted"; sessionId: string }
+  | { type: "error"; error: string; sessionId?: string };
 
 const API_BASE = "/api";
 
@@ -57,9 +69,10 @@ export default function App() {
     selectedSessionRef.current = selectedSessionId;
   }, [selectedSessionId]);
 
-  const handleWSMessage = useCallback((message: any) => {
+  const handleWSMessage = useCallback((message: ServerWSMessage) => {
     // Ignore messages from sessions we're not currently viewing
-    if (message.sessionId && message.sessionId !== selectedSessionRef.current) {
+    const msgSessionId = "sessionId" in message ? message.sessionId : undefined;
+    if (msgSessionId && msgSessionId !== selectedSessionRef.current) {
       return;
     }
 
@@ -161,7 +174,7 @@ export default function App() {
 
   useEffect(() => {
     if (lastJsonMessage) {
-      handleWSMessage(lastJsonMessage);
+      handleWSMessage(lastJsonMessage as ServerWSMessage);
     }
   }, [lastJsonMessage, handleWSMessage]);
 
