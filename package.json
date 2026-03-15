@@ -5,16 +5,13 @@
   "description": "Claude World Studio - Trend Discovery to Content Publishing Pipeline",
   "main": "electron/main.cjs",
   "bin": {
-    "claude-world-studio": "./bin/cli.js"
+    "claude-world-studio": "bin/cli.js"
   },
   "files": [
     "bin/",
     "client/",
     "server/",
     "scripts/",
-    "dist/",
-    "data/",
-    "electron/",
     "postcss.config.js",
     "tailwind.config.js",
     "tsconfig.json",
@@ -35,7 +32,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/claude-world/claude-world-studio.git"
+    "url": "git+https://github.com/claude-world/claude-world-studio.git"
   },
   "homepage": "https://github.com/claude-world/claude-world-studio",
   "scripts": {
@@ -67,7 +64,10 @@
       "package.json"
     ],
     "extraResources": [
-      { "from": "data", "to": "data" }
+      {
+        "from": "data",
+        "to": "data"
+      }
     ]
   },
   "dependencies": {
