@@ -138,6 +138,7 @@ function AccountsManager() {
   const [editing, setEditing] = useState<Account | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState("");
 
   const fetchAccounts = () => {
     fetch("/api/accounts").then((r) => r.ok ? r.json() : []).then(setAccounts).catch(() => {});
@@ -162,6 +163,7 @@ function AccountsManager() {
         setEditing(null);
         setIsNew(false);
         fetchAccounts();
+        setNotice("Saved. Start a new session to use updated accounts.");
       }
     } catch {}
     setSaving(false);
@@ -170,7 +172,7 @@ function AccountsManager() {
   const handleDelete = async (id: string) => {
     try {
       const res = await fetch(`/api/accounts/${id}`, { method: "DELETE" });
-      if (res.ok) fetchAccounts();
+      if (res.ok) { fetchAccounts(); setNotice("Deleted. Start a new session to apply."); }
     } catch {}
   };
 
@@ -192,6 +194,14 @@ function AccountsManager() {
           + Add Account
         </button>
       </div>
+
+      {/* Notice */}
+      {notice && (
+        <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700 flex items-center gap-2">
+          <span>&#9888;</span>
+          <span>{notice}</span>
+        </div>
+      )}
 
       {/* Account list */}
       {accounts.length === 0 && !editing && (
@@ -325,7 +335,7 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
         body: JSON.stringify(settings),
       });
       if (!res.ok) throw new Error();
-      setMessage("Settings saved. Restart sessions for MCP changes to take effect.");
+      setMessage("Settings saved! Start a new session to apply MCP changes.");
     } catch { setMessage("Error saving settings."); }
     setSaving(false);
   };

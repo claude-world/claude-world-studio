@@ -46,9 +46,7 @@ Full markdown rendering with syntax highlighting, clickable source links, cost/d
 
 ### File Explorer + Preview
 
-Browse workspace files with inline image thumbnails. Click any file to open a full-screen preview modal supporting images, PDFs, audio, video, and text:
-
-![File Explorer](demo/08-file-explorer.png)
+Browse workspace files with inline image thumbnails. Click any file to open a full-screen preview modal supporting images, PDFs, audio, video, and text.
 
 ### Multi-Language (i18n)
 

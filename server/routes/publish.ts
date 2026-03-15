@@ -8,7 +8,7 @@ const router = Router();
 
 // Publish content to a specific account
 router.post("/", async (req, res) => {
-  const { accountId, text, sessionId, score, imageUrl, pollOptions, linkComment } = req.body;
+  const { accountId, text, sessionId, score, imageUrl, pollOptions, linkComment, tag } = req.body;
 
   if (!accountId || !text) {
     return res.status(400).json({ error: "accountId and text are required" });
@@ -43,6 +43,7 @@ router.post("/", async (req, res) => {
         imageUrl,
         pollOptions,
         linkComment,
+        tag,
       });
     } else {
       throw new Error(`Publishing to ${account.platform} is not yet supported`);

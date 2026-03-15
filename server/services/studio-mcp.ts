@@ -13,6 +13,7 @@ const publishTool = tool(
     image_url: z.string().optional().describe("Public image URL to attach"),
     poll_options: z.string().optional().describe("Poll options separated by | (2-4 options, max 25 chars each)"),
     link_comment: z.string().optional().describe("Auto-reply with this link (avoids reach penalty)"),
+    tag: z.string().optional().describe("Topic tag (no # prefix, one per post)"),
   },
   async (args) => {
     const account = store.getAccount(args.account_id);
@@ -34,6 +35,7 @@ const publishTool = tool(
         imageUrl: args.image_url,
         pollOptions: args.poll_options,
         linkComment: args.link_comment,
+        tag: args.tag,
       });
 
       // Log to publish history

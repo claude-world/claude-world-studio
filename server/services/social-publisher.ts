@@ -16,6 +16,7 @@ export interface PublishOptions {
   imageUrl?: string;
   pollOptions?: string;   // pipe-separated: "A|B|C"
   linkComment?: string;
+  tag?: string;
 }
 
 export interface PublishResult {
@@ -46,6 +47,9 @@ export async function publishToThreads(opts: PublishOptions): Promise<PublishRes
     }
     if (opts.linkComment) {
       args.push("--link-comment", opts.linkComment);
+    }
+    if (opts.tag) {
+      args.push("--tag", opts.tag);
     }
 
     execFile(

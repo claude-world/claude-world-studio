@@ -155,7 +155,8 @@ class ThreadsAPI:
     # ── Publishing ──
 
     def create_container(self, text: str, reply_to: str = None,
-                         image_url: str = None, poll_options: list = None) -> str:
+                         image_url: str = None, poll_options: list = None,
+                         tag: str = None) -> str:
         """
         Create a media container for a post.
         Returns the creation_id needed for publishing.
@@ -192,6 +193,9 @@ class ThreadsAPI:
                 poll[keys[i]] = opt[:25]
             params["poll_attachment"] = json.dumps(poll)
 
+        if tag:
+            params["tag"] = tag
+
         data = self._request("POST", f"/{self.user_id}/threads", data=params)
         return data.get("id")
 
@@ -206,14 +210,16 @@ class ThreadsAPI:
         return data
 
     def publish_text(self, text: str, image_url: str = None,
-                     poll_options: list = None, link_comment: str = None) -> dict:
+                     poll_options: list = None, link_comment: str = None,
+                     tag: str = None) -> dict:
         """
         Full publish flow: create container → wait → publish.
         If link_comment is provided, auto-reply with the link (avoids reach penalty).
         If poll_options is provided, attach a native poll (2-4 options, max 25 chars each).
         """
         container_id = self.create_container(text, image_url=image_url,
-                                             poll_options=poll_options)
+                                             poll_options=poll_options,
+                                             tag=tag)
         if not container_id:
             raise Exception("Failed to create media container")
 
@@ -247,6 +253,8 @@ class ThreadsAPI:
             output["poll_options"] = poll_options[:4]
         if image_url:
             output["image_url"] = image_url
+        if tag:
+            output["tag"] = tag
 
         return output
 
@@ -371,6 +379,7 @@ def cmd_publish(args):
             image_url=args.image,
             poll_options=poll_opts,
             link_comment=args.link_comment,
+            tag=args.tag,
         )
 
     print(json.dumps(results, indent=2, ensure_ascii=False))
@@ -489,6 +498,7 @@ def main():
     pub_parser.add_argument("--image", default=None, help="Public image URL to attach")
     pub_parser.add_argument("--poll", default=None, help="Poll options separated by | (2-4, max 25 chars each)")
     pub_parser.add_argument("--link-comment", default=None, help="Auto-reply with this link (avoids reach penalty)")
+    pub_parser.add_argument("--tag", default=None, help="Topic tag (no # prefix, one per post)")
     pub_parser.add_argument("--thread", action="store_true", help="Split by --- into thread")
 
     # batch-publish
