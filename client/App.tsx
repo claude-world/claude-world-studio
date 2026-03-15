@@ -349,6 +349,7 @@ export default function App() {
             onShowPublish={() => setShowPublish(true)}
             onNewSession={createSession}
             onPreviewFile={handlePreviewFile}
+            workspacePath={sessions.find((s) => s.id === selectedSessionId)?.workspace_path}
             showFilesActive={showFiles}
             language={language}
           />

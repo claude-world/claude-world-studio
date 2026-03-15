@@ -2,7 +2,7 @@ import React, { useState } from "react";
 
 interface ToolUseBlockProps {
   toolName: string;
-  toolInput: Record<string, any>;
+  toolInput: Record<string, unknown>;
   toolId: string;
   onPreviewFile?: (absolutePath: string) => void;
 }
@@ -40,30 +40,35 @@ function getToolDisplayName(name: string): string {
     .replace(/_/g, " ");
 }
 
-function getToolSummary(name: string, input: Record<string, any>): string {
+function str(val: unknown): string {
+  return typeof val === "string" ? val : "";
+}
+
+function getToolSummary(name: string, input: Record<string, unknown>): string {
   switch (name) {
     case "Read":
-      return input.file_path || "";
     case "Write":
     case "Edit":
-      return input.file_path || "";
-    case "Bash":
-      return input.command?.slice(0, 80) + (input.command?.length > 80 ? "..." : "") || "";
+      return str(input.file_path);
+    case "Bash": {
+      const cmd = str(input.command);
+      return cmd.length > 80 ? cmd.slice(0, 80) + "..." : cmd;
+    }
     case "Grep":
-      return `"${input.pattern}" in ${input.path || "."}`;
+      return `"${str(input.pattern)}" in ${str(input.path) || "."}`;
     case "Glob":
-      return input.pattern || "";
+      return str(input.pattern);
     case "WebSearch":
-      return input.query || "";
+      return str(input.query);
     case "WebFetch":
-      return input.url || "";
+      return str(input.url);
   }
 
-  if (input.topic) return input.topic;
-  if (input.query) return input.query;
-  if (input.url) return input.url;
-  if (input.keyword) return input.keyword;
-  if (input.sources) return `sources: ${input.sources}`;
+  if (input.topic) return str(input.topic);
+  if (input.query) return str(input.query);
+  if (input.url) return str(input.url);
+  if (input.keyword) return str(input.keyword);
+  if (input.sources) return `sources: ${str(input.sources)}`;
 
   return JSON.stringify(input).slice(0, 60);
 }
