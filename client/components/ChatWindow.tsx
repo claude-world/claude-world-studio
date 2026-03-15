@@ -88,7 +88,7 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       label: "自動發文 (Freestyle)",
       description: "一鍵完成：趨勢探索 → 深度研究 → 評分 → 發文",
       mode: "send",
-      prompt: "執行完整內容產線（趨勢→研究→創作→發布）：\n1. get_trending(sources=\"\", geo=\"TW\", count=20) 查詢全部 20 個來源\n2. 確認時間線（今天幾號？），過濾 48h 以上舊資料\n3. 選出最有潛力且最即時的 1 個話題\n4. browser_markdown 抓 2-3 個相關頁面研究\n5. get_content_brief(topic) 取得寫作策略\n6. get_platform_specs(\"threads\") 取得平台規格\n7. 撰寫高互動 Threads 貼文（繁中，500 字內）\n8. get_scoring_guide 自我評分（必須 ≥ 70 分）\n9. get_review_checklist 最終品質檢查\n10. 問我是否要用 publish_to_threads 發布\n\n開始！",
+      prompt: "執行完整內容產線（趨勢→讀原文→驗時間→創作→評分→發布）：\n1. get_trending(sources=\"\", geo=\"TW\", count=20) 查詢全部 20 個來源\n2. 確認時間線（今天幾號？），過濾 48h 以上舊資料\n3. 選出最有潛力且最即時的 1 個話題\n4. 【必做】browser_markdown 讀原文（至少 2-3 個一手來源），不可只看標題\n5. 【必做】驗證每個事實的時間戳，套用時間詞對照表\n6. get_content_brief(topic) 取得寫作策略\n7. 撰寫高互動 Threads 貼文（繁中，500 字內），按 Meta 5 維專利逐項檢查：\n   - Hook 有數字或反差？(EdgeRank)\n   - CTA 人人都能回答？(Dear Algo)\n   - 有正反兩面/轉折？(72hr window)\n   - 夠短且即時？(Andromeda)\n   - 手機可掃描？(Multi-modal)\n8. get_scoring_guide 自我評分（Overall ≥ 70, Conversation Durability ≥ 55）\n9. get_review_checklist 最終品質檢查，移除 AI 腔（在當今/隨著/值得注意）\n10. 問我是否要用 publish_to_threads 發布（--poll 做投票, --link-comment 放連結）\n\n開始！",
     },
     {
       icon: "🎯",
@@ -113,7 +113,7 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       label: "Auto Post (Freestyle)",
       description: "One click: Trends → Research → Score → Publish",
       mode: "send",
-      prompt: "Run the full content pipeline (Trends→Research→Create→Publish):\n1. get_trending(sources=\"\", geo=\"US\", count=20) — ALL 20 sources\n2. Check timestamps (today's date?), discard >48h old data\n3. Pick the most promising & freshest topic\n4. browser_markdown — scrape 2-3 related pages\n5. get_content_brief(topic) for writing strategy\n6. get_platform_specs(\"threads\") for platform specs\n7. Write a high-engagement Threads post (under 500 chars)\n8. get_scoring_guide — self-score (must be ≥70)\n9. get_review_checklist — final quality check\n10. Ask me whether to publish_to_threads\n\nGo!",
+      prompt: "Run the full content pipeline (Trends→Read Source→Verify Timeline→Create→Score→Publish):\n1. get_trending(sources=\"\", geo=\"US\", count=20) — ALL 20 sources\n2. Check timestamps (today's date?), discard >48h old data\n3. Pick the most promising & freshest topic\n4. [MANDATORY] browser_markdown — read 2-3 original sources (never write from titles alone)\n5. [MANDATORY] Verify every fact's timestamp, use correct time words\n6. get_content_brief(topic) for writing strategy\n7. Write a high-engagement Threads post (under 500 chars), check Meta's 5 patent dimensions:\n   - Hook has number/contrast? (EdgeRank)\n   - CTA anyone can answer? (Dear Algo)\n   - Has both sides/contrast? (72hr window)\n   - Short & timely? (Andromeda)\n   - Mobile-scannable? (Multi-modal)\n8. get_scoring_guide — self-score (Overall ≥70, Conversation Durability ≥55)\n9. get_review_checklist — final quality check, remove AI filler\n10. Ask me whether to publish_to_threads (use --poll for polls, --link-comment for URLs)\n\nGo!",
     },
     {
       icon: "🎯",
@@ -138,7 +138,7 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       label: "自動投稿 (Freestyle)",
       description: "ワンクリック：トレンド → 調査 → スコア → 投稿",
       mode: "send",
-      prompt: "フルコンテンツパイプライン（トレンド→調査→作成→公開）：\n1. get_trending(sources=\"\", geo=\"JP\", count=20) で全20ソース取得\n2. タイムスタンプ確認（今日の日付は？）、48h超は除外\n3. 最も有望で最新のトピックを1つ選択\n4. browser_markdown で関連2-3ページを調査\n5. get_content_brief(topic) で執筆戦略取得\n6. get_platform_specs(\"threads\") でプラットフォーム仕様取得\n7. 高エンゲージメントThreads投稿を作成（500文字以内）\n8. get_scoring_guide で自己採点（70点以上必須）\n9. get_review_checklist で最終品質チェック\n10. publish_to_threads で公開するか確認\n\n開始！",
+      prompt: "フルコンテンツパイプライン（トレンド→原文読解→タイムライン検証→作成→採点→公開）：\n1. get_trending(sources=\"\", geo=\"JP\", count=20) で全20ソース取得\n2. タイムスタンプ確認（今日の日付は？）、48h超は除外\n3. 最も有望で最新のトピックを1つ選択\n4. 【必須】browser_markdown で原文を2-3件読む（タイトルだけで書かない）\n5. 【必須】各事実のタイムスタンプを検証、時間表現を確認\n6. get_content_brief(topic) で執筆戦略取得\n7. 高エンゲージメントThreads投稿を作成（500文字以内）、Meta特許5次元チェック：\n   - Hookに数字/対比？(EdgeRank)\n   - CTAは誰でも回答可能？(Dear Algo)\n   - 両面/転換点がある？(72hr window)\n   - 短く即時的？(Andromeda)\n   - モバイルでスキャン可能？(Multi-modal)\n8. get_scoring_guide で自己採点（Overall≥70, 会話持続性≥55）\n9. get_review_checklist で最終品質チェック、AI表現を除去\n10. publish_to_threads で公開するか確認（--pollで投票、--link-commentでURL）\n\n開始！",
     },
     {
       icon: "🎯",
