@@ -26,6 +26,20 @@ router.get("/:id", (req, res) => {
   res.json(session);
 });
 
+// Update session title
+router.patch("/:id", (req, res) => {
+  const { title } = req.body || {};
+  if (!title || typeof title !== "string") {
+    return res.status(400).json({ error: "Title required" });
+  }
+  const session = store.getSession(req.params.id);
+  if (!session) {
+    return res.status(404).json({ error: "Session not found" });
+  }
+  store.updateSessionTitle(req.params.id, title.slice(0, 200));
+  res.json({ success: true });
+});
+
 // Delete session (also clean up in-memory agent session)
 router.delete("/:id", (req, res) => {
   removeSession(req.params.id);

@@ -722,8 +722,8 @@ export function ChatWindow({
 
       {/* Input + Quick Chips */}
       <div className="border-t border-gray-200 shrink-0 bg-white">
-        {/* Quick action chips */}
-        <div className="px-4 pt-3 pb-1.5 flex flex-wrap gap-1.5">
+        {/* Quick action chips — hide when empty chat shows its own chips */}
+        {messages.length > 0 && <div className="px-4 pt-3 pb-1.5 flex flex-wrap gap-1.5">
           {QUICK_CHIPS[language].map((chip) => (
             <button
               key={chip.label}
@@ -741,7 +741,7 @@ export function ChatWindow({
               {chip.label}
             </button>
           ))}
-        </div>
+        </div>}
 
         {/* Input */}
         <div className="px-4 pb-3">

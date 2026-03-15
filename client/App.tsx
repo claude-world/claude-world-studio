@@ -302,15 +302,30 @@ export default function App() {
   const handleSendMessage = (content: string) => {
     if (!selectedSessionId || !isConnected) return;
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        role: "user",
-        content,
-        timestamp: new Date().toISOString(),
-      },
-    ]);
+    setMessages((prev) => {
+      // Auto-update session title from first user message
+      if (prev.length === 0) {
+        const title = content.slice(0, 80).replace(/\n/g, " ");
+        setSessions((ss) =>
+          ss.map((s) => s.id === selectedSessionId ? { ...s, title } : s)
+        );
+        // Persist title to server (fire-and-forget)
+        fetch(`${API_BASE}/sessions/${selectedSessionId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title }),
+        }).catch(() => {});
+      }
+      return [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "user",
+          content,
+          timestamp: new Date().toISOString(),
+        },
+      ];
+    });
 
     setIsLoading(true);
 
