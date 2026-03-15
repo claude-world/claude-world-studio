@@ -14,7 +14,7 @@
   - `interrupt` — stop running sessions via WebSocket
 - **`--json` global flag** — all commands support JSON output for programmatic use (NDJSON for chat streaming)
 - **`--port` / `--host` global flags** — override server connection (env: `STUDIO_PORT`, `STUDIO_HOST`)
-- **`studio` bin entry** — `node bin/cli.js <command>` or `studio <command>` after `npm link`
+- **`studio` bin entry** — `npm install -g @claude-world/studio` then `studio <command>`
 - **CLI skill file** — `.claude/skills/studio/SKILL.md` with complete command reference
 - **CI/CD** — GitHub Actions workflow: typecheck + build + CLI smoke test (~30s)
 

@@ -117,9 +117,17 @@ Content integrity is enforced at the system level:
 - **Claude Code CLI** installed and authenticated (`npm install -g @anthropic-ai/claude-code`)
 - **Python** 3.10+ (for MCP servers)
 
-## Setup Guide
+## Install
 
-### Step 1: Install Claude World Studio
+### Option A: npm (recommended)
+
+```bash
+npm install -g @claude-world/studio
+```
+
+After install, both `studio` and `claude-world-studio` commands are available globally.
+
+### Option B: From source
 
 ```bash
 git clone https://github.com/claude-world/claude-world-studio.git
@@ -127,6 +135,50 @@ cd claude-world-studio
 npm install
 cp .env.example .env
 ```
+
+Use `node bin/cli.js <command>` or `npm link` to register the `studio` command.
+
+## CLI
+
+Full CLI with 25+ commands. All commands support `--json` for programmatic use.
+
+```bash
+# Server
+studio serve                    # Start web UI
+studio status                   # Check if running
+
+# Sessions
+studio session list
+studio session create --title "Research" --workspace /path
+studio session get <ID>
+studio session delete <ID>
+
+# Chat (WebSocket streaming)
+studio chat --message "Find trending topics" --json
+studio chat --session <ID> --message "Publish the best"
+echo "What's trending?" | studio chat --json
+
+# Accounts
+studio account list
+studio account create --name "Main" --handle "@me" --platform threads
+
+# Settings
+studio settings get
+studio settings detect          # Auto-detect MCP tools
+studio settings apply           # Apply detected values
+
+# Publishing
+studio publish --account <ID> --text "Hello!" --score 85
+studio history --limit 10
+
+# Files
+studio file list <SESSION_ID> --depth 2
+studio file read <SESSION_ID> src/index.ts
+```
+
+Global flags: `--json`, `--port N` (env: `STUDIO_PORT`), `--host H` (env: `STUDIO_HOST`)
+
+## Setup Guide
 
 ### Step 2: Set Up MCP Servers
 

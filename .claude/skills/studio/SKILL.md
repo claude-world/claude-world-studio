@@ -8,6 +8,13 @@ user_invocable: false
 
 Full CLI for Claude World Studio. Maps 1:1 to the REST API + WebSocket.
 
+## Install
+
+```bash
+npm install -g @claude-world/studio   # global install
+# or: node bin/cli.js <command>       # from source
+```
+
 ## Quick Reference
 
 ```bash
