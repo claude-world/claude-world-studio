@@ -7,28 +7,51 @@ const __dirname = path.dirname(__filename);
 
 const SCRIPTS_DIR = path.join(__dirname, "../../scripts");
 const MAX_TEXT_LENGTH = 500;
+const MIN_PUBLISH_SCORE = 70;
 
-export async function publishToThreads(
-  text: string,
-  token: string
-): Promise<{ id: string; permalink: string }> {
-  if (text.length > MAX_TEXT_LENGTH) {
-    throw new Error(`Text too long: ${text.length} chars (max ${MAX_TEXT_LENGTH})`);
+export interface PublishOptions {
+  text: string;
+  token: string;
+  score?: number;
+  imageUrl?: string;
+  pollOptions?: string;   // pipe-separated: "A|B|C"
+  linkComment?: string;
+}
+
+export interface PublishResult {
+  id: string;
+  permalink: string;
+}
+
+export async function publishToThreads(opts: PublishOptions): Promise<PublishResult> {
+  if (opts.score !== undefined && opts.score < MIN_PUBLISH_SCORE) {
+    throw new Error(`Score ${opts.score} below minimum ${MIN_PUBLISH_SCORE}. Improve content before publishing.`);
+  }
+  if (opts.text.length > MAX_TEXT_LENGTH) {
+    throw new Error(`Text too long: ${opts.text.length} chars (max ${MAX_TEXT_LENGTH})`);
+  }
+  if (!opts.token) {
+    throw new Error("No token provided. Configure token in Settings for this account.");
   }
 
   return new Promise((resolve, reject) => {
     const scriptPath = path.join(SCRIPTS_DIR, "threads_api.py");
+    const args = [scriptPath, "publish", "--token", opts.token, "--text", opts.text];
+
+    if (opts.imageUrl) {
+      args.push("--image", opts.imageUrl);
+    }
+    if (opts.pollOptions) {
+      args.push("--poll", opts.pollOptions);
+    }
+    if (opts.linkComment) {
+      args.push("--link-comment", opts.linkComment);
+    }
 
     execFile(
       "python3",
-      [scriptPath, "publish", "--text", text],
-      {
-        env: {
-          ...process.env,
-          THREADS_TOKEN: token,
-        },
-        timeout: 30000,
-      },
+      args,
+      { timeout: 30000 },
       (error, stdout, stderr) => {
         if (error) {
           reject(new Error(stderr || error.message));

@@ -1,5 +1,6 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { buildMcpServers, getSettings } from "./mcp-config.js";
+import { createStudioMcpServer } from "./services/studio-mcp.js";
 import store from "./db.js";
 import type { Language, SocialAccount } from "./types.js";
 
@@ -55,7 +56,7 @@ You are Claude World Studio assistant — an AI-powered content pipeline for tre
 
 ## MCP Tools Available
 
-### 1. trend-pulse (14 tools — trends + content + publishing)
+### 1. trend-pulse (12 tools — trends + content)
 
 **Trend Data (5 tools):**
 - **get_trending(sources, geo, count)**: Query ALL 20 free sources for real-time trends.
@@ -75,10 +76,12 @@ You are Claude World Studio assistant — an AI-powered content pipeline for tre
 - **get_review_checklist()**: Quality review checklist (7 checks) before publishing.
 - **get_reel_guide()**: Reels script guide (tutorial/story/list — 3 styles).
 
-**Publishing (3 tools):**
-- **publish_to_threads(text, account, score)**: Publish to Threads via Graph API. Built-in quality gate: score ≥ 70 required. Use account ID from the Social Accounts table below.
+**Threads Search (1 tool):**
 - **search_threads_posts(query)**: Search Threads posts, sorted by heat score.
-- **get_publish_history()**: Query local publish records (no API token needed).
+
+### 4. studio (2 tools — publishing + history, in-process)
+- **publish_to_threads(text, account_id, score, image_url?, poll_options?, link_comment?)**: Publish to Threads via Graph API. Quality gate: score ≥ 70 required. Use account ID from the Social Accounts table below. Token is read from DB automatically.
+- **get_publish_history(limit?)**: Query local publish records (no API token needed).
 
 ## Social Accounts
 ${buildAccountsBlock(accounts)}
@@ -192,7 +195,7 @@ When writing social posts, check ALL 5 dimensions from Meta's ranking patents:
 6. **Create**: Write content → patent check (5 dimensions) → format check
 7. **Score**: get_scoring_guide — self-score (must ≥ 70, Conversation Durability ≥ 55)
 8. **Review**: get_review_checklist — final quality check, remove AI filler
-9. **Publish**: publish_to_threads(text, account, score)
+9. **Publish**: mcp__studio__publish_to_threads(text, account_id, score)
 
 Be concise but thorough. Explain which tools you're using and why.`;
 }
@@ -271,6 +274,9 @@ export class AgentSession {
     const lang = language || settings.language || "zh-TW";
     const accounts = store.getAllAccounts();
 
+    // In-process Studio MCP server (direct DB access, no env vars)
+    const studioServer = createStudioMcpServer();
+
     const allowedTools = [
       "Bash",
       "Read",
@@ -283,7 +289,8 @@ export class AgentSession {
     ];
 
     // Add MCP tool patterns so MCP tools are accessible
-    const mcpServerNames = Object.keys(mcpServers);
+    const allMcpServers: Record<string, any> = { ...mcpServers, studio: studioServer };
+    const mcpServerNames = Object.keys(allMcpServers);
     for (const name of mcpServerNames) {
       allowedTools.push(`mcp__${name}`);
     }
@@ -298,11 +305,10 @@ export class AgentSession {
       systemPrompt: buildSystemPrompt(lang, accounts),
       cwd,
       allowedTools,
+      // Prevent confusion: trend-pulse publish tool is superseded by studio
+      disallowedTools: ["mcp__trend-pulse__publish_to_threads", "mcp__trend-pulse__get_publish_history"],
+      mcpServers: allMcpServers,
     };
-
-    if (mcpServerNames.length > 0) {
-      options.mcpServers = mcpServers;
-    }
 
     this.outputIterator = query({
       prompt: this.queue as any,

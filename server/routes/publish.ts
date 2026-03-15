@@ -8,7 +8,7 @@ const router = Router();
 
 // Publish content to a specific account
 router.post("/", async (req, res) => {
-  const { accountId, text, sessionId } = req.body;
+  const { accountId, text, sessionId, score, imageUrl, pollOptions, linkComment } = req.body;
 
   if (!accountId || !text) {
     return res.status(400).json({ error: "accountId and text are required" });
@@ -36,7 +36,14 @@ router.post("/", async (req, res) => {
     let result: any;
 
     if (account.platform === "threads") {
-      result = await publishToThreads(text, account.token);
+      result = await publishToThreads({
+        text,
+        token: account.token,
+        score,
+        imageUrl,
+        pollOptions,
+        linkComment,
+      });
     } else {
       throw new Error(`Publishing to ${account.platform} is not yet supported`);
     }
