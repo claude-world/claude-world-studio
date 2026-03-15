@@ -20,9 +20,17 @@ Three clear entry points — no complex menus, just pick and go:
 | **Custom Topic** | Type your topic | Deep research → score → publish |
 | **Custom + Media** | Type your topic | Research → NotebookLM slides/video/podcast → publish |
 
+### Smart Input Fill
+
+Click "Custom Topic" and the input auto-fills with a template prompt. A hint guides what to type:
+
+![Custom Topic](demo/03-custom-topic-fill.png)
+
 ### Live Agent Execution
 
-Watch Claude work in real-time — tool calls are shown as collapsible blocks with MCP server badges:
+Watch Claude work in real-time — tool calls shown as collapsible blocks with MCP server badges. Loading state keeps the Stop button visible throughout long operations:
+
+![Loading State](demo/05-loading-state.png)
 
 ![Tool Calls](demo/06-tool-calls.png)
 
@@ -32,36 +40,34 @@ Watch Claude work in real-time — tool calls are shown as collapsible blocks wi
 
 ### Rich Markdown Responses
 
-Full markdown rendering with syntax highlighting, clickable links, and inline file previews:
+Full markdown rendering with syntax highlighting, clickable source links, cost/duration tracking, and inline file path previews:
 
 ![Rich Content](demo/07-history-rich.png)
 
 ### File Explorer + Preview
 
-Browse workspace files with inline image thumbnails. Click any file to open a full-screen preview modal (images, PDFs, audio, video, text):
+Browse workspace files with inline image thumbnails. Click any file to open a full-screen preview modal supporting images, PDFs, audio, video, and text:
 
 ![File Explorer](demo/08-file-explorer.png)
 
 ### Multi-Language (i18n)
 
-Full support for Traditional Chinese, English, and Japanese — pipeline cards, chips, UI labels, and system prompts all adapt:
+Full support for Traditional Chinese, English, and Japanese — all pipeline cards, chips, UI labels, system prompts, and placeholder text adapt:
 
 <table>
 <tr>
-<td><img src="demo/02-pipeline-cards.png" alt="ZH-TW" width="280"/></td>
-<td><img src="demo/09-en-cards.png" alt="EN" width="280"/></td>
-<td><img src="demo/10-ja-cards.png" alt="JA" width="280"/></td>
+<td><img src="demo/09-en-cards.png" alt="EN" width="400"/></td>
+<td><img src="demo/10-ja-cards.png" alt="JA" width="400"/></td>
 </tr>
 <tr>
-<td align="center">ZH-TW</td>
 <td align="center">English</td>
 <td align="center">Japanese</td>
 </tr>
 </table>
 
-### Meta Patent-Based Scoring
+### Social Publishing
 
-Every post is checked against Meta's 7 ranking patents before publishing:
+Built-in publish flow with Meta's patent-based scoring. Every post is checked against 5 ranking dimensions before publishing:
 
 | Dimension | Patent | What it checks |
 |-----------|--------|---------------|
@@ -71,14 +77,22 @@ Every post is checked against Meta's 7 ranking patents before publishing:
 | Velocity Potential | Andromeda | Short enough? Timely? |
 | Format Score | Multi-modal | Mobile-scannable? |
 
-Quality gates: Overall >= 70, Conversation Durability >= 55.
+Quality gates: Overall >= 70, Conversation Durability >= 55. Supports `--poll` for native polls, `--link-comment` to avoid URL reach penalty.
+
+### Source Verification & Timeline Rules
+
+Content integrity is enforced at the system level:
+
+- **Read original sources** — Never write from titles/metadata alone. At least 1 primary source per topic, 2+ for controversial topics.
+- **Timeline verification** — Every fact gets a verified timestamp. Time words are mapped by age (today = "just now", 1-3 days = "recently", etc.).
+- **No AI filler** — System prompt blocks generic phrases like "in today's world" / "it's worth noting".
 
 ## Architecture
 
 ```
 ┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │  React UI   │────▶│  Express + WS    │────▶│  Claude Agent   │
-│  (Vite)     │◀────│  Server          │◀────│  SDK (Sonnet)   │
+│  (Vite)     │◀────│  Server          │◀────│  SDK            │
 └─────────────┘     └──────────────────┘     └────────┬────────┘
                                                       │
                            ┌──────────────────────────┤
@@ -98,41 +112,42 @@ Quality gates: Overall >= 70, Conversation Durability >= 55.
 |-------|------|
 | Frontend | React 18 + Vite + Tailwind CSS |
 | Backend | Express + WebSocket + Claude Agent SDK |
-| AI | Claude Sonnet 4.6 (bypassPermissions, local only) |
+| AI Model | Claude Sonnet 4.6 |
 | MCP Servers | trend-pulse, cf-browser, notebooklm |
 | Database | SQLite (better-sqlite3) |
-| Rendering | react-markdown + rehype-sanitize |
+| Markdown | react-markdown + rehype-sanitize |
+
+## Prerequisites
+
+- Node.js >= 18
+- Claude Code CLI installed and authenticated
+- Python 3.10+ (for MCP servers)
+- MCP servers set up: [trend-pulse](https://github.com/claude-world/trend-pulse), [cf-browser](https://github.com/claude-world/cf-browser), [notebooklm-skill](https://github.com/claude-world/notebooklm-skill)
 
 ## Quick Start
 
 ```bash
-# Clone
-git clone https://github.com/claude-world/claude-world.com.git
-cd claude-world-studio
-
-# Install
+# Install dependencies
 npm install
 
-# Configure
+# Configure MCP server paths
 cp .env.example .env
-# Edit .env with your MCP server paths
+# Edit .env — set TREND_PULSE_PYTHON, CF_BROWSER_PYTHON, NOTEBOOKLM_SERVER_PATH
 
-# Run
+# Start dev server (frontend + backend)
 npm run dev
-# Opens at http://localhost:5173
+
+# Open http://localhost:5173
 ```
 
 ## Security
 
-- Server binds to `127.0.0.1` only (not exposed to network)
+- Binds to `127.0.0.1` only (local use, not network-exposed)
 - WebSocket origin verification (exact port whitelist)
 - CORS restricted to localhost dev ports
 - File API: async realpath + workspace containment check (TOCTOU-safe)
 - Path traversal rejected on both client and server
-- `rehype-sanitize` for XSS protection in markdown rendering
+- XSS protection via `rehype-sanitize`
 - Session isolation: WS messages filtered by sessionId
 - Idle session eviction (30min TTL)
-
-## License
-
-Private project. Not open source.
+- Query cancellation via AbortController on interrupt/eviction
