@@ -81,10 +81,28 @@ export default function App() {
         break;
 
       case "history":
-        setMessages(message.messages || []);
+        // Only apply history if we haven't already started sending messages
+        // (prevents late history from overwriting optimistic local messages)
+        setMessages((prev) => prev.length === 0 ? (message.messages || []) : prev);
         break;
 
       case "user_message":
+        // Render user messages from other tabs/subscribers
+        if (message.content) {
+          setMessages((prev) => {
+            // Skip if already present (optimistic local insert)
+            if (prev.some((m) => m.role === "user" && m.content === message.content &&
+              Date.now() - new Date(m.timestamp || 0).getTime() < 5000)) {
+              return prev;
+            }
+            return [...prev, {
+              id: crypto.randomUUID(),
+              role: "user",
+              content: message.content,
+              timestamp: new Date().toISOString(),
+            }];
+          });
+        }
         break;
 
       case "assistant_message":
@@ -103,7 +121,7 @@ export default function App() {
         setMessages((prev) => [
           ...prev,
           {
-            id: message.toolId || crypto.randomUUID(),
+            id: `tu_${message.toolId || crypto.randomUUID()}`,
             role: "tool_use",
             content: null,
             timestamp: new Date().toISOString(),
@@ -118,7 +136,7 @@ export default function App() {
         setMessages((prev) => [
           ...prev,
           {
-            id: message.toolId || crypto.randomUUID(),
+            id: `tr_${message.toolId || crypto.randomUUID()}`,
             role: "tool_result",
             content: message.content,
             timestamp: new Date().toISOString(),

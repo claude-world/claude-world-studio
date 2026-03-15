@@ -124,30 +124,33 @@ router.get("/:sessionId/files/*", async (req, res) => {
     return res.status(400).json({ error: "File path required" });
   }
 
-  const fullPath = path.resolve(session.workspace_path, filePath);
+  const requestedPath = path.resolve(session.workspace_path, filePath);
 
   try {
-    // Stat first to confirm file exists, then security check with realpath
-    const stat = await fsp.stat(fullPath);
+    // Resolve symlinks FIRST, then use the resolved path for all ops (eliminates TOCTOU)
+    const resolvedPath = await fsp.realpath(requestedPath);
+    const resolvedBase = await fsp.realpath(session.workspace_path);
 
-    // Security: resolve symlinks and verify path is within workspace
-    if (!isWithinWorkspace(session.workspace_path, fullPath)) {
+    // Security: verify resolved path is within workspace
+    if (resolvedPath !== resolvedBase && !resolvedPath.startsWith(resolvedBase + path.sep)) {
       return res.status(403).json({ error: "Path traversal not allowed" });
     }
+
+    const stat = await fsp.stat(resolvedPath);
     if (stat.isDirectory()) {
       return res.status(400).json({ error: "Path is a directory" });
     }
 
     // For binary files, send raw; for text, send JSON
-    const ext = path.extname(fullPath).toLowerCase();
+    const ext = path.extname(resolvedPath).toLowerCase();
     const binaryExts = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".pdf", ".mp3", ".mp4", ".wav", ".m4a", ".webm", ".ogg"];
 
     if (binaryExts.includes(ext)) {
-      res.sendFile(fullPath);
+      res.sendFile(resolvedPath);
     } else {
       // Text file - limit by byte size, then decode
       if (stat.size > MAX_TEXT_BYTES) {
-        const fh = await fsp.open(fullPath, "r");
+        const fh = await fsp.open(resolvedPath, "r");
         try {
           const buf = Buffer.alloc(MAX_TEXT_BYTES);
           await fh.read(buf, 0, MAX_TEXT_BYTES, 0);
@@ -157,7 +160,7 @@ router.get("/:sessionId/files/*", async (req, res) => {
           await fh.close();
         }
       } else {
-        const content = await fsp.readFile(fullPath, "utf-8");
+        const content = await fsp.readFile(resolvedPath, "utf-8");
         res.json({ path: filePath, content, truncated: false, size: stat.size });
       }
     }

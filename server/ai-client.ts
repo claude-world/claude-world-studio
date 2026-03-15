@@ -213,6 +213,7 @@ class MessageQueue {
 export class AgentSession {
   private queue = new MessageQueue();
   private outputIterator: AsyncIterator<any> | null = null;
+  private abortController = new AbortController();
 
   constructor(workspacePath?: string, language?: Language) {
     const settings = getSettings();
@@ -244,6 +245,7 @@ export class AgentSession {
       // bypassPermissions: intentional — local single-user tool.
       // All tool calls execute without prompting. Do NOT expose to untrusted networks.
       permissionMode: "bypassPermissions",
+      abortController: this.abortController,
       systemPrompt: buildSystemPrompt(lang, accounts),
       cwd,
       allowedTools,
@@ -275,6 +277,7 @@ export class AgentSession {
   }
 
   close() {
+    this.abortController.abort();
     this.queue.close();
   }
 }
