@@ -40,7 +40,9 @@ router.get("/detect", (_req, res) => {
     process.env.DEFAULT_WORKSPACE ||
     process.cwd();
 
+  const projectMcp = join(__dirname, "../../mcp-servers");
   const searchRoots = [
+    projectMcp,
     workspace,
     join(home, "github"),
     join(home, "projects"),

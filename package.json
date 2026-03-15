@@ -5,7 +5,8 @@
   "description": "Claude World Studio - Trend Discovery to Content Publishing Pipeline",
   "main": "electron/main.cjs",
   "bin": {
-    "claude-world-studio": "bin/cli.js"
+    "claude-world-studio": "bin/cli.js",
+    "setup-mcp": "bin/setup-mcp.sh"
   },
   "files": [
     "bin/",
