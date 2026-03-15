@@ -1,0 +1,12 @@
+{
+  "name": "claude-world/claude-world-studio",
+  "description": "AI-powered content pipeline: trend discovery → research → social publishing. Built with Claude Agent SDK + MCP.",
+  "accepts": [
+    {
+      "network": "eip155:8453",
+      "asset": "USDC",
+      "address": "YOUR_WALLET_ADDRESS"
+    }
+  ],
+  "resources": []
+}
