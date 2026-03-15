@@ -24,6 +24,8 @@ export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewMo
   const fileUrl = `/api/sessions/${encodeURIComponent(sessionId)}/files/${encodedPath}`;
 
   useEffect(() => {
+    const controller = new AbortController();
+
     const load = async () => {
       setLoading(true);
 
@@ -56,7 +58,7 @@ export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewMo
       }
 
       try {
-        const res = await fetch(fileUrl);
+        const res = await fetch(fileUrl, { signal: controller.signal });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           setFileType("text");
@@ -72,7 +74,8 @@ export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewMo
           setFileType("binary");
           setContent(fileUrl);
         }
-      } catch {
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
         setFileType("text");
         setContent("[Error loading file]");
       }
@@ -80,6 +83,7 @@ export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewMo
     };
 
     load();
+    return () => controller.abort();
   }, [sessionId, filePath]);
 
   useEffect(() => {
@@ -97,7 +101,7 @@ export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewMo
       className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div role="dialog" aria-modal="true" aria-label={fileName} className="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2 min-w-0">

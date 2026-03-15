@@ -95,9 +95,12 @@ export function ToolUseBlock({ toolName, toolInput, toolId, onPreviewFile }: Too
 
   return (
     <div className={`my-2 border rounded ${colorClass}`}>
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full p-2 flex items-center justify-between text-left hover:opacity-80"
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setIsExpanded(!isExpanded); } }}
+        className="w-full p-2 flex items-center justify-between text-left hover:opacity-80 cursor-pointer"
       >
         <div className="flex items-center gap-2 min-w-0">
           {badge && (
@@ -129,7 +132,7 @@ export function ToolUseBlock({ toolName, toolInput, toolId, onPreviewFile }: Too
             {isExpanded ? "▼" : "▶"}
           </span>
         </div>
-      </button>
+      </div>
       {isExpanded && (
         <div className="p-2 border-t border-gray-200/50">
           <pre className="text-xs bg-white p-2 rounded overflow-x-auto max-h-64 overflow-y-auto">

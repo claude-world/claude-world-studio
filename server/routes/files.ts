@@ -134,33 +134,41 @@ router.get("/:sessionId/files/*", (req, res) => {
     return res.status(403).json({ error: "Path traversal not allowed" });
   }
 
-  const stat = fs.statSync(fullPath);
-  if (stat.isDirectory()) {
-    return res.status(400).json({ error: "Path is a directory" });
-  }
-
-  // For binary files, send raw; for text, send JSON
-  const ext = path.extname(fullPath).toLowerCase();
-  const binaryExts = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".pdf", ".mp3", ".mp4", ".wav", ".m4a", ".webm", ".ogg"];
-
-  if (binaryExts.includes(ext)) {
-    res.sendFile(fullPath);
-  } else {
-    // Text file - limit by byte size, then decode
-    if (stat.size > MAX_TEXT_BYTES) {
-      const buf = Buffer.alloc(MAX_TEXT_BYTES);
-      const fd = fs.openSync(fullPath, "r");
-      try {
-        fs.readSync(fd, buf, 0, MAX_TEXT_BYTES, 0);
-      } finally {
-        fs.closeSync(fd);
-      }
-      const content = buf.toString("utf-8");
-      res.json({ path: filePath, content, truncated: true, size: stat.size });
-    } else {
-      const content = fs.readFileSync(fullPath, "utf-8");
-      res.json({ path: filePath, content, truncated: false, size: stat.size });
+  // Wrap all fs ops in try-catch for TOCTOU (file may disappear between checks)
+  try {
+    const stat = fs.statSync(fullPath);
+    if (stat.isDirectory()) {
+      return res.status(400).json({ error: "Path is a directory" });
     }
+
+    // For binary files, send raw; for text, send JSON
+    const ext = path.extname(fullPath).toLowerCase();
+    const binaryExts = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".pdf", ".mp3", ".mp4", ".wav", ".m4a", ".webm", ".ogg"];
+
+    if (binaryExts.includes(ext)) {
+      res.sendFile(fullPath);
+    } else {
+      // Text file - limit by byte size, then decode
+      if (stat.size > MAX_TEXT_BYTES) {
+        const buf = Buffer.alloc(MAX_TEXT_BYTES);
+        const fd = fs.openSync(fullPath, "r");
+        try {
+          fs.readSync(fd, buf, 0, MAX_TEXT_BYTES, 0);
+        } finally {
+          fs.closeSync(fd);
+        }
+        const content = buf.toString("utf-8");
+        res.json({ path: filePath, content, truncated: true, size: stat.size });
+      } else {
+        const content = fs.readFileSync(fullPath, "utf-8");
+        res.json({ path: filePath, content, truncated: false, size: stat.size });
+      }
+    }
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return res.status(404).json({ error: "File not found" });
+    if (code === "EACCES") return res.status(403).json({ error: "Permission denied" });
+    return res.status(500).json({ error: "Failed to read file" });
   }
 });
 

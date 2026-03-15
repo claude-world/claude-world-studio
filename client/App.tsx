@@ -58,6 +58,11 @@ export default function App() {
   }, [selectedSessionId]);
 
   const handleWSMessage = useCallback((message: any) => {
+    // Ignore messages from sessions we're not currently viewing
+    if (message.sessionId && message.sessionId !== selectedSessionRef.current) {
+      return;
+    }
+
     switch (message.type) {
       case "connected":
         break;
