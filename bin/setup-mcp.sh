@@ -77,20 +77,20 @@ setup_repo \
   ".venv/bin/pip install -q -e '.[mcp]'" \
   ".venv/bin/python"
 
-# --- cf-browser ---
+# --- cf-browser (SDK + MCP server) ---
 setup_repo \
   "cf-browser" \
   "https://github.com/claude-world/cf-browser.git" \
   "mcp-server" \
-  ".venv/bin/pip install -q -e '.[dev]'" \
+  ".venv/bin/pip install -q -e ../sdk && .venv/bin/pip install -q -e ." \
   "mcp-server/.venv/bin/python"
 
-# --- notebooklm-skill ---
+# --- notebooklm-skill (notebooklm-py is the correct PyPI name) ---
 setup_repo \
   "notebooklm-skill" \
   "https://github.com/claude-world/notebooklm-skill.git" \
   "." \
-  ".venv/bin/pip install -q -r requirements.txt" \
+  ".venv/bin/pip install -q notebooklm-py playwright fastmcp python-dotenv httpx" \
   "mcp-server/server.py"
 
 echo ""
