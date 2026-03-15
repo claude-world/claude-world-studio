@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 set -e
 
-# Setup MCP servers for Claude World Studio
-# Installs trend-pulse, cf-browser, notebooklm-skill as siblings
+# Setup & update MCP servers for Claude World Studio
+#   setup-mcp            Install missing MCP servers
+#   setup-mcp --update   Pull latest + reinstall deps
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 MCP_DIR="$PROJECT_DIR/mcp-servers"
+UPDATE=false
+[[ "${1:-}" == "--update" || "${1:-}" == "-u" ]] && UPDATE=true
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -14,7 +17,8 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 ok()   { echo -e "${GREEN}✓${NC} $1"; }
-skip() { echo -e "${YELLOW}→${NC} $1 (already installed)"; }
+skip() { echo -e "${YELLOW}→${NC} $1 (already installed, use --update to upgrade)"; }
+info() { echo -e "${YELLOW}↻${NC} $1"; }
 fail() { echo -e "${RED}✗${NC} $1"; }
 
 # Check Python
@@ -28,47 +32,73 @@ ok "Python $PYTHON_VERSION"
 
 mkdir -p "$MCP_DIR"
 echo ""
-echo "Installing MCP servers to: $MCP_DIR"
+if $UPDATE; then
+  echo "Updating MCP servers in: $MCP_DIR"
+else
+  echo "Installing MCP servers to: $MCP_DIR"
+fi
 echo ""
+
+# --- Helper: install or update a repo ---
+setup_repo() {
+  local name="$1" repo="$2" venv_dir="$3" install_cmd="$4" check_file="$5"
+
+  if $UPDATE && [ -d "$MCP_DIR/$name/.git" ]; then
+    info "Updating $name..."
+    cd "$MCP_DIR/$name"
+    local before=$(git rev-parse HEAD)
+    git pull --ff-only origin main 2>/dev/null || git pull --ff-only 2>/dev/null || true
+    local after=$(git rev-parse HEAD)
+    if [ "$before" != "$after" ]; then
+      cd "$MCP_DIR/$name/$venv_dir"
+      eval "$install_cmd"
+      local commits=$(git log --oneline "$before..$after" | wc -l | tr -d ' ')
+      ok "$name updated ($commits new commits)"
+    else
+      ok "$name already up to date"
+    fi
+  elif [ -f "$MCP_DIR/$name/$check_file" ]; then
+    skip "$name"
+  else
+    echo "Installing $name..."
+    git clone --depth 1 "$repo" "$MCP_DIR/$name" 2>/dev/null || true
+    cd "$MCP_DIR/$name/$venv_dir"
+    python3 -m venv .venv
+    eval "$install_cmd"
+    ok "$name installed"
+  fi
+}
 
 # --- trend-pulse ---
-if [ -f "$MCP_DIR/trend-pulse/.venv/bin/python" ]; then
-  skip "trend-pulse"
-else
-  echo "Installing trend-pulse..."
-  git clone --depth 1 https://github.com/claude-world/trend-pulse.git "$MCP_DIR/trend-pulse" 2>/dev/null || true
-  cd "$MCP_DIR/trend-pulse"
-  python3 -m venv .venv
-  .venv/bin/pip install -q -e '.[mcp]'
-  ok "trend-pulse → $MCP_DIR/trend-pulse/.venv/bin/python"
-fi
+setup_repo \
+  "trend-pulse" \
+  "https://github.com/claude-world/trend-pulse.git" \
+  "." \
+  ".venv/bin/pip install -q -e '.[mcp]'" \
+  ".venv/bin/python"
 
 # --- cf-browser ---
-if [ -f "$MCP_DIR/cf-browser/mcp-server/.venv/bin/python" ]; then
-  skip "cf-browser"
-else
-  echo "Installing cf-browser..."
-  git clone --depth 1 https://github.com/claude-world/cf-browser.git "$MCP_DIR/cf-browser" 2>/dev/null || true
-  cd "$MCP_DIR/cf-browser/mcp-server"
-  python3 -m venv .venv
-  .venv/bin/pip install -q -e '.[dev]'
-  ok "cf-browser → $MCP_DIR/cf-browser/mcp-server/.venv/bin/python"
-fi
+setup_repo \
+  "cf-browser" \
+  "https://github.com/claude-world/cf-browser.git" \
+  "mcp-server" \
+  ".venv/bin/pip install -q -e '.[dev]'" \
+  "mcp-server/.venv/bin/python"
 
 # --- notebooklm-skill ---
-if [ -f "$MCP_DIR/notebooklm-skill/mcp-server/server.py" ]; then
-  skip "notebooklm-skill"
-else
-  echo "Installing notebooklm-skill..."
-  git clone --depth 1 https://github.com/claude-world/notebooklm-skill.git "$MCP_DIR/notebooklm-skill" 2>/dev/null || true
-  cd "$MCP_DIR/notebooklm-skill"
-  python3 -m venv .venv
-  .venv/bin/pip install -q -r requirements.txt
-  ok "notebooklm-skill → $MCP_DIR/notebooklm-skill/mcp-server/server.py"
-fi
+setup_repo \
+  "notebooklm-skill" \
+  "https://github.com/claude-world/notebooklm-skill.git" \
+  "." \
+  ".venv/bin/pip install -q -r requirements.txt" \
+  "mcp-server/server.py"
 
 echo ""
-echo -e "${GREEN}Done!${NC} Start Studio and click ${YELLOW}Scan System${NC} in Settings to auto-detect."
+if $UPDATE; then
+  echo -e "${GREEN}All MCP servers updated.${NC} Restart Studio to use new versions."
+else
+  echo -e "${GREEN}Done!${NC} Start Studio and click ${YELLOW}Scan System${NC} in Settings to auto-detect."
+fi
 echo ""
-echo "  npm start        # or"
-echo "  npx claude-world-studio"
+echo "  claude-world-studio       # start"
+echo "  setup-mcp --update        # update later"
