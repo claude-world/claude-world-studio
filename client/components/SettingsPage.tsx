@@ -230,7 +230,7 @@ function AccountsManager() {
             </div>
             <div>
               <label className="text-xs text-gray-500 block mb-1">Handle *</label>
-              <input type="text" value={editing.handle} onChange={(e) => setEditing({ ...editing, handle: e.target.value })} placeholder="@claude.world.taiwan" className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm" />
+              <input type="text" value={editing.handle} onChange={(e) => setEditing({ ...editing, handle: e.target.value })} placeholder="@your.account" className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm" />
             </div>
             <div>
               <label className="text-xs text-gray-500 block mb-1">Platform *</label>
@@ -249,7 +249,7 @@ function AccountsManager() {
             </div>
             <div>
               <label className="text-xs text-gray-500 block mb-1">User ID</label>
-              <input type="text" value={editing.user_id} onChange={(e) => setEditing({ ...editing, user_id: e.target.value })} placeholder="26105870269107920" className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm font-mono" />
+              <input type="text" value={editing.user_id} onChange={(e) => setEditing({ ...editing, user_id: e.target.value })} placeholder="your-threads-user-id" className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm font-mono" />
             </div>
           </div>
           <div>

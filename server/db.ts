@@ -67,49 +67,7 @@ db.exec(`
   );
 `);
 
-// --- Migrate legacy hardcoded accounts → social_accounts ---
-(function migrateLegacyAccounts() {
-  const count = (db.prepare("SELECT COUNT(*) as n FROM social_accounts").get() as { n: number }).n;
-  if (count > 0) return;
-
-  const get = (key: string) => {
-    const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | undefined;
-    return row?.value || "";
-  };
-
-  const cwToken = get("threadsTokenCw");
-  const lfToken = get("threadsTokenLf");
-
-  if (cwToken) {
-    db.prepare(
-      "INSERT INTO social_accounts (id, name, handle, platform, token, user_id, style, persona_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run("cw", "Claude World Taiwan", "@claude.world.taiwan", "threads", cwToken, get("threadsUserIdCw"), "tech-educator", "You are a knowledgeable tech educator focused on Claude Code and AI development tools. Write in Traditional Chinese (Taiwan). Tone: professional yet approachable, data-driven, with practical insights.");
-  }
-
-  if (lfToken) {
-    db.prepare(
-      "INSERT INTO social_accounts (id, name, handle, platform, token, user_id, style, persona_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run("lf", "Lucas Futures", "@lucasfutures", "threads", lfToken, get("threadsUserIdLf"), "futurist", "You are a forward-thinking futurist who explores emerging tech trends. Write in Traditional Chinese (Taiwan). Tone: visionary, thought-provoking, concise.");
-  }
-
-  // Also migrate IG accounts if tokens exist
-  const cwIg = get("igTokenCw");
-  const lfIg = get("igTokenLf");
-  if (cwIg) {
-    db.prepare(
-      "INSERT INTO social_accounts (id, name, handle, platform, token, user_id, style, persona_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run("cw-ig", "Claude World Taiwan (IG)", "@claude.world.taiwan", "instagram", cwIg, "", "tech-visual", "Create visually-oriented tech content about Claude Code and AI tools. Focus on infographics, quick tips, and visual guides.");
-  }
-  if (lfIg) {
-    db.prepare(
-      "INSERT INTO social_accounts (id, name, handle, platform, token, user_id, style, persona_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run("lf-ig", "Lucas Futures (IG)", "@lucasfutures", "instagram", lfIg, "", "futurist-visual", "Create visually striking content about future tech trends. Focus on bold statements and eye-catching visuals.");
-  }
-
-  if (cwToken || lfToken || cwIg || lfIg) {
-    console.log("[DB] Migrated legacy accounts to social_accounts table");
-  }
-})();
+// Social accounts are configured via the Settings UI — no hardcoded accounts.
 
 // Prepared statements
 const stmts = {

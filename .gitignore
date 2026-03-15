@@ -2,6 +2,25 @@ node_modules/
 dist/
 data/
 workspaces/
+
+# Secrets — never commit
 .env
+.env.*
+!.env.example
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Playwright
+.playwright-mcp/

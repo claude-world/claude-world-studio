@@ -119,30 +119,97 @@ Content integrity is enforced at the system level:
 
 ## Prerequisites
 
-- Node.js >= 18
-- Claude Code CLI installed and authenticated
-- Python 3.10+ (for MCP servers)
-- MCP servers set up: [trend-pulse](https://github.com/claude-world/trend-pulse), [cf-browser](https://github.com/claude-world/cf-browser), [notebooklm-skill](https://github.com/claude-world/notebooklm-skill)
+- **Node.js** >= 18
+- **Claude Code CLI** installed and authenticated (`npm install -g @anthropic-ai/claude-code`)
+- **Python** 3.10+ (for MCP servers)
 
-## Quick Start
+## Setup Guide
+
+### Step 1: Install Claude World Studio
 
 ```bash
-# Install dependencies
+git clone https://github.com/claude-world/claude-world-studio.git
+cd claude-world-studio
 npm install
-
-# Configure MCP server paths
 cp .env.example .env
-# Edit .env — set TREND_PULSE_PYTHON, CF_BROWSER_PYTHON, NOTEBOOKLM_SERVER_PATH
-
-# Start dev server (frontend + backend)
-npm run dev
-
-# Open http://localhost:5173
 ```
+
+### Step 2: Set Up MCP Servers
+
+The app uses 3 MCP servers — **all optional**, the app works with any combination. Set up what you need:
+
+#### trend-pulse (Trend Discovery) — Recommended
+
+Real-time trends from 20 sources (Google Trends, HN, Reddit, GitHub, etc). **Zero API keys needed.**
+
+```bash
+git clone https://github.com/claude-world/trend-pulse.git
+cd trend-pulse
+python3 -m venv .venv
+.venv/bin/pip install -e ".[mcp]"
+```
+
+Add to `.env`:
+```
+TREND_PULSE_PYTHON=/absolute/path/to/trend-pulse/.venv/bin/python
+```
+
+#### cf-browser (Web Scraping) — Recommended
+
+Cloudflare Browser Rendering for reading JS-rendered pages. Requires a free Cloudflare account.
+
+```bash
+git clone https://github.com/claude-world/cf-browser.git
+cd cf-browser
+bash setup.sh    # Deploys Worker + installs MCP server
+```
+
+Add to `.env`:
+```
+CF_BROWSER_PYTHON=/absolute/path/to/cf-browser/mcp-server/.venv/bin/python
+CF_BROWSER_URL=https://your-cf-browser.workers.dev
+CF_BROWSER_API_KEY=your-api-key
+```
+
+See [cf-browser README](https://github.com/claude-world/cf-browser) for Cloudflare Worker setup.
+
+#### notebooklm-skill (Research + Media) — Optional
+
+Google NotebookLM integration for podcast, slides, video generation. Requires a Google account.
+
+```bash
+git clone https://github.com/claude-world/notebooklm-skill.git
+cd notebooklm-skill
+pip install -r requirements.txt
+python3 scripts/auth_helper.py    # One-time Google login
+```
+
+Add to `.env`:
+```
+NOTEBOOKLM_SERVER_PATH=/absolute/path/to/notebooklm-skill/mcp-server/server.py
+```
+
+### Step 3: Start
+
+```bash
+npm run dev
+# Frontend: http://localhost:5173
+# Backend:  http://127.0.0.1:3001
+```
+
+The app auto-detects which MCP servers are configured and enables them. Unconfigured servers are silently skipped.
+
+### Step 4: Configure Social Accounts (Optional)
+
+To publish to Threads/Instagram, add accounts via **Settings > Social Accounts** in the UI. You'll need:
+- A Meta Developer App with Threads/Instagram API access
+- An access token (60-day expiry, renewable via OAuth)
 
 ## Security
 
-- Binds to `127.0.0.1` only (local use, not network-exposed)
+This is a **local-only development tool**. It runs Claude with full tool access on your machine.
+
+- Binds to `127.0.0.1` only (not exposed to network)
 - WebSocket origin verification (exact port whitelist)
 - CORS restricted to localhost dev ports
 - File API: async realpath + workspace containment check (TOCTOU-safe)
@@ -151,3 +218,13 @@ npm run dev
 - Session isolation: WS messages filtered by sessionId
 - Idle session eviction (30min TTL)
 - Query cancellation via AbortController on interrupt/eviction
+
+> **Warning**: Do NOT expose this server to the internet. The AI agent has `Bash`, `Read`, `Write`, and `Edit` access to your filesystem.
+
+## Contributing
+
+Issues and PRs welcome. Please open an issue first to discuss major changes.
+
+## License
+
+MIT
