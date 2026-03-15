@@ -8,9 +8,14 @@ interface FilePreviewModalProps {
 
 const IMAGE_EXTS = ["png", "jpg", "jpeg", "gif", "webp", "svg"];
 
-/** Sanitize path: strip ".." and "." segments to prevent traversal */
+/** Normalize path: resolve ".." by popping parent segments, strip "." */
 function sanitizePath(p: string): string {
-  return p.split("/").filter((seg) => seg !== ".." && seg !== "." && seg !== "").join("/");
+  const parts: string[] = [];
+  for (const seg of p.split("/")) {
+    if (seg === ".." ) { parts.pop(); }
+    else if (seg !== "." && seg !== "") { parts.push(seg); }
+  }
+  return parts.join("/");
 }
 
 export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewModalProps) {

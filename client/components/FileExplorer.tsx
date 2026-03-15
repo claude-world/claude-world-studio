@@ -198,7 +198,7 @@ export function FileExplorer({ sessionId, isVisible, onToggle, onPreviewFile }: 
       </div>
 
       {/* Tree */}
-      <div className="flex-1 overflow-y-auto p-1.5">
+      <div role="tree" aria-label="File explorer" className="flex-1 overflow-y-auto p-1.5">
         {loadingTree ? (
           <div className="text-xs text-gray-400 text-center mt-4">
             Loading...

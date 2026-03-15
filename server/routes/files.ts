@@ -126,13 +126,14 @@ router.get("/:sessionId/files/*", async (req, res) => {
 
   const fullPath = path.resolve(session.workspace_path, filePath);
 
-  // Security: resolve symlinks and verify path is within workspace
-  if (!isWithinWorkspace(session.workspace_path, fullPath)) {
-    return res.status(403).json({ error: "Path traversal not allowed" });
-  }
-
   try {
+    // Stat first to confirm file exists, then security check with realpath
     const stat = await fsp.stat(fullPath);
+
+    // Security: resolve symlinks and verify path is within workspace
+    if (!isWithinWorkspace(session.workspace_path, fullPath)) {
+      return res.status(403).json({ error: "Path traversal not allowed" });
+    }
     if (stat.isDirectory()) {
       return res.status(400).json({ error: "Path is a directory" });
     }

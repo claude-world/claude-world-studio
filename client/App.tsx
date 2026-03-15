@@ -263,6 +263,8 @@ export default function App() {
   };
 
   const selectSession = (sessionId: string) => {
+    // Update ref BEFORE subscribe so WS message filter accepts the new session
+    selectedSessionRef.current = sessionId;
     setSelectedSessionId(sessionId);
     setMessages([]);
     setIsLoading(false);

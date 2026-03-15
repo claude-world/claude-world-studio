@@ -95,14 +95,16 @@ export function ToolUseBlock({ toolName, toolInput, toolId, onPreviewFile }: Too
 
   return (
     <div className={`my-2 border rounded ${colorClass}`}>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => setIsExpanded(!isExpanded)}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setIsExpanded(!isExpanded); } }}
-        className="w-full p-2 flex items-center justify-between text-left hover:opacity-80 cursor-pointer"
-      >
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="p-2 flex items-center justify-between">
+        {/* Collapse toggle — clickable label area */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setIsExpanded(!isExpanded)}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setIsExpanded(!isExpanded); } }}
+          className="flex items-center gap-2 min-w-0 cursor-pointer hover:opacity-80 flex-1"
+        >
+          <span className="text-xs text-gray-400 shrink-0">{isExpanded ? "▼" : "▶"}</span>
           {badge && (
             <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${badge.color}`}>
               {badge.label}
@@ -115,23 +117,16 @@ export function ToolUseBlock({ toolName, toolInput, toolId, onPreviewFile }: Too
             {getToolSummary(toolName, toolInput)}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0 ml-2">
-          {canPreview && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onPreviewFile!(filePath!);
-              }}
-              className="text-[10px] px-2 py-0.5 rounded bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors"
-            >
-              Preview
-            </button>
-          )}
-          <span className="text-xs text-gray-400">
-            {isExpanded ? "▼" : "▶"}
-          </span>
-        </div>
+        {/* Preview button — separate from toggle, no nesting */}
+        {canPreview && (
+          <button
+            type="button"
+            onClick={() => onPreviewFile!(filePath!)}
+            className="text-[10px] px-2 py-0.5 rounded bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors shrink-0 ml-2"
+          >
+            Preview
+          </button>
+        )}
       </div>
       {isExpanded && (
         <div className="p-2 border-t border-gray-200/50">
