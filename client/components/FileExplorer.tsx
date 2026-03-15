@@ -78,24 +78,16 @@ function FileTreeNode({
 
   return (
     <div>
-      <div
-        role="treeitem"
-        tabIndex={0}
+      <button
+        type="button"
         aria-expanded={entry.type === "directory" ? isOpen : undefined}
-        className="flex items-center gap-1.5 py-1 px-1.5 hover:bg-gray-100 rounded cursor-pointer text-xs group"
+        className="w-full flex items-center gap-1.5 py-1 px-1.5 hover:bg-gray-100 rounded cursor-pointer text-xs group text-left"
         style={{ paddingLeft: depth * 14 + 6 }}
         onClick={() => {
           if (entry.type === "directory") {
             setIsOpen(!isOpen);
           } else {
             onSelect(entry.path);
-          }
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            if (entry.type === "directory") setIsOpen(!isOpen);
-            else onSelect(entry.path);
           }
         }}
       >
@@ -111,13 +103,15 @@ function FileTreeNode({
             {formatSize(entry.size)}
           </span>
         )}
-      </div>
+      </button>
 
       {/* Inline image thumbnail for image files */}
       {entry.type === "file" && isImage && (
-        <div
-          className="ml-8 mr-2 my-1 cursor-pointer"
+        <button
+          type="button"
+          className="ml-8 mr-2 my-1 cursor-pointer block"
           onClick={() => onSelect(entry.path)}
+          aria-label={`Preview ${entry.name}`}
         >
           <img
             src={`/api/sessions/${encodeURIComponent(sessionId)}/files/${entry.path.split("/").map(encodeURIComponent).join("/")}`}
@@ -125,7 +119,7 @@ function FileTreeNode({
             className="max-h-16 rounded border border-gray-200 hover:border-blue-300 transition-colors"
             loading="lazy"
           />
-        </div>
+        </button>
       )}
 
       {entry.type === "directory" && isOpen && entry.children && (
@@ -198,7 +192,7 @@ export function FileExplorer({ sessionId, isVisible, onToggle, onPreviewFile }: 
       </div>
 
       {/* Tree */}
-      <div role="tree" aria-label="File explorer" className="flex-1 overflow-y-auto p-1.5">
+      <div role="list" aria-label="File explorer" className="flex-1 overflow-y-auto p-1.5">
         {loadingTree ? (
           <div className="text-xs text-gray-400 text-center mt-4">
             Loading...

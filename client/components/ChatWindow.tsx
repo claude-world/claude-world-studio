@@ -291,13 +291,15 @@ function InlineCode({
   const text = String(children);
   if (isPreviewablePath(text, workspacePath)) {
     return (
-      <code
-        className="text-blue-600 bg-blue-50 px-1 py-0.5 rounded text-xs cursor-pointer hover:bg-blue-100 hover:underline transition-colors"
+      <button
+        type="button"
+        className="text-blue-600 bg-blue-50 px-1 py-0.5 rounded text-xs cursor-pointer hover:bg-blue-100 hover:underline transition-colors font-mono inline"
         onClick={() => onPreviewFile(text)}
         title="Click to preview"
+        aria-label={`Preview file ${text.split("/").pop()}`}
       >
         {children}
-      </code>
+      </button>
     );
   }
   return <code>{children}</code>;

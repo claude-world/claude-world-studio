@@ -305,18 +305,21 @@ export default function App() {
     setIsLoading(false);
   };
 
-  // Preview a file — accepts absolute or relative path
+  // Preview a file — accepts absolute or relative path (must be within workspace)
   const handlePreviewFile = (filePath: string) => {
     if (!selectedSessionId) return;
     const session = sessions.find((s) => s.id === selectedSessionId);
-    let relativePath = filePath;
-    if (session) {
+    if (filePath.startsWith("/")) {
+      // Absolute path — must be within workspace, otherwise reject
+      if (!session) return;
       const wsBase = session.workspace_path.replace(/\/$/, "");
-      if (filePath.startsWith(wsBase + "/")) {
-        relativePath = filePath.slice(wsBase.length + 1);
-      }
+      if (!filePath.startsWith(wsBase + "/")) return; // outside workspace, ignore
+      const relativePath = filePath.slice(wsBase.length + 1);
+      setPreviewFile({ relativePath, sessionId: selectedSessionId });
+    } else {
+      // Already relative
+      setPreviewFile({ relativePath: filePath, sessionId: selectedSessionId });
     }
-    setPreviewFile({ relativePath, sessionId: selectedSessionId });
   };
 
   // Preview from file explorer (already relative)
