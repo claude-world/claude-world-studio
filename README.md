@@ -44,10 +44,6 @@ Full markdown rendering with syntax highlighting, clickable source links, cost/d
 
 ![Rich Content](demo/07-history-rich.png)
 
-### File Explorer + Preview
-
-Browse workspace files with inline image thumbnails. Click any file to open a full-screen preview modal supporting images, PDFs, audio, video, and text.
-
 ### Multi-Language (i18n)
 
 Full support for Traditional Chinese, English, and Japanese — all pipeline cards, chips, UI labels, system prompts, and placeholder text adapt:
