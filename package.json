@@ -3,12 +3,72 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Claude World Studio - Trend Discovery to Content Publishing Pipeline",
+  "main": "electron/main.cjs",
+  "bin": {
+    "claude-world-studio": "./bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "client/",
+    "server/",
+    "scripts/",
+    "dist/",
+    "data/",
+    "electron/",
+    "postcss.config.js",
+    "tailwind.config.js",
+    "tsconfig.json",
+    "vite.config.ts",
+    ".env.example"
+  ],
+  "keywords": [
+    "claude",
+    "ai",
+    "agent",
+    "threads",
+    "social-media",
+    "trend-analysis",
+    "mcp",
+    "anthropic"
+  ],
+  "author": "Claude World <hello@claude-world.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/claude-world/claude-world-studio.git"
+  },
+  "homepage": "https://github.com/claude-world/claude-world-studio",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "tsx watch server/server.ts",
     "dev:client": "vite --port 5173",
+    "postinstall": "npm rebuild better-sqlite3 2>/dev/null; true",
     "start": "tsx server/server.ts",
-    "build": "vite build"
+    "build": "vite build",
+    "electron:dev": "npm run build && electron .",
+    "electron:build": "npm run build && electron-builder --mac"
+  },
+  "build": {
+    "appId": "com.claude-world.studio",
+    "productName": "Claude World Studio",
+    "npmRebuild": false,
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": "dmg"
+    },
+    "files": [
+      "electron/**/*",
+      "server/**/*",
+      "scripts/**/*",
+      "dist/**/*",
+      "data/**/*",
+      "node_modules/**/*",
+      ".env",
+      "package.json"
+    ],
+    "extraResources": [
+      { "from": "data", "to": "data" }
+    ]
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.28",
@@ -24,7 +84,14 @@
     "rehype-sanitize": "^6.0.0",
     "uuid": "^10.0.0",
     "ws": "^8.18.0",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "tsx": "^4.19.0",
+    "concurrently": "^9.0.0",
+    "vite": "^5.4.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",
@@ -36,13 +103,8 @@
     "@types/react-dom": "^18.3.0",
     "@types/uuid": "^10.0.0",
     "@types/ws": "^8.5.12",
-    "@vitejs/plugin-react": "^4.3.0",
-    "autoprefixer": "^10.4.20",
-    "concurrently": "^9.0.0",
-    "postcss": "^8.4.47",
-    "tailwindcss": "^3.4.14",
-    "tsx": "^4.19.0",
-    "typescript": "^5.5.0",
-    "vite": "^5.4.0"
+    "electron": "^41.0.2",
+    "electron-builder": "^26.8.1",
+    "typescript": "^5.5.0"
   }
 }

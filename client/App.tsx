@@ -374,7 +374,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50 pt-8">
       {/* Sidebar */}
       <div className="w-64 shrink-0">
         <Sidebar
