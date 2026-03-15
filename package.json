@@ -59,6 +59,7 @@
       "target": "dmg"
     },
     "files": [
+      "bin/**/*",
       "electron/**/*",
       "server/**/*",
       "scripts/**/*",

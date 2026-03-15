@@ -112,12 +112,33 @@ function hasFlag(args, name) {
 
 // serve
 async function cmdServe(args, port, host) {
-  const { execSync } = await import("node:child_process");
-  try {
-    execSync(`npx tsx server/server.ts`, { stdio: "inherit", env: { ...process.env, PORT: String(port), HOST: host } });
-  } catch {
-    process.exit(1);
+  const { spawnSync } = await import("node:child_process");
+  const { existsSync, mkdirSync } = await import("node:fs");
+  const { join, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+
+  const __filename = fileURLToPath(import.meta.url);
+  const projectDir = join(dirname(__filename), "..");
+
+  // Ensure data directory exists
+  const dataDir = join(projectDir, "data");
+  if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
+
+  // Use bundled tsx (works in npm install -g and Electron), fallback to npx
+  const tsxBin = join(projectDir, "node_modules", ".bin", "tsx");
+  const cmd = existsSync(tsxBin) ? tsxBin : "npx";
+  const cmdArgs = existsSync(tsxBin) ? ["server/server.ts"] : ["tsx", "server/server.ts"];
+
+  const result = spawnSync(cmd, cmdArgs, {
+    cwd: projectDir,
+    stdio: "inherit",
+    env: { ...process.env, PORT: String(port), HOST: host },
+  });
+
+  if (result.error) {
+    die(`Failed to start server: ${result.error.message}`);
   }
+  process.exit(result.status ?? 1);
 }
 
 // status
