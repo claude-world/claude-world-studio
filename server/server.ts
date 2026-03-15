@@ -24,7 +24,14 @@ const PORT = parseInt(process.env.PORT || "3001", 10);
 const HOST = process.env.HOST || "127.0.0.1";
 
 const app = express();
-app.use(cors({ origin: /^https?:\/\/localhost(:\d+)?$/ }));
+// Only allow our own frontend origins (exact port match)
+const ALLOWED_ORIGINS = [
+  `http://localhost:${PORT}`,
+  `http://127.0.0.1:${PORT}`,
+  "http://localhost:5173",    // Vite dev server
+  "http://127.0.0.1:5173",
+];
+app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(express.json());
 
 // Serve built assets in production, raw client in dev
@@ -111,16 +118,14 @@ export { removeSession };
 // Create HTTP server
 const server = createServer(app);
 
-// WebSocket server with origin check
-const ALLOWED_WS_ORIGINS = /^https?:\/\/localhost(:\d+)?$/;
-
+// WebSocket server with origin check (same list as CORS)
 const wss = new WebSocketServer({
   server,
   path: "/ws",
   verifyClient: ({ origin }: { origin?: string }) => {
     // Allow connections without origin (e.g. from CLI tools)
     if (!origin) return true;
-    return ALLOWED_WS_ORIGINS.test(origin);
+    return ALLOWED_ORIGINS.includes(origin);
   },
 });
 
@@ -141,6 +146,12 @@ wss.on("connection", (ws: WSClient) => {
 
       switch (message.type) {
         case "subscribe": {
+          // Unsubscribe from any previous session first
+          if (ws.sessionId) {
+            const prev = sessions.get(ws.sessionId);
+            if (prev) prev.unsubscribe(ws);
+          }
+
           const session = getSession(message.sessionId);
           if (!session) {
             ws.send(JSON.stringify({
@@ -168,6 +179,11 @@ wss.on("connection", (ws: WSClient) => {
           if (!message.content?.trim()) {
             ws.send(JSON.stringify({ type: "error", error: "Empty message" }));
             break;
+          }
+          // Unsubscribe from previous session if switching
+          if (ws.sessionId && ws.sessionId !== message.sessionId) {
+            const prev = sessions.get(ws.sessionId);
+            if (prev) prev.unsubscribe(ws);
           }
           const session = getSession(message.sessionId);
           if (!session) {
