@@ -14,6 +14,7 @@
     "client/",
     "server/",
     "scripts/",
+    "electron/",
     "postcss.config.js",
     "tailwind.config.js",
     "tsconfig.json",

@@ -4,7 +4,7 @@
 
 ### Added
 
-- **Full CLI support** — `bin/cli.js` with 25+ commands mapping 1:1 to REST API + WebSocket
+- **Full CLI support** — `bin/cli.js` with 23 commands mapping 1:1 to REST API + WebSocket
   - `session list|create|get|rename|delete|messages` — full session CRUD
   - `chat --message|--session|--json` — WebSocket streaming with auto-session-create and stdin pipe
   - `account list|create|update|delete` — social account management

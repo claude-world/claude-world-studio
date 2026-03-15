@@ -27,3 +27,6 @@ jobs:
 
       - name: CLI smoke test
         run: node bin/cli.js help > /dev/null
+
+      - name: Package validation
+        run: npm pack --dry-run 2>&1 | tail -20

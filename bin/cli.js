@@ -64,7 +64,7 @@ function api(method, path, body, port, host) {
     });
     req.on("error", (err) => {
       if (err.code === "ECONNREFUSED") {
-        reject(new Error(`Server not running at ${host}:${port}. Start with: npx studio serve`));
+        reject(new Error(`Server not running at ${host}:${port}. Start with: studio serve`));
       } else {
         reject(err);
       }

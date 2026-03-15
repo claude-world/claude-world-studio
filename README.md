@@ -140,7 +140,7 @@ Use `node bin/cli.js <command>` or `npm link` to register the `studio` command.
 
 ## CLI
 
-Full CLI with 25+ commands. All commands support `--json` for programmatic use.
+Full CLI with 23 commands. All commands support `--json` for programmatic use.
 
 ```bash
 # Server
@@ -178,9 +178,11 @@ studio file read <SESSION_ID> src/index.ts
 
 Global flags: `--json`, `--port N` (env: `STUDIO_PORT`), `--host H` (env: `STUDIO_HOST`)
 
+Additional utility: `setup-mcp` — interactive MCP server setup wizard (`npx @claude-world/studio setup-mcp`)
+
 ## Setup Guide
 
-### Step 2: Set Up MCP Servers
+### Step 1: Set Up MCP Servers
 
 The app uses 3 MCP servers — **all optional**, the app works with any combination. Set up what you need:
 
@@ -235,7 +237,7 @@ Add to `.env`:
 NOTEBOOKLM_SERVER_PATH=/absolute/path/to/notebooklm-skill/mcp-server/server.py
 ```
 
-### Step 3: Start
+### Step 2: Start
 
 ```bash
 npm run dev
@@ -245,7 +247,7 @@ npm run dev
 
 The app auto-detects which MCP servers are configured and enables them. Unconfigured servers are silently skipped.
 
-### Step 4: Configure Social Accounts (Optional)
+### Step 3: Configure Social Accounts (Optional)
 
 To publish to Threads/Instagram, add accounts via **Settings > Social Accounts** in the UI. You'll need:
 - A Meta Developer App with Threads/Instagram API access
