@@ -236,6 +236,8 @@ export class AgentSession {
     const options: Record<string, any> = {
       maxTurns: 200,
       model: "sonnet",
+      // bypassPermissions: intentional — local single-user tool.
+      // All tool calls execute without prompting. Do NOT expose to untrusted networks.
       permissionMode: "bypassPermissions",
       systemPrompt: buildSystemPrompt(lang, accounts),
       cwd,

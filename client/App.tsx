@@ -149,6 +149,7 @@ export default function App() {
   // Re-subscribe to the active session after reconnect
   useEffect(() => {
     if (isConnected && selectedSessionRef.current) {
+      setIsLoading(false); // reset stale loading state from before disconnect
       sendJsonMessage({ type: "subscribe", sessionId: selectedSessionRef.current });
     }
   }, [isConnected, sendJsonMessage]);
