@@ -43,35 +43,39 @@ interface SettingGroup {
   guide?: { title: string; steps: string[]; links?: { label: string; url: string }[] };
 }
 
+/** Keys that are auto-provided by uvx and don't need manual paths */
+const UVX_AUTO_KEYS = new Set(["trendPulseVenvPython", "cfBrowserVenvPython", "notebooklmServerPath"]);
+
 const SETTING_GROUPS: SettingGroup[] = [
   {
     title: "MCP Servers",
     fields: [
-      { key: "trendPulseVenvPython", label: "trend-pulse Python path", placeholder: "/path/to/trend-pulse/.venv/bin/python" },
-      { key: "cfBrowserVenvPython", label: "cf-browser Python path", placeholder: "/path/to/cf-browser/.venv/bin/python" },
-      { key: "notebooklmServerPath", label: "NotebookLM server path", placeholder: "/path/to/mcp-server/server.py" },
+      { key: "trendPulseVenvPython", label: "trend-pulse Python path", placeholder: "Auto (uvx)" },
+      { key: "cfBrowserVenvPython", label: "cf-browser Python path", placeholder: "Auto (uvx)" },
+      { key: "notebooklmServerPath", label: "NotebookLM server path", placeholder: "Auto (uvx)" },
       { key: "cfBrowserUrl", label: "CF Browser URL", placeholder: "https://cf-browser.your-subdomain.workers.dev" },
       { key: "cfBrowserApiKey", label: "CF Browser API Key", placeholder: "api-key", sensitive: true },
     ],
     guide: {
       title: "How to set up MCP Servers",
       steps: [
-        "--- trend-pulse ---",
+        "--- Recommended: uvx (no clone needed) ---",
+        "uvx --from 'trend-pulse[mcp]' trend-pulse-server",
+        "uvx --from cf-browser-mcp cf-browser-mcp",
+        "uvx --from notebooklm-skill notebooklm-mcp",
+        "",
+        "If uvx is installed, paths above are auto-detected.",
+        "Only CF Browser URL/Key need manual config.",
+        "",
+        "--- Alternative: manual install ---",
         "git clone https://github.com/claude-world/trend-pulse.git",
         "cd trend-pulse && python3 -m venv .venv && .venv/bin/pip install -e '.[mcp]'",
-        "",
-        "--- cf-browser ---",
-        "git clone https://github.com/claude-world/cf-browser.git",
-        "cd cf-browser && bash setup.sh",
-        "",
-        "--- NotebookLM ---",
-        "git clone https://github.com/claude-world/notebooklm-skill.git",
-        "cd notebooklm-skill && pip install -r requirements.txt",
       ],
       links: [
         { label: "trend-pulse", url: "https://github.com/claude-world/trend-pulse" },
         { label: "cf-browser", url: "https://github.com/claude-world/cf-browser" },
         { label: "notebooklm-skill", url: "https://github.com/claude-world/notebooklm-skill" },
+        { label: "Install uv", url: "https://docs.astral.sh/uv/" },
       ],
     },
   },
@@ -373,16 +377,26 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
               )}
             </div>
           </div>
+          {detected["uvxAvailable"]?.found && (
+            <div className="mt-2 px-3 py-2 bg-emerald-100 border border-emerald-300 rounded-md flex items-center gap-2 text-xs text-emerald-800">
+              <StatusDot found={true} />
+              <span><strong>uvx detected</strong> — MCP servers auto-configured, no manual paths needed.</span>
+            </div>
+          )}
           {Object.keys(detected).length > 0 && (
             <div className="mt-3 grid grid-cols-2 gap-1.5">
               {allKeys.map((key) => {
                 const info = detected[key];
                 if (!info) return null;
                 const label = SETTING_GROUPS.flatMap((g) => g.fields).find((f) => f.key === key)?.label || key;
+                const isUvxAuto = UVX_AUTO_KEYS.has(key) && detected["uvxAvailable"]?.found && info.value?.startsWith("uvx:");
                 return (
                   <div key={key} className="flex items-center gap-1.5 text-xs">
                     <StatusDot found={info.found} />
-                    <span className={info.found ? "text-gray-700" : "text-gray-400"}>{label}</span>
+                    <span className={info.found ? "text-gray-700" : "text-gray-400"}>
+                      {label}
+                      {isUvxAuto && <span className="ml-1 text-emerald-600 font-medium">(uvx)</span>}
+                    </span>
                   </div>
                 );
               })}
@@ -414,24 +428,34 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
               {group.fields.map((field) => {
                 const det = detected[field.key];
                 const hasValue = !!(settings as any)[field.key];
+                const isUvxAuto = UVX_AUTO_KEYS.has(field.key) && detected["uvxAvailable"]?.found;
+                const uvxHandled = isUvxAuto && !hasValue;
+
                 return (
                   <div key={field.key}>
                     <label className="text-sm text-gray-600 flex items-center gap-2 mb-1">
-                      {hasValue ? <StatusDot found={true} /> : det ? <StatusDot found={det.found} /> : null}
+                      {uvxHandled ? <StatusDot found={true} /> : hasValue ? <StatusDot found={true} /> : det ? <StatusDot found={det.found} /> : null}
                       {field.label}
-                      {det?.found && !(settings as any)[field.key] && (
+                      {uvxHandled && <span className="text-xs text-emerald-600 font-medium">auto (uvx)</span>}
+                      {!uvxHandled && det?.found && !hasValue && (
                         <button onClick={() => setSettings((prev) => ({ ...prev, [field.key]: det.value }))} className="text-xs text-emerald-600 hover:text-emerald-800 font-medium ml-1">
                           use detected
                         </button>
                       )}
                     </label>
-                    <input
-                      type={field.sensitive ? "password" : "text"}
-                      value={(settings as any)[field.key] || ""}
-                      onChange={(e) => setSettings((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                      placeholder={field.placeholder}
-                      className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono ${hasValue ? "border-green-300 bg-green-50/30" : "border-gray-300"}`}
-                    />
+                    {uvxHandled ? (
+                      <div className="px-3 py-2 border border-emerald-200 bg-emerald-50/30 rounded-lg text-sm text-emerald-700 font-mono">
+                        uvx auto-configured
+                      </div>
+                    ) : (
+                      <input
+                        type={field.sensitive ? "password" : "text"}
+                        value={(settings as any)[field.key] || ""}
+                        onChange={(e) => setSettings((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                        placeholder={field.placeholder}
+                        className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono ${hasValue ? "border-green-300 bg-green-50/30" : "border-gray-300"}`}
+                      />
+                    )}
                   </div>
                 );
               })}
