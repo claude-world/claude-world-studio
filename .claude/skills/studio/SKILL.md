@@ -48,9 +48,22 @@ studio settings detect          # Scan system for MCP tools
 studio settings apply           # Apply detected values
 studio settings set --language en --default-workspace /path
 
-# Publishing
+# Publishing (supports all Threads post types)
 studio publish --account <ID> --text "Hello!" --score 85
 studio publish --account <ID> --text "Vote!" --poll "Option A|Option B"
+studio publish --account <ID> --text "Look!" --image "https://url/img.png"
+studio publish --account <ID> --text "Watch" --video "https://url/vid.mp4"
+studio publish --account <ID> --text "Slides" --carousel URL1 URL2 URL3
+studio publish --account <ID> --text "Mood" --gif-id "GIPHY_ID"
+studio publish --account <ID> --text "Read" --link-attachment "https://url"
+studio publish --account <ID> --text "TL;DR" --text-attachment article.txt
+studio publish --account <ID> --text "Spoiler!" --image URL --spoiler-media
+studio publish --account <ID> --text "Secret text" --spoiler-text "7:4"
+studio publish --account <ID> --text "24hr only" --ghost
+studio publish --account <ID> --text "My take" --quote-post-id "12345"
+studio publish --account <ID> --text "Post" --reply-control mentioned_only
+studio publish --account <ID> --text "Post" --topic-tag "AI" --alt-text "desc"
+studio publish --account <ID> --text "Post" --link-comment "https://url"
 studio history --limit 10
 
 # Files

@@ -8,7 +8,19 @@ const router = Router();
 
 // Publish content to a specific account
 router.post("/", async (req, res) => {
-  const { accountId, text, sessionId, score, imageUrl, pollOptions, linkComment, tag } = req.body;
+  const {
+    accountId, text, sessionId, score,
+    // Media
+    imageUrl, videoUrl, carouselUrls,
+    // Attachments
+    pollOptions, gifId, linkAttachment, textAttachment,
+    // Spoiler
+    spoilerMedia, spoilerText,
+    // Special
+    ghost, quotePostId,
+    // Controls
+    replyControl, topicTag, altText, linkComment,
+  } = req.body;
 
   if (!accountId || !text) {
     return res.status(400).json({ error: "accountId and text are required" });
@@ -41,9 +53,20 @@ router.post("/", async (req, res) => {
         token: account.token,
         score,
         imageUrl,
+        videoUrl,
+        carouselUrls,
         pollOptions,
+        gifId,
+        linkAttachment,
+        textAttachment,
+        spoilerMedia,
+        spoilerText,
+        ghost,
+        quotePostId,
+        replyControl,
+        topicTag,
+        altText,
         linkComment,
-        tag,
       });
     } else {
       throw new Error(`Publishing to ${account.platform} is not yet supported`);

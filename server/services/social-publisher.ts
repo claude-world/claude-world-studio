@@ -13,10 +13,26 @@ export interface PublishOptions {
   text: string;
   token: string;
   score?: number;
+  // Media
   imageUrl?: string;
-  pollOptions?: string;   // pipe-separated: "A|B|C"
-  linkComment?: string;
-  tag?: string;
+  videoUrl?: string;
+  carouselUrls?: string[];       // 2-20 URLs
+  // Attachments (TEXT only)
+  pollOptions?: string;          // pipe-separated: "A|B|C"
+  gifId?: string;
+  linkAttachment?: string;       // URL for link preview card
+  textAttachment?: string;       // file path or inline text (up to 10k chars)
+  // Spoiler
+  spoilerMedia?: boolean;        // blur image/video/carousel
+  spoilerText?: string[];        // ["offset:length", ...] up to 10
+  // Special
+  ghost?: boolean;               // 24hr ephemeral post
+  quotePostId?: string;          // quote another post
+  // Content controls
+  replyControl?: string;         // everyone|accounts_you_follow|mentioned_only|parent_post_author_only|followers_only
+  topicTag?: string;             // 1-50 chars
+  altText?: string;              // accessibility description, max 1000 chars
+  linkComment?: string;          // auto-reply with link
 }
 
 export interface PublishResult {
@@ -39,23 +55,70 @@ export async function publishToThreads(opts: PublishOptions): Promise<PublishRes
     const scriptPath = path.join(SCRIPTS_DIR, "threads_api.py");
     const args = [scriptPath, "publish", "--token", opts.token, "--text", opts.text];
 
+    // Media
     if (opts.imageUrl) {
       args.push("--image", opts.imageUrl);
     }
+    if (opts.videoUrl) {
+      args.push("--video", opts.videoUrl);
+    }
+    if (opts.carouselUrls && opts.carouselUrls.length >= 2) {
+      args.push("--carousel", ...opts.carouselUrls);
+    }
+
+    // Attachments (TEXT only)
     if (opts.pollOptions) {
       args.push("--poll", opts.pollOptions);
+    }
+    if (opts.gifId) {
+      args.push("--gif-id", opts.gifId);
+    }
+    if (opts.linkAttachment) {
+      args.push("--link-attachment", opts.linkAttachment);
+    }
+    if (opts.textAttachment) {
+      args.push("--text-attachment", opts.textAttachment);
+    }
+
+    // Spoiler
+    if (opts.spoilerMedia) {
+      args.push("--spoiler-media");
+    }
+    if (opts.spoilerText) {
+      for (const range of opts.spoilerText) {
+        args.push("--spoiler-text", range);
+      }
+    }
+
+    // Special
+    if (opts.ghost) {
+      args.push("--ghost");
+    }
+    if (opts.quotePostId) {
+      args.push("--quote-post-id", opts.quotePostId);
+    }
+
+    // Content controls
+    if (opts.replyControl) {
+      args.push("--reply-control", opts.replyControl);
+    }
+    if (opts.topicTag) {
+      args.push("--topic-tag", opts.topicTag);
+    }
+    if (opts.altText) {
+      args.push("--alt-text", opts.altText);
     }
     if (opts.linkComment) {
       args.push("--link-comment", opts.linkComment);
     }
-    if (opts.tag) {
-      args.push("--tag", opts.tag);
-    }
+
+    // Video/carousel need more processing time
+    const timeout = opts.videoUrl || opts.carouselUrls ? 180000 : 30000;
 
     execFile(
       "python3",
       args,
-      { timeout: 30000 },
+      { timeout },
       (error, stdout, stderr) => {
         if (error) {
           reject(new Error(stderr || error.message));
