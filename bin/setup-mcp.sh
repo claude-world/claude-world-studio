@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 set -e
 
-# Setup & update MCP servers for Claude World Studio
-#   setup-mcp            Install missing MCP servers
-#   setup-mcp --update   Pull latest + reinstall deps
+# Setup MCP servers for Claude World Studio
+#   setup-mcp              Auto-detect best method (uvx preferred)
+#   setup-mcp --update     Update installed servers
+#   setup-mcp --venv       Force clone + venv (legacy mode)
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-MCP_DIR="$PROJECT_DIR/mcp-servers"
 UPDATE=false
-[[ "${1:-}" == "--update" || "${1:-}" == "-u" ]] && UPDATE=true
+FORCE_VENV=false
+for arg in "$@"; do
+  case "$arg" in
+    --update|-u) UPDATE=true ;;
+    --venv)      FORCE_VENV=true ;;
+  esac
+done
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -17,18 +21,58 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 ok()   { echo -e "${GREEN}✓${NC} $1"; }
-skip() { echo -e "${YELLOW}→${NC} $1 (already installed, use --update to upgrade)"; }
+skip() { echo -e "${YELLOW}→${NC} $1"; }
 info() { echo -e "${YELLOW}↻${NC} $1"; }
 fail() { echo -e "${RED}✗${NC} $1"; }
 
+# ─── Check: uvx available? ───
+HAS_UVX=false
+if command -v uvx &>/dev/null && [ "$FORCE_VENV" = false ]; then
+  HAS_UVX=true
+  ok "uvx $(uvx --version 2>/dev/null | head -1)"
+fi
+
+# ─── uvx mode (preferred) ───
+if $HAS_UVX; then
+  echo ""
+  echo "Installing MCP servers via uvx (no clone needed)..."
+  echo ""
+
+  # Pre-install to uvx cache
+  uvx --from 'trend-pulse[mcp]' trend-pulse-server --help &>/dev/null && ok "trend-pulse" || fail "trend-pulse"
+  uvx --from cf-browser-mcp cf-browser-mcp --help &>/dev/null && ok "cf-browser" || fail "cf-browser"
+  uvx --from notebooklm-skill notebooklm-mcp --help &>/dev/null && ok "notebooklm" || fail "notebooklm"
+
+  echo ""
+  echo -e "${GREEN}Done!${NC} All MCP servers cached via uvx."
+  echo "Studio will auto-detect uvx and use it — no path config needed."
+  echo ""
+  echo "  For Claude Code CLI:  uvx config is in .mcp.json"
+  echo "  For Claude App (Mac): add to ~/Library/Application Support/Claude/claude_desktop_config.json"
+  echo ""
+  echo "  Example (Claude App):"
+  echo '    "trend-pulse": {'
+  echo '      "command": "uvx",'
+  echo '      "args": ["--from", "trend-pulse[mcp]", "trend-pulse-server"]'
+  echo '    }'
+  echo ""
+  exit 0
+fi
+
+# ─── Legacy venv mode ───
+
 # Check Python
 if ! command -v python3 &>/dev/null; then
-  fail "python3 not found. Install Python 3.10+ first."
+  fail "python3 not found. Install Python 3.10+ or uv (https://docs.astral.sh/uv/)."
   exit 1
 fi
 
 PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-ok "Python $PYTHON_VERSION"
+ok "Python $PYTHON_VERSION (legacy venv mode)"
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+MCP_DIR="$PROJECT_DIR/mcp-servers"
 
 mkdir -p "$MCP_DIR"
 echo ""
@@ -58,7 +102,7 @@ setup_repo() {
       ok "$name already up to date"
     fi
   elif [ -f "$MCP_DIR/$name/$check_file" ]; then
-    skip "$name"
+    skip "$name (already installed, use --update to upgrade)"
   else
     echo "Installing $name..."
     git clone --depth 1 "$repo" "$MCP_DIR/$name" 2>/dev/null || true
@@ -85,7 +129,7 @@ setup_repo \
   ".venv/bin/pip install -q -e ../sdk && .venv/bin/pip install -q -e ." \
   "mcp-server/.venv/bin/python"
 
-# --- notebooklm-skill (notebooklm-py is the correct PyPI name) ---
+# --- notebooklm-skill ---
 setup_repo \
   "notebooklm-skill" \
   "https://github.com/claude-world/notebooklm-skill.git" \
@@ -100,5 +144,5 @@ else
   echo -e "${GREEN}Done!${NC} Start Studio and click ${YELLOW}Scan System${NC} in Settings to auto-detect."
 fi
 echo ""
-echo "  claude-world-studio       # start"
-echo "  setup-mcp --update        # update later"
+echo "  Tip: Install uv (https://docs.astral.sh/uv/) for simpler setup next time."
+echo ""

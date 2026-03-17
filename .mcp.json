@@ -42,10 +42,21 @@
     },
     "trend-pulse": {
       "type": "stdio",
-      "command": "/Users/longweiwang/github/claude-code-community/trend-pulse/.venv/bin/python",
-      "args": ["-m", "trend_pulse.server"],
+      "command": "uvx",
+      "args": ["--from", "trend-pulse[mcp]", "trend-pulse-server"],
       "env": {}
-
+    },
+    "cf-browser": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["--from", "cf-browser-mcp", "cf-browser-mcp"],
+      "env": {}
+    },
+    "notebooklm": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["--from", "notebooklm-skill", "notebooklm-mcp"],
+      "env": {}
     }
   }
 }

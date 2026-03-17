@@ -1,11 +1,26 @@
 import { existsSync } from "fs";
 import { isAbsolute } from "path";
+import { execFileSync } from "child_process";
 import type { Settings, Language } from "./types.js";
 import store from "./db.js";
 
 /** Validate a path setting: must be absolute and exist on disk */
 function isValidPath(p: string): boolean {
   return !!p && isAbsolute(p) && existsSync(p);
+}
+
+/** Check if uvx is available on the system */
+let _uvxAvailable: boolean | null = null;
+function isUvxAvailable(): boolean {
+  if (_uvxAvailable === null) {
+    try {
+      execFileSync("uvx", ["--version"], { stdio: "ignore" });
+      _uvxAvailable = true;
+    } catch {
+      _uvxAvailable = false;
+    }
+  }
+  return _uvxAvailable;
 }
 
 export function getSettings(): Settings {
@@ -27,6 +42,13 @@ export function getSettings(): Settings {
   };
 }
 
+/** uvx definitions for each MCP server (used as fallback) */
+const UVX_SERVERS: Record<string, { from: string; cmd: string }> = {
+  "trend-pulse": { from: "trend-pulse[mcp]", cmd: "trend-pulse-server" },
+  "cf-browser":  { from: "cf-browser-mcp",   cmd: "cf-browser-mcp" },
+  "notebooklm":  { from: "notebooklm-skill", cmd: "notebooklm-mcp" },
+};
+
 interface McpServerConfig {
   name: string;
   path: string;
@@ -35,6 +57,7 @@ interface McpServerConfig {
 
 export function buildMcpServers(settings: Settings) {
   const servers: Record<string, any> = {};
+  const uvx = isUvxAvailable();
 
   const configs: McpServerConfig[] = [
     {
@@ -70,15 +93,34 @@ export function buildMcpServers(settings: Settings) {
   ];
 
   for (const cfg of configs) {
-    if (!cfg.path) continue;
-
-    if (!isValidPath(cfg.path)) {
-      console.warn(`[MCP] ${cfg.name} skipped: path not found → ${cfg.path}`);
+    // 1. Local venv path configured and valid → use it
+    if (cfg.path && isValidPath(cfg.path)) {
+      servers[cfg.name] = cfg.build();
+      console.log(`[MCP] ${cfg.name} enabled → ${cfg.path}`);
       continue;
     }
 
-    servers[cfg.name] = cfg.build();
-    console.log(`[MCP] ${cfg.name} enabled → ${cfg.path}`);
+    // 2. Fallback to uvx if available
+    const uvxDef = UVX_SERVERS[cfg.name];
+    if (uvx && uvxDef) {
+      const env: Record<string, string> = {};
+      if (cfg.name === "cf-browser") {
+        if (settings.cfBrowserUrl) env.CF_BROWSER_URL = settings.cfBrowserUrl;
+        if (settings.cfBrowserApiKey) env.CF_BROWSER_API_KEY = settings.cfBrowserApiKey;
+      }
+      servers[cfg.name] = {
+        command: "uvx",
+        args: ["--from", uvxDef.from, uvxDef.cmd],
+        env,
+      };
+      console.log(`[MCP] ${cfg.name} enabled → uvx ${uvxDef.cmd}`);
+      continue;
+    }
+
+    // 3. Skip
+    if (cfg.path) {
+      console.warn(`[MCP] ${cfg.name} skipped: path not found → ${cfg.path}`);
+    }
   }
 
   return servers;

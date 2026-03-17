@@ -1,11 +1,22 @@
 import { Router } from "express";
 import { existsSync, readFileSync, readdirSync } from "fs";
+import { execFileSync } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
 import store from "../db.js";
 import { getSettings } from "../mcp-config.js";
 
 const { join, isAbsolute } = path;
+
+/** Check if uvx is available */
+function hasUvx(): boolean {
+  try {
+    execFileSync("uvx", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -104,13 +115,25 @@ router.get("/detect", (_req, res) => {
     }
   }
 
+  const uvxAvailable = hasUvx();
+
   const detected: Record<string, { value: string; found: boolean }> = {
-    trendPulseVenvPython: { value: trendPulsePython, found: !!trendPulsePython },
-    cfBrowserVenvPython: { value: cfBrowserPython, found: !!cfBrowserPython },
-    notebooklmServerPath: { value: notebooklmPath, found: !!notebooklmPath },
+    trendPulseVenvPython: {
+      value: trendPulsePython || (uvxAvailable ? "uvx:trend-pulse[mcp]" : ""),
+      found: !!trendPulsePython || uvxAvailable,
+    },
+    cfBrowserVenvPython: {
+      value: cfBrowserPython || (uvxAvailable ? "uvx:cf-browser-mcp" : ""),
+      found: !!cfBrowserPython || uvxAvailable,
+    },
+    notebooklmServerPath: {
+      value: notebooklmPath || (uvxAvailable ? "uvx:notebooklm-skill" : ""),
+      found: !!notebooklmPath || uvxAvailable,
+    },
     cfBrowserUrl: { value: cfBrowserUrl, found: !!cfBrowserUrl },
     cfBrowserApiKey: { value: "", found: cfBrowserApiKeyFound },
     defaultWorkspace: { value: workspace, found: existsSync(workspace) },
+    uvxAvailable: { value: uvxAvailable ? "true" : "", found: uvxAvailable },
   };
 
   res.json(detected);
