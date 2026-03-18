@@ -1,6 +1,7 @@
 import { execFile } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
+import type { PostInsights } from "../types.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -134,4 +135,36 @@ export async function publishToThreads(opts: PublishOptions): Promise<PublishRes
       }
     );
   });
+}
+
+/**
+ * Fetch insights (views, likes, replies, reposts, quotes) for a published Threads post.
+ * Uses the Threads Graph API: GET /{media-id}/threads_insights
+ */
+export async function fetchThreadsInsights(postId: string, token: string): Promise<PostInsights> {
+  const metrics = "views,likes,replies,reposts,quotes";
+  const url = `https://graph.threads.net/v1.0/${encodeURIComponent(postId)}/threads_insights?metric=${metrics}`;
+
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Threads Insights API error (${res.status}): ${body}`);
+  }
+
+  const json = await res.json();
+  const data: Record<string, number> = {};
+  for (const entry of json.data || []) {
+    // Threads API returns total_value for lifetime metrics, values array for time-series
+    data[entry.name] = entry.total_value?.value ?? entry.values?.[0]?.value ?? 0;
+  }
+
+  return {
+    views: data.views ?? 0,
+    likes: data.likes ?? 0,
+    replies: data.replies ?? 0,
+    reposts: data.reposts ?? 0,
+    quotes: data.quotes ?? 0,
+  };
 }

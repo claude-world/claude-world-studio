@@ -35,7 +35,7 @@ const publishTool = tool(
         imageUrl: args.image_url,
         pollOptions: args.poll_options,
         linkComment: args.link_comment,
-        tag: args.tag,
+        topicTag: args.tag,
       });
 
       // Log to publish history
@@ -44,6 +44,7 @@ const publishTool = tool(
         platform: "threads",
         account: args.account_id,
         content: args.text,
+        image_url: args.image_url || null,
         post_id: result.id,
         post_url: result.permalink,
         status: "published",
@@ -68,6 +69,7 @@ const publishTool = tool(
         platform: "threads",
         account: args.account_id,
         content: args.text,
+        image_url: args.image_url || null,
         post_id: null,
         post_url: null,
         status: "failed",

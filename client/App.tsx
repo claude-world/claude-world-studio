@@ -6,8 +6,10 @@ import { FileExplorer } from "./components/FileExplorer";
 import { FilePreviewModal } from "./components/FilePreviewModal";
 import { PublishDialog } from "./components/PublishDialog";
 import { SettingsPage } from "./components/SettingsPage";
+import { SocialAccountsPage } from "./components/SocialAccountsPage";
 
 export type Language = "zh-TW" | "en" | "ja";
+export type Theme = "light" | "dark" | "system";
 
 interface Session {
   id: string;
@@ -59,10 +61,32 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [showFiles, setShowFiles] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSocial, setShowSocial] = useState(false);
   const [showPublish, setShowPublish] = useState(false);
   const [previewFile, setPreviewFile] = useState<{ relativePath: string; sessionId: string } | null>(null);
   const [defaultWorkspace, setDefaultWorkspace] = useState("");
   const [language, setLanguage] = useState<Language>("zh-TW");
+  const [theme, setTheme] = useState<Theme>("light");
+
+  // Apply dark class to <html>
+  useEffect(() => {
+    const isDark =
+      theme === "dark" ||
+      (theme === "system" &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.classList.toggle("dark", isDark);
+  }, [theme]);
+
+  // Listen for OS theme changes when in "system" mode
+  useEffect(() => {
+    if (theme !== "system") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = (e: MediaQueryListEvent) => {
+      document.documentElement.classList.toggle("dark", e.matches);
+    };
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, [theme]);
 
   // Keep ref in sync for use inside WS callback
   useEffect(() => {
@@ -221,8 +245,24 @@ export default function App() {
       const data = await res.json();
       setDefaultWorkspace(data.defaultWorkspace || "");
       setLanguage(data.language || "zh-TW");
+      if (data.theme) setTheme(data.theme);
     } catch {
       // ignore
+    }
+  };
+
+  const handleThemeChange = async (newTheme: Theme) => {
+    const prev = theme;
+    setTheme(newTheme);
+    try {
+      const res = await fetch(`${API_BASE}/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme: newTheme }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+    } catch {
+      setTheme(prev);
     }
   };
 
@@ -294,6 +334,7 @@ export default function App() {
     setMessages([]);
     setIsLoading(false);
     setShowSettings(false);
+    setShowSocial(false);
     if (isConnected) {
       sendJsonMessage({ type: "subscribe", sessionId });
     }
@@ -374,7 +415,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className={`flex h-screen bg-gray-50${navigator.userAgent.includes('Electron') ? ' pt-8' : ''}`}>
+    <div className="flex h-screen bg-gray-50 dark:bg-gray-950">
       {/* Sidebar */}
       <div className="w-64 shrink-0">
         <Sidebar
@@ -383,11 +424,14 @@ export default function App() {
           onSelectSession={selectSession}
           onNewSession={createSession}
           onDeleteSession={deleteSession}
-          onShowSettings={() => setShowSettings(true)}
+          onShowSettings={() => { setShowSettings(true); setShowSocial(false); }}
+          onShowSocial={() => { setShowSocial(true); setShowSettings(false); }}
           defaultWorkspace={defaultWorkspace}
           isConnected={isConnected}
           language={language}
           onLanguageChange={handleLanguageChange}
+          theme={theme}
+          onThemeChange={handleThemeChange}
         />
       </div>
 
@@ -399,6 +443,8 @@ export default function App() {
           language={language}
           onLanguageChange={handleLanguageChange}
         />
+      ) : showSocial ? (
+        <SocialAccountsPage onClose={() => setShowSocial(false)} />
       ) : (
         <>
           <ChatWindow

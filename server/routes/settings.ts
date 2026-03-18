@@ -1,7 +1,10 @@
 import { Router } from "express";
 import { existsSync, readFileSync, readdirSync } from "fs";
-import { execFileSync } from "child_process";
+import { execFileSync, execFile } from "child_process";
+import { promisify } from "util";
 import path from "path";
+
+const execFileAsync = promisify(execFile);
 import { fileURLToPath } from "url";
 import store from "../db.js";
 import { getSettings } from "../mcp-config.js";
@@ -22,7 +25,7 @@ const __dirname = path.dirname(__filename);
 
 const router = Router();
 
-const SENSITIVE_KEYS = ["cfBrowserApiKey"] as const;
+const SENSITIVE_KEYS = ["cfBrowserApiKey", "cfApiToken"] as const;
 
 function maskValue(value: string): string {
   if (!value || value.length < 12) return value ? "***" : "";
@@ -205,6 +208,51 @@ router.post("/detect/apply", (_req, res) => {
   res.json({ success: true, applied });
 });
 
+// CLI definitions
+const CLI_DEFS = [
+  { name: "Claude Code", command: "claude", versionArgs: ["--version"], description: "Anthropic's AI coding assistant CLI", website: "https://docs.anthropic.com/en/docs/claude-code" },
+  { name: "OpenAI Codex", command: "codex", versionArgs: ["--version"], description: "OpenAI's coding agent CLI", website: "https://github.com/openai/codex" },
+  { name: "Gemini CLI", command: "gemini", versionArgs: ["--version"], description: "Google's Gemini AI CLI", website: "https://github.com/google-gemini/gemini-cli" },
+  { name: "OpenCode", command: "opencode", versionArgs: ["version"], description: "Open-source AI coding CLI (multi-provider)", website: "https://github.com/opencode-ai/opencode" },
+  { name: "Aider", command: "aider", versionArgs: ["--version"], description: "AI pair programming in terminal", website: "https://aider.chat" },
+  { name: "GitHub Copilot", command: "gh-copilot", versionArgs: ["copilot", "--version"], execCommand: "gh", description: "GitHub Copilot in the CLI", website: "https://docs.github.com/en/copilot/github-copilot-in-the-cli" },
+] as const;
+
+/** Valid CLI command identifiers for input validation */
+const VALID_CLI_COMMANDS: Set<string> = new Set(CLI_DEFS.map((d) => d.command));
+
+// Detect available coding CLIs (async — doesn't block event loop)
+router.get("/detect-clis", async (_req, res) => {
+  const results = await Promise.all(CLI_DEFS.map(async (def) => {
+    const bin = "execCommand" in def ? def.execCommand : def.command;
+    let installed = false;
+    let version = "";
+    try {
+      const { stdout } = await execFileAsync(bin, [...def.versionArgs], {
+        timeout: 2000,
+        encoding: "utf-8",
+      });
+      installed = true;
+      const firstLine = (stdout as string).split("\n")[0].trim();
+      // Extract semver-like token, or fall back to stripping common prefixes
+      const semverMatch = firstLine.match(/(\d+\.\d+[\d.]*)/);
+      version = semverMatch ? semverMatch[1] : firstLine.replace(/^(v|version\s*:?\s*)/i, "").trim();
+    } catch {
+      // not installed, timed out, or errored
+    }
+    return {
+      name: def.name,
+      command: def.command,
+      description: def.description,
+      installed,
+      version,
+      website: def.website,
+    };
+  }));
+
+  res.json(results);
+});
+
 // Update settings
 router.put("/", (req, res) => {
   const updates = req.body;
@@ -214,12 +262,19 @@ router.put("/", (req, res) => {
 
   const allowedKeys = [
     "language",
+    "theme",
+    "cfBrowserMode",
     "trendPulseVenvPython",
     "cfBrowserVenvPython",
     "notebooklmServerPath",
     "cfBrowserUrl",
     "cfBrowserApiKey",
+    "cfAccountId",
+    "cfApiToken",
     "defaultWorkspace",
+    "cliRoutingMode",
+    "cliEnabledList",
+    "cliPrimary",
   ];
 
   const pathKeys = [
@@ -234,6 +289,13 @@ router.put("/", (req, res) => {
 
     if (pathKeys.includes(key) && value) {
       if (!isAbsolute(value) || /[;&|`$(){}]/.test(value)) continue;
+    }
+
+    // Validate CLI command names
+    if (key === "cliPrimary" && value && !VALID_CLI_COMMANDS.has(value)) continue;
+    if (key === "cliEnabledList" && value) {
+      const parts = value.split(",").filter(Boolean);
+      if (!parts.every((p) => VALID_CLI_COMMANDS.has(p))) continue;
     }
 
     store.setSetting(key, value);

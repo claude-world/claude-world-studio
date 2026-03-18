@@ -10,24 +10,53 @@ let serverProcess = null;
 let mainWindow = null;
 
 function startServer() {
-  const projectDir = path.join(__dirname, "..");
-
-  // Build client assets if dist/ doesn't exist
-  const distDir = path.join(projectDir, "dist");
+  // In packaged app, spawnable files live in app.asar.unpacked
+  const appPath = app.getAppPath();
+  const projectDir = app.isPackaged
+    ? appPath.replace("app.asar", "app.asar.unpacked")
+    : path.join(__dirname, "..");
   const fs = require("fs");
-  if (!fs.existsSync(distDir)) {
-    console.log("[Electron] Building client assets...");
-    require("child_process").execSync("npx vite build", {
-      cwd: projectDir,
-      stdio: "inherit",
-    });
+
+  // Build client assets if dist/ doesn't exist (dev mode only)
+  if (!app.isPackaged) {
+    const distDir = path.join(projectDir, "dist");
+    if (!fs.existsSync(distDir)) {
+      console.log("[Electron] Building client assets...");
+      require("child_process").execSync("npx vite build", {
+        cwd: projectDir,
+        stdio: "inherit",
+      });
+    }
   }
 
-  // Start Express server via bundled tsx (not npx — unavailable in packaged app)
-  const tsxBin = path.join(projectDir, "node_modules", ".bin", "tsx");
-  serverProcess = spawn(tsxBin, ["server/server.ts"], {
+  // Start Express server via tsx
+  // In packaged mode: .bin symlinks are broken, use node + tsx CLI directly
+  // In dev mode: .bin/tsx symlink works fine
+  const spawnEnv = { ...process.env, PORT: String(PORT), HOST: "127.0.0.1" };
+
+  // Find system node for packaged mode (Electron's Node has different ABI for native modules)
+  let spawnCmd, spawnArgs;
+  if (app.isPackaged) {
+    const tsxCli = path.join(projectDir, "node_modules", "tsx", "dist", "cli.mjs");
+    // Use system node (not Electron's) to avoid native module ABI mismatch
+    const { execSync } = require("child_process");
+    let systemNode;
+    try {
+      systemNode = execSync("which node", { encoding: "utf-8" }).trim();
+    } catch {
+      systemNode = "/usr/local/bin/node";
+    }
+    spawnCmd = systemNode;
+    spawnArgs = [tsxCli, "server/server.ts"];
+  } else {
+    spawnCmd = path.join(projectDir, "node_modules", ".bin", "tsx");
+    spawnArgs = ["server/server.ts"];
+  }
+
+  console.log(`[Electron] Starting server: ${path.basename(spawnCmd)} ${spawnArgs.join(" ")}`);
+  serverProcess = spawn(spawnCmd, spawnArgs, {
     cwd: projectDir,
-    env: { ...process.env, PORT: String(PORT), HOST: "127.0.0.1" },
+    env: spawnEnv,
     stdio: ["pipe", "pipe", "pipe"],
   });
 

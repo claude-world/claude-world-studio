@@ -10,26 +10,26 @@ interface ToolUseBlockProps {
 // Color mapping for MCP server tools
 function getToolColor(name: string): string {
   if (name.startsWith("mcp__trend-pulse") || name.startsWith("mcp__trend_pulse")) {
-    return "border-emerald-300 bg-emerald-50";
+    return "border-emerald-300 bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-950";
   }
   if (name.startsWith("mcp__cf-browser") || name.startsWith("mcp__cf_browser")) {
-    return "border-blue-300 bg-blue-50";
+    return "border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-950";
   }
   if (name.startsWith("mcp__notebooklm")) {
-    return "border-purple-300 bg-purple-50";
+    return "border-purple-300 bg-purple-50 dark:border-purple-700 dark:bg-purple-950";
   }
-  return "border-gray-200 bg-gray-50";
+  return "border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800";
 }
 
 function getToolBadge(name: string): { label: string; color: string } | null {
   if (name.startsWith("mcp__trend-pulse") || name.startsWith("mcp__trend_pulse")) {
-    return { label: "trend-pulse", color: "bg-emerald-100 text-emerald-700" };
+    return { label: "trend-pulse", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-400" };
   }
   if (name.startsWith("mcp__cf-browser") || name.startsWith("mcp__cf_browser")) {
-    return { label: "cf-browser", color: "bg-blue-100 text-blue-700" };
+    return { label: "cf-browser", color: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-400" };
   }
   if (name.startsWith("mcp__notebooklm")) {
-    return { label: "notebooklm", color: "bg-purple-100 text-purple-700" };
+    return { label: "notebooklm", color: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-400" };
   }
   return null;
 }
@@ -104,16 +104,16 @@ export function ToolUseBlock({ toolName, toolInput, toolId, onPreviewFile }: Too
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setIsExpanded(!isExpanded); } }}
           className="flex items-center gap-2 min-w-0 cursor-pointer hover:opacity-80 flex-1"
         >
-          <span className="text-xs text-gray-400 shrink-0">{isExpanded ? "▼" : "▶"}</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">{isExpanded ? "▼" : "▶"}</span>
           {badge && (
             <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${badge.color}`}>
               {badge.label}
             </span>
           )}
-          <span className="text-xs font-semibold text-gray-600 uppercase shrink-0">
+          <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase shrink-0">
             {getToolDisplayName(toolName)}
           </span>
-          <span className="text-xs text-gray-500 truncate">
+          <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
             {getToolSummary(toolName, toolInput)}
           </span>
         </div>
@@ -129,8 +129,8 @@ export function ToolUseBlock({ toolName, toolInput, toolId, onPreviewFile }: Too
         )}
       </div>
       {isExpanded && (
-        <div className="p-2 border-t border-gray-200/50">
-          <pre className="text-xs bg-white p-2 rounded overflow-x-auto max-h-64 overflow-y-auto">
+        <div className="p-2 border-t border-gray-200/50 dark:border-gray-700">
+          <pre className="text-xs bg-white dark:bg-gray-900 p-2 rounded overflow-x-auto max-h-64 overflow-y-auto">
             {JSON.stringify(toolInput, null, 2)}
           </pre>
         </div>

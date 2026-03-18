@@ -26,7 +26,7 @@ export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewMo
   if (!safePath) {
     return (
       <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6" onClick={onClose}>
-        <div role="dialog" aria-modal="true" className="bg-white rounded-xl shadow-2xl p-8 text-center">
+        <div role="dialog" aria-modal="true" className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl p-8 text-center">
           <p className="text-red-600 font-medium">Invalid file path (traversal rejected)</p>
           <button onClick={onClose} className="mt-4 px-4 py-2 bg-gray-200 rounded-lg text-sm">Close</button>
         </div>
@@ -116,19 +116,19 @@ export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewMo
       className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div role="dialog" aria-modal="true" aria-label={fileName} className="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div role="dialog" aria-modal="true" aria-label={fileName} className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between shrink-0">
+        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-xs font-mono px-2 py-0.5 rounded bg-gray-100 text-gray-500 uppercase shrink-0">
+            <span className="text-xs font-mono px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 uppercase shrink-0">
               {ext}
             </span>
-            <span className="text-sm font-medium text-gray-700 truncate">{fileName}</span>
-            <span className="text-xs text-gray-400 truncate hidden sm:inline">{safePath}</span>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{fileName}</span>
+            <span className="text-xs text-gray-400 dark:text-gray-500 truncate hidden sm:inline">{safePath}</span>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-lg px-2 shrink-0"
+            className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 text-lg px-2 shrink-0"
           >
             ✕
           </button>
@@ -137,9 +137,9 @@ export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewMo
         {/* Content */}
         <div className="flex-1 overflow-auto">
           {loading ? (
-            <div className="text-center text-gray-400 py-16">Loading...</div>
+            <div className="text-center text-gray-400 dark:text-gray-500 py-16">Loading...</div>
           ) : fileType === "image" ? (
-            <div className="flex items-center justify-center p-6 bg-gray-50">
+            <div className="flex items-center justify-center p-6 bg-gray-50 dark:bg-gray-800">
               <img
                 src={content!}
                 alt={fileName}
@@ -158,7 +158,7 @@ export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewMo
             </div>
           ) : fileType === "binary" ? (
             <div className="text-center py-16">
-              <p className="text-gray-500 mb-3">Binary file — preview not available</p>
+              <p className="text-gray-500 dark:text-gray-400 mb-3">Binary file — preview not available</p>
               <a
                 href={content!}
                 download={fileName}
@@ -168,7 +168,7 @@ export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewMo
               </a>
             </div>
           ) : (
-            <pre className="text-sm text-gray-700 whitespace-pre-wrap break-words font-mono p-6 leading-relaxed">
+            <pre className="text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words font-mono p-6 leading-relaxed">
               {content}
             </pre>
           )}

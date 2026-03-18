@@ -14,21 +14,22 @@ interface SettingsData {
   notebooklmServerPath: string;
   cfBrowserUrl: string;
   cfBrowserApiKey: string;
+  cfAccountId: string;
+  cfApiToken: string;
+  cfBrowserMode: "cf-api" | "worker";
   defaultWorkspace: string;
 }
 
-interface Account {
-  id: string;
-  name: string;
-  handle: string;
-  platform: string;
-  token: string;
-  user_id: string;
-  style: string;
-  persona_prompt: string;
-}
-
 type DetectedMap = Record<string, { value: string; found: boolean }>;
+
+interface CliInfo {
+  name: string;
+  command: string;
+  description: string;
+  installed: boolean;
+  version: string;
+  website: string;
+}
 
 interface FieldDef {
   key: string;
@@ -53,8 +54,6 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: "trendPulseVenvPython", label: "trend-pulse Python path", placeholder: "Auto (uvx)" },
       { key: "cfBrowserVenvPython", label: "cf-browser Python path", placeholder: "Auto (uvx)" },
       { key: "notebooklmServerPath", label: "NotebookLM server path", placeholder: "Auto (uvx)" },
-      { key: "cfBrowserUrl", label: "CF Browser URL", placeholder: "https://cf-browser.your-subdomain.workers.dev" },
-      { key: "cfBrowserApiKey", label: "CF Browser API Key", placeholder: "api-key", sensitive: true },
     ],
     guide: {
       title: "How to set up MCP Servers",
@@ -95,7 +94,7 @@ const LANGUAGE_OPTIONS: { code: Language; label: string }[] = [
 
 function StatusDot({ found }: { found: boolean }) {
   return (
-    <span className={`inline-block w-2 h-2 rounded-full ${found ? "bg-green-500" : "bg-gray-300"}`} title={found ? "Detected" : "Not found"} />
+    <span className={`inline-block w-2 h-2 rounded-full ${found ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"}`} title={found ? "Detected" : "Not found"} />
   );
 }
 
@@ -110,14 +109,14 @@ function SetupGuide({ guide }: { guide: NonNullable<SettingGroup["guide"]> }) {
         {guide.title}
       </button>
       {open && (
-        <div className="mt-2 ml-5 p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-gray-700 space-y-1">
+        <div className="mt-2 ml-5 p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-gray-700 space-y-1 dark:bg-blue-950 dark:border-blue-900 dark:text-gray-300">
           {guide.steps.map((step, i) => {
             if (step === "") return <div key={i} className="h-2" />;
-            if (step.startsWith("---")) return <div key={i} className="font-semibold text-gray-800 pt-1">{step.replace(/^-+\s*/, "").replace(/\s*-+$/, "")}</div>;
+            if (step.startsWith("---")) return <div key={i} className="font-semibold text-gray-800 dark:text-gray-200 pt-1">{step.replace(/^-+\s*/, "").replace(/\s*-+$/, "")}</div>;
             return <div key={i}><code className="whitespace-pre-wrap break-all">{step}</code></div>;
           })}
           {guide.links && (
-            <div className="pt-2 border-t border-blue-200 mt-2 flex flex-wrap gap-3">
+            <div className="pt-2 border-t border-blue-200 dark:border-blue-800 mt-2 flex flex-wrap gap-3">
               {guide.links.map((link) => (
                 <a key={link.url} href={link.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline">
                   {link.label}
@@ -125,157 +124,6 @@ function SetupGuide({ guide }: { guide: NonNullable<SettingGroup["guide"]> }) {
               ))}
             </div>
           )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Accounts Manager ───
-
-const EMPTY_ACCOUNT: Omit<Account, "id"> = {
-  name: "", handle: "", platform: "threads", token: "", user_id: "", style: "", persona_prompt: "",
-};
-
-function AccountsManager() {
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [editing, setEditing] = useState<Account | null>(null);
-  const [isNew, setIsNew] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState("");
-
-  const fetchAccounts = () => {
-    fetch("/api/accounts").then((r) => r.ok ? r.json() : []).then(setAccounts).catch(() => {});
-  };
-
-  useEffect(() => { fetchAccounts(); }, []);
-
-  const handleSave = async () => {
-    if (!editing || !editing.name || !editing.handle) return;
-    setSaving(true);
-
-    const url = isNew ? "/api/accounts" : `/api/accounts/${editing.id}`;
-    const method = isNew ? "POST" : "PUT";
-
-    try {
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editing),
-      });
-      if (res.ok) {
-        setEditing(null);
-        setIsNew(false);
-        fetchAccounts();
-        setNotice("Saved. Start a new session to use updated accounts.");
-      }
-    } catch {}
-    setSaving(false);
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      const res = await fetch(`/api/accounts/${id}`, { method: "DELETE" });
-      if (res.ok) { fetchAccounts(); setNotice("Deleted. Start a new session to apply."); }
-    } catch {}
-  };
-
-  const startNew = () => {
-    setEditing({ id: "", ...EMPTY_ACCOUNT });
-    setIsNew(true);
-  };
-
-  const startEdit = (account: Account) => {
-    setEditing({ ...account, token: "" }); // Don't prefill masked token
-    setIsNew(false);
-  };
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Social Accounts</h3>
-        <button onClick={startNew} className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium">
-          + Add Account
-        </button>
-      </div>
-
-      {/* Notice */}
-      {notice && (
-        <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700 flex items-center gap-2">
-          <span>&#9888;</span>
-          <span>{notice}</span>
-        </div>
-      )}
-
-      {/* Account list */}
-      {accounts.length === 0 && !editing && (
-        <p className="text-xs text-gray-400 mb-4">No accounts configured. Click "Add Account" to get started.</p>
-      )}
-
-      <div className="space-y-2 mb-4">
-        {accounts.map((a) => (
-          <div key={a.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-800">{a.handle}</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${a.platform === "threads" ? "bg-gray-100 text-gray-600" : "bg-pink-50 text-pink-600"}`}>
-                  {a.platform}
-                </span>
-                {a.style && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">{a.style}</span>}
-              </div>
-              <div className="text-xs text-gray-400 mt-0.5">{a.name}</div>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button onClick={() => startEdit(a)} className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 text-gray-600">Edit</button>
-              <button onClick={() => handleDelete(a.id)} className="text-xs px-2 py-1 text-red-500 hover:bg-red-50 rounded">Delete</button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Edit form */}
-      {editing && (
-        <div className="p-4 border border-blue-200 rounded-lg bg-blue-50/30 space-y-3">
-          <div className="text-sm font-medium text-gray-700">{isNew ? "New Account" : `Edit: ${editing.handle}`}</div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Name *</label>
-              <input type="text" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} placeholder="Claude World Taiwan" className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Handle *</label>
-              <input type="text" value={editing.handle} onChange={(e) => setEditing({ ...editing, handle: e.target.value })} placeholder="@your.account" className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Platform *</label>
-              <select value={editing.platform} onChange={(e) => setEditing({ ...editing, platform: e.target.value })} className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm">
-                <option value="threads">Threads</option>
-                <option value="instagram">Instagram</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Style</label>
-              <input type="text" value={editing.style} onChange={(e) => setEditing({ ...editing, style: e.target.value })} placeholder="tech-educator, futurist..." className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Token {!isNew && "(leave empty to keep current)"}</label>
-              <input type="password" value={editing.token} onChange={(e) => setEditing({ ...editing, token: e.target.value })} placeholder="API token" className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm font-mono" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">User ID</label>
-              <input type="text" value={editing.user_id} onChange={(e) => setEditing({ ...editing, user_id: e.target.value })} placeholder="your-threads-user-id" className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm font-mono" />
-            </div>
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 block mb-1">Persona Prompt (AI uses this to adapt content style for this account)</label>
-            <textarea value={editing.persona_prompt} onChange={(e) => setEditing({ ...editing, persona_prompt: e.target.value })} rows={3} placeholder="You are a tech educator focused on Claude Code. Write in Traditional Chinese. Tone: professional yet approachable..." className="w-full px-3 py-2 border border-gray-300 rounded text-sm resize-none" />
-          </div>
-          <div className="flex gap-2">
-            <button onClick={handleSave} disabled={!editing.name || !editing.handle || saving} className="text-xs px-4 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-40">
-              {saving ? "Saving..." : isNew ? "Create" : "Update"}
-            </button>
-            <button onClick={() => { setEditing(null); setIsNew(false); }} className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:bg-gray-50 text-gray-600">Cancel</button>
-          </div>
         </div>
       )}
     </div>
@@ -290,11 +138,49 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
   const [detecting, setDetecting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [clis, setClis] = useState<CliInfo[]>([]);
+  const [detectingClis, setDetectingClis] = useState(false);
+  const [cliRoutingMode, setCliRoutingMode] = useState<"primary" | "auto-dispatch">("primary");
+  const [cliEnabledSet, setCliEnabledSet] = useState<Set<string>>(new Set());
+  const [cliPrimary, setCliPrimary] = useState("");
 
   useEffect(() => {
     if (!isVisible) return;
-    fetch("/api/settings").then((r) => r.ok ? r.json() : {}).then(setSettings).catch(() => {});
+    setDetectingClis(true);
+    // Fetch settings + CLI detection in parallel, apply together to avoid race
+    Promise.all([
+      fetch("/api/settings").then((r) => r.ok ? r.json() : {}).catch(() => ({})),
+      fetch("/api/settings/detect-clis").then((r) => r.ok ? r.json() : []).catch(() => []),
+    ]).then(([settingsData, cliData]: [any, CliInfo[]]) => {
+      // Apply settings
+      setSettings(settingsData);
+      if (settingsData.cliRoutingMode) setCliRoutingMode(settingsData.cliRoutingMode);
+      // Apply CLI detection
+      setClis(cliData);
+      const installedCommands = cliData.filter((c) => c.installed).map((c) => c.command);
+      // CLI enabled list: use saved config, or auto-enable all installed
+      if (settingsData.cliEnabledList) {
+        const saved = new Set<string>(settingsData.cliEnabledList.split(",").filter(Boolean));
+        setCliEnabledSet(saved);
+      } else {
+        setCliEnabledSet(new Set(installedCommands));
+      }
+      // Primary: use saved, or first installed CLI
+      const savedPrimary = settingsData.cliPrimary;
+      if (savedPrimary && installedCommands.includes(savedPrimary)) {
+        setCliPrimary(savedPrimary);
+      } else {
+        setCliPrimary(installedCommands[0] || "claude");
+      }
+    }).finally(() => setDetectingClis(false));
   }, [isVisible]);
+
+  // Auto-demote to "primary" mode when only 1 CLI is enabled
+  useEffect(() => {
+    if (cliEnabledSet.size <= 1 && cliRoutingMode === "auto-dispatch") {
+      setCliRoutingMode("primary");
+    }
+  }, [cliEnabledSet.size, cliRoutingMode]);
 
   const handleDetect = async () => {
     setDetecting(true);
@@ -308,6 +194,21 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
       setMessage(`Detected ${found}/${Object.keys(data).length} settings.`);
     } catch { setMessage("Detection failed."); }
     setDetecting(false);
+  };
+
+  const toggleCliEnabled = (command: string) => {
+    if (command === cliPrimary) return; // Primary CLI cannot be disabled
+    setCliEnabledSet((prev) => {
+      const next = new Set(prev);
+      next.has(command) ? next.delete(command) : next.add(command);
+      return next;
+    });
+  };
+
+  const handleSetPrimary = (command: string) => {
+    setCliPrimary(command);
+    // Ensure primary is always enabled
+    setCliEnabledSet((prev) => new Set([...prev, command]));
   };
 
   const handleApplyDetected = async () => {
@@ -333,13 +234,19 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
     setSaving(true);
     setMessage("");
     try {
+      const payload = {
+        ...settings,
+        cliRoutingMode,
+        cliPrimary,
+        cliEnabledList: [...cliEnabledSet].join(","),
+      };
       const res = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error();
-      setMessage("Settings saved! Start a new session to apply MCP changes.");
+      setMessage("Settings saved! Start a new session to apply changes.");
     } catch { setMessage("Error saving settings."); }
     setSaving(false);
   };
@@ -351,21 +258,21 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
   const configuredCount = allKeys.filter((k) => (settings as any)[k]).length;
 
   return (
-    <div className="flex-1 flex flex-col bg-white overflow-y-auto">
+    <div className="flex-1 flex flex-col bg-white dark:bg-gray-900 overflow-y-auto">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
+      <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-900 z-10">
         <div className="flex items-center gap-4">
-          <h2 className="text-lg font-semibold text-gray-800">Settings</h2>
-          <span className="text-xs text-gray-400">{configuredCount}/{allKeys.length} configured</span>
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Settings</h2>
+          <span className="text-xs text-gray-400 dark:text-gray-500">{configuredCount}/{allKeys.length} configured</span>
         </div>
-        <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">Back to Chat</button>
+        <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">Back to Chat</button>
       </div>
 
       <div className="p-6 max-w-2xl space-y-8">
         {/* Auto-detect */}
-        <div className="p-4 bg-gradient-to-r from-emerald-50 to-blue-50 border border-emerald-200 rounded-lg">
+        <div className="p-4 bg-gradient-to-r from-emerald-50 to-blue-50 border border-emerald-200 rounded-lg dark:from-emerald-900/40 dark:to-blue-900/40 dark:border-emerald-700">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-gray-800">Auto-Detect MCP Tools</h3>
+            <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Auto-Detect MCP Tools</h3>
             <div className="flex gap-2">
               <button onClick={handleDetect} disabled={detecting} className="px-3 py-1.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50 text-xs font-medium">
                 {detecting ? "Scanning..." : "Scan System"}
@@ -378,7 +285,7 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
             </div>
           </div>
           {detected["uvxAvailable"]?.found && (
-            <div className="mt-2 px-3 py-2 bg-emerald-100 border border-emerald-300 rounded-md flex items-center gap-2 text-xs text-emerald-800">
+            <div className="mt-2 px-3 py-2 bg-emerald-100 border border-emerald-300 rounded-md flex items-center gap-2 text-xs text-emerald-800 dark:bg-emerald-900/50 dark:border-emerald-600 dark:text-emerald-300">
               <StatusDot found={true} />
               <span><strong>uvx detected</strong> — MCP servers auto-configured, no manual paths needed.</span>
             </div>
@@ -393,9 +300,9 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
                 return (
                   <div key={key} className="flex items-center gap-1.5 text-xs">
                     <StatusDot found={info.found} />
-                    <span className={info.found ? "text-gray-700" : "text-gray-400"}>
+                    <span className={info.found ? "text-gray-700 dark:text-gray-200" : "text-gray-400 dark:text-gray-500"}>
                       {label}
-                      {isUvxAuto && <span className="ml-1 text-emerald-600 font-medium">(uvx)</span>}
+                      {isUvxAuto && <span className="ml-1 text-emerald-600 dark:text-emerald-400 font-medium">(uvx)</span>}
                     </span>
                   </div>
                 );
@@ -404,25 +311,154 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
           )}
         </div>
 
+        {/* AI Coding CLIs */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">AI Coding CLIs</h3>
+            {detectingClis && <span className="text-xs text-gray-400 dark:text-gray-500 animate-pulse">Scanning system...</span>}
+            {!detectingClis && clis.length > 0 && (
+              <span className="text-xs text-gray-400 dark:text-gray-500">
+                {clis.filter((c) => c.installed).length}/{clis.length} detected
+                {" \u00B7 "}
+                {cliEnabledSet.size} enabled
+              </span>
+            )}
+          </div>
+
+          {/* CLI cards */}
+          {clis.length > 0 && (
+            <div className="space-y-2 mb-4">
+              {clis.map((cli) => {
+                const isEnabled = cliEnabledSet.has(cli.command);
+                const isPrimary = cliPrimary === cli.command;
+                return (
+                  <div
+                    key={cli.command}
+                    className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                      !cli.installed
+                        ? "border-gray-200 bg-gray-50/30 dark:border-gray-700 dark:bg-gray-800/30 opacity-60"
+                        : isEnabled
+                          ? "border-green-200 bg-green-50/30 dark:border-green-700 dark:bg-green-900/20"
+                          : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {/* Enable toggle */}
+                      <button
+                        onClick={() => cli.installed && toggleCliEnabled(cli.command)}
+                        disabled={!cli.installed || isPrimary}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0 ${
+                          !cli.installed ? "bg-gray-200 dark:bg-gray-700 cursor-not-allowed" :
+                          isEnabled ? "bg-green-500 cursor-pointer" : "bg-gray-300 dark:bg-gray-600 cursor-pointer"
+                        } ${isPrimary ? "cursor-not-allowed" : ""}`}
+                        title={!cli.installed ? "Not installed" : isPrimary ? "Primary CLI cannot be disabled" : isEnabled ? "Disable" : "Enable"}
+                      >
+                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${isEnabled ? "translate-x-4" : "translate-x-0.5"}`} />
+                      </button>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-gray-800 dark:text-gray-100">{cli.name}</span>
+                          <code className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400 font-mono">{cli.command}</code>
+                          {cli.installed && cli.version && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 font-mono">
+                              v{cli.version.replace(/^v/, "")}
+                            </span>
+                          )}
+                          {isPrimary && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 font-medium">
+                              Primary
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{cli.description}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {cli.installed && !isPrimary && isEnabled && (
+                        <button
+                          onClick={() => handleSetPrimary(cli.command)}
+                          className="text-[10px] px-2 py-1 border border-gray-200 dark:border-gray-600 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 text-gray-500 dark:text-gray-400 hover:text-blue-600"
+                          title="Set as primary CLI"
+                        >
+                          Set Primary
+                        </button>
+                      )}
+                      {!cli.installed && (
+                        <a
+                          href={cli.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                        >
+                          Install
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Routing mode — only useful with 2+ enabled CLIs */}
+          {cliEnabledSet.size > 1 && (
+            <div className="p-4 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/30 dark:to-indigo-900/30 border border-purple-200 dark:border-purple-700 rounded-lg">
+              <label className="text-sm text-gray-700 dark:text-gray-200 font-medium block mb-2">Routing Mode</label>
+              <div className="space-y-2">
+                <label className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                  cliRoutingMode === "primary"
+                    ? "border-purple-300 bg-purple-50/50 dark:border-purple-500 dark:bg-purple-900/30"
+                    : "border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500"
+                }`}>
+                  <input type="radio" name="cliRoutingMode" value="primary"
+                    checked={cliRoutingMode === "primary"}
+                    onChange={() => setCliRoutingMode("primary")}
+                    className="mt-0.5 text-purple-600" />
+                  <div>
+                    <div className="text-sm font-medium text-gray-700 dark:text-gray-200">Primary Only</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      All tasks go to <strong>{clis.find((c) => c.command === cliPrimary)?.name || cliPrimary}</strong>. Other CLIs are available for manual handoff.
+                    </div>
+                  </div>
+                </label>
+                <label className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                  cliRoutingMode === "auto-dispatch"
+                    ? "border-purple-300 bg-purple-50/50 dark:border-purple-500 dark:bg-purple-900/30"
+                    : "border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500"
+                }`}>
+                  <input type="radio" name="cliRoutingMode" value="auto-dispatch"
+                    checked={cliRoutingMode === "auto-dispatch"}
+                    onChange={() => setCliRoutingMode("auto-dispatch")}
+                    className="mt-0.5 text-purple-600" />
+                  <div>
+                    <div className="text-sm font-medium text-gray-700 dark:text-gray-200">Auto-Dispatch</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      Automatically distribute tasks across {cliEnabledSet.size} enabled CLIs. Large tasks get split and parallelized.
+                      Best with 2+ CLIs for comparison or throughput.
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Language */}
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wider">Language / 語言</h3>
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wider">Language / 語言</h3>
           <div className="flex gap-2">
             {LANGUAGE_OPTIONS.map((opt) => (
-              <button key={opt.code} onClick={() => onLanguageChange(opt.code)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${language === opt.code ? "bg-blue-600 text-white border-blue-600 shadow" : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"}`}>
+              <button key={opt.code} onClick={() => onLanguageChange(opt.code)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${language === opt.code ? "bg-blue-600 text-white border-blue-600 shadow" : "bg-white text-gray-600 border-gray-300 hover:border-gray-400 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600"}`}>
                 {opt.label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Social Accounts */}
-        <AccountsManager />
-
         {/* MCP + General settings */}
         {SETTING_GROUPS.map((group) => (
           <div key={group.title}>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wider">{group.title}</h3>
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wider">{group.title}</h3>
             {group.guide && <SetupGuide guide={group.guide} />}
             <div className="space-y-3">
               {group.fields.map((field) => {
@@ -433,7 +469,7 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
 
                 return (
                   <div key={field.key}>
-                    <label className="text-sm text-gray-600 flex items-center gap-2 mb-1">
+                    <label className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2 mb-1">
                       {uvxHandled ? <StatusDot found={true} /> : hasValue ? <StatusDot found={true} /> : det ? <StatusDot found={det.found} /> : null}
                       {field.label}
                       {uvxHandled && <span className="text-xs text-emerald-600 font-medium">auto (uvx)</span>}
@@ -444,7 +480,7 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
                       )}
                     </label>
                     {uvxHandled ? (
-                      <div className="px-3 py-2 border border-emerald-200 bg-emerald-50/30 rounded-lg text-sm text-emerald-700 font-mono">
+                      <div className="px-3 py-2 border border-emerald-200 bg-emerald-50/30 rounded-lg text-sm text-emerald-700 font-mono dark:border-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300">
                         uvx auto-configured
                       </div>
                     ) : (
@@ -453,13 +489,106 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
                         value={(settings as any)[field.key] || ""}
                         onChange={(e) => setSettings((prev) => ({ ...prev, [field.key]: e.target.value }))}
                         placeholder={field.placeholder}
-                        className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono ${hasValue ? "border-green-300 bg-green-50/30" : "border-gray-300"}`}
+                        className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono ${hasValue ? "border-green-300 bg-green-50/30 dark:border-green-600 dark:bg-green-900/20 dark:text-gray-100" : "border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"}`}
                       />
                     )}
                   </div>
                 );
               })}
             </div>
+            {group.title === "MCP Servers" && (
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <label className="text-sm text-gray-600 dark:text-gray-400 font-medium block mb-3">CF Browser Mode</label>
+                <div className="space-y-2 mb-3">
+                  <label className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                    (settings as any).cfBrowserMode !== "worker"
+                      ? "border-blue-300 bg-blue-50/50 dark:border-blue-500 dark:bg-blue-900/30"
+                      : "border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500"
+                  }`}>
+                    <input type="radio" name="cfBrowserMode" value="cf-api"
+                      checked={(settings as any).cfBrowserMode !== "worker"}
+                      onChange={() => setSettings((prev) => ({ ...prev, cfBrowserMode: "cf-api" }))}
+                      className="text-blue-600" />
+                    <div>
+                      <div className="text-sm font-medium text-gray-700 dark:text-gray-200">CF API</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Call Cloudflare Browser Rendering API directly (needs API Token)</div>
+                    </div>
+                  </label>
+                  <label className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                    (settings as any).cfBrowserMode === "worker"
+                      ? "border-blue-300 bg-blue-50/50 dark:border-blue-500 dark:bg-blue-900/30"
+                      : "border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500"
+                  }`}>
+                    <input type="radio" name="cfBrowserMode" value="worker"
+                      checked={(settings as any).cfBrowserMode === "worker"}
+                      onChange={() => setSettings((prev) => ({ ...prev, cfBrowserMode: "worker" }))}
+                      className="text-blue-600" />
+                    <div>
+                      <div className="text-sm font-medium text-gray-700 dark:text-gray-200">Worker</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Use your own deployed Cloudflare Worker</div>
+                    </div>
+                  </label>
+                </div>
+                {(settings as any).cfBrowserMode === "worker" ? (
+                  <div className="space-y-3 ml-7">
+                    <div>
+                      <label className="text-sm text-gray-600 dark:text-gray-400 mb-1 block">Worker URL</label>
+                      <input type="text"
+                        value={(settings as any).cfBrowserUrl || ""}
+                        onChange={(e) => setSettings((prev) => ({ ...prev, cfBrowserUrl: e.target.value }))}
+                        placeholder="https://cf-browser.your-subdomain.workers.dev"
+                        className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm text-gray-600 dark:text-gray-400 mb-1 block">Worker API Key</label>
+                      <input type="password"
+                        value={(settings as any).cfBrowserApiKey || ""}
+                        onChange={(e) => setSettings((prev) => ({ ...prev, cfBrowserApiKey: e.target.value }))}
+                        placeholder="worker-api-key"
+                        className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3 ml-7">
+                    <div>
+                      <label className="text-sm text-gray-600 dark:text-gray-400 mb-1 block">Account ID</label>
+                      <input type="text"
+                        value={(settings as any).cfAccountId || ""}
+                        onChange={(e) => setSettings((prev) => ({ ...prev, cfAccountId: e.target.value }))}
+                        placeholder="your-cloudflare-account-id"
+                        className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                      />
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                        Found in your Cloudflare dashboard sidebar.
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-2">
+                        API Token
+                        <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                          Get API Token
+                          <svg className="w-3 h-3 inline ml-0.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                        </a>
+                      </label>
+                      <input type="password"
+                        value={(settings as any).cfApiToken || ""}
+                        onChange={(e) => setSettings((prev) => ({ ...prev, cfApiToken: e.target.value }))}
+                        placeholder="cf-api-token"
+                        className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                      />
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                        Create a token with <strong>Account / Workers Browser Rendering / Edit</strong> permission.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ))}
 
@@ -468,7 +597,7 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
           <button onClick={handleSave} disabled={saving} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm">
             {saving ? "Saving..." : "Save Settings"}
           </button>
-          {message && <span className="text-sm text-gray-600">{message}</span>}
+          {message && <span className="text-sm text-gray-600 dark:text-gray-400">{message}</span>}
         </div>
       </div>
     </div>

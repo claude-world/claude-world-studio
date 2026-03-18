@@ -63,8 +63,20 @@ db.exec(`
     user_id TEXT NOT NULL DEFAULT '',
     style TEXT NOT NULL DEFAULT '',
     persona_prompt TEXT NOT NULL DEFAULT '',
+    auto_publish INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
   );
+`);
+
+// Migrations for existing databases
+try { db.exec(`ALTER TABLE social_accounts ADD COLUMN auto_publish INTEGER NOT NULL DEFAULT 0`); } catch { /* column already exists */ }
+try { db.exec(`ALTER TABLE publish_history ADD COLUMN image_url TEXT`); } catch { /* column already exists */ }
+
+// Performance indices
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_social_accounts_platform ON social_accounts(platform);
+  CREATE INDEX IF NOT EXISTS idx_publish_history_account ON publish_history(account);
+  CREATE INDEX IF NOT EXISTS idx_publish_history_status ON publish_history(status);
 `);
 
 // Social accounts are configured via the Settings UI — no hardcoded accounts.
@@ -107,11 +119,20 @@ const stmts = {
 
   // Publish History
   addPublish: db.prepare(
-    `INSERT INTO publish_history (id, session_id, platform, account, content, post_id, post_url, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO publish_history (id, session_id, platform, account, content, image_url, post_id, post_url, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ),
   getPublishHistory: db.prepare(
     `SELECT * FROM publish_history ORDER BY created_at DESC LIMIT ?`
+  ),
+  getPublishByAccount: db.prepare(
+    `SELECT * FROM publish_history WHERE account = ? ORDER BY created_at DESC LIMIT ?`
+  ),
+  getPublishById: db.prepare(
+    `SELECT * FROM publish_history WHERE id = ?`
+  ),
+  getPendingPosts: db.prepare(
+    `SELECT * FROM publish_history WHERE status = 'draft' ORDER BY created_at ASC`
   ),
   updatePublishStatus: db.prepare(
     `UPDATE publish_history SET status = ?, post_id = ?, post_url = ? WHERE id = ?`
@@ -125,7 +146,7 @@ const stmts = {
   getAllAccounts: db.prepare(`SELECT * FROM social_accounts ORDER BY created_at ASC`),
   getAccountsByPlatform: db.prepare(`SELECT * FROM social_accounts WHERE platform = ? ORDER BY created_at ASC`),
   updateAccount: db.prepare(
-    `UPDATE social_accounts SET name = ?, handle = ?, platform = ?, user_id = ?, style = ?, persona_prompt = ? WHERE id = ?`
+    `UPDATE social_accounts SET name = ?, handle = ?, platform = ?, user_id = ?, style = ?, persona_prompt = ?, auto_publish = ? WHERE id = ?`
   ),
   updateAccountToken: db.prepare(
     `UPDATE social_accounts SET token = ? WHERE id = ?`
@@ -228,13 +249,25 @@ export const store = {
     const id = uuidv4();
     stmts.addPublish.run(
       id, record.session_id, record.platform, record.account,
-      record.content, record.post_id, record.post_url, record.status
+      record.content, record.image_url ?? null, record.post_id, record.post_url, record.status
     );
     return { id, created_at: new Date().toISOString(), ...record };
   },
 
   getPublishHistory(limit = 50): PublishRecord[] {
     return stmts.getPublishHistory.all(limit) as PublishRecord[];
+  },
+
+  getPublishByAccount(accountId: string, limit = 100): PublishRecord[] {
+    return stmts.getPublishByAccount.all(accountId, limit) as PublishRecord[];
+  },
+
+  getPublishById(id: string): PublishRecord | undefined {
+    return stmts.getPublishById.get(id) as PublishRecord | undefined;
+  },
+
+  getPendingPosts(): PublishRecord[] {
+    return stmts.getPendingPosts.all() as PublishRecord[];
   },
 
   updatePublishStatus(id: string, status: string, postId?: string, postUrl?: string) {
@@ -279,10 +312,12 @@ export const store = {
     user_id: string;
     style: string;
     persona_prompt: string;
+    auto_publish: number;
   }) {
     stmts.updateAccount.run(
       data.name, data.handle, data.platform,
-      data.user_id, data.style, data.persona_prompt, id
+      data.user_id, data.style, data.persona_prompt,
+      data.auto_publish, id
     );
   },
 

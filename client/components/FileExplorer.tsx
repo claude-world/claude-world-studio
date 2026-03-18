@@ -81,7 +81,7 @@ function FileTreeNode({
       <button
         type="button"
         aria-expanded={entry.type === "directory" ? isOpen : undefined}
-        className="w-full flex items-center gap-1.5 py-1 px-1.5 hover:bg-gray-100 rounded cursor-pointer text-xs group text-left"
+        className="w-full flex items-center gap-1.5 py-1 px-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded cursor-pointer text-xs group text-left"
         style={{ paddingLeft: depth * 14 + 6 }}
         onClick={() => {
           if (entry.type === "directory") {
@@ -99,7 +99,7 @@ function FileTreeNode({
         <FileIcon type={entry.type} name={entry.name} />
         <span className="truncate flex-1">{entry.name}</span>
         {entry.type === "file" && entry.size != null && (
-          <span className="text-gray-400 text-[10px] shrink-0">
+          <span className="text-gray-400 dark:text-gray-500 text-[10px] shrink-0">
             {formatSize(entry.size)}
           </span>
         )}
@@ -116,7 +116,7 @@ function FileTreeNode({
           <img
             src={`/api/sessions/${encodeURIComponent(sessionId)}/files/${entry.path.split("/").map(encodeURIComponent).join("/")}`}
             alt={entry.name}
-            className="max-h-16 rounded border border-gray-200 hover:border-blue-300 transition-colors"
+            className="max-h-16 rounded border border-gray-200 hover:border-blue-300 dark:border-gray-700 dark:hover:border-blue-600 transition-colors"
             loading="lazy"
           />
         </button>
@@ -174,31 +174,31 @@ export function FileExplorer({ sessionId, isVisible, onToggle, onPreviewFile }: 
   if (!isVisible) return null;
 
   return (
-    <div className="w-96 border-l border-gray-200 flex flex-col bg-white shrink-0">
+    <div className="w-96 border-l border-gray-200 dark:border-gray-700 flex flex-col bg-white dark:bg-gray-900 shrink-0">
       {/* Header */}
-      <div className="px-3 py-2 border-b border-gray-200 flex items-center justify-between">
-        <h3 className="text-xs font-semibold text-gray-600 uppercase">Files</h3>
+      <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+        <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Files</h3>
         <button
           onClick={onToggle}
-          className="text-xs text-gray-400 hover:text-gray-600"
+          className="text-xs text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
         >
           Close
         </button>
       </div>
 
       {/* Workspace path */}
-      <div className="px-3 py-1 text-[10px] text-gray-400 truncate border-b border-gray-100">
+      <div className="px-3 py-1 text-[10px] text-gray-400 dark:text-gray-500 truncate border-b border-gray-100 dark:border-gray-800">
         {workspace}
       </div>
 
       {/* Tree */}
       <div role="list" aria-label="File explorer" className="flex-1 overflow-y-auto p-1.5">
         {loadingTree ? (
-          <div className="text-xs text-gray-400 text-center mt-4">
+          <div className="text-xs text-gray-400 dark:text-gray-500 text-center mt-4">
             Loading...
           </div>
         ) : tree.length === 0 ? (
-          <div className="text-xs text-gray-400 text-center mt-4">
+          <div className="text-xs text-gray-400 dark:text-gray-500 text-center mt-4">
             No files found
           </div>
         ) : (

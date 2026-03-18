@@ -39,16 +39,24 @@ export interface SocialAccount {
   user_id: string;
   style: string;
   persona_prompt: string;
+  auto_publish: number; // 0 = manual review, 1 = auto publish
   created_at: string;
 }
 
+export type Theme = "light" | "dark" | "system";
+export type CfBrowserMode = "cf-api" | "worker";
+
 export interface Settings {
   language: Language;
+  theme: Theme;
+  cfBrowserMode: CfBrowserMode;
   trendPulseVenvPython: string;
   cfBrowserVenvPython: string;
   notebooklmServerPath: string;
   cfBrowserUrl: string;
   cfBrowserApiKey: string;
+  cfAccountId: string;
+  cfApiToken: string;
   defaultWorkspace: string;
 }
 
@@ -58,10 +66,19 @@ export interface PublishRecord {
   platform: string;
   account: string;
   content: string;
+  image_url: string | null;
   post_id: string | null;
   post_url: string | null;
-  status: string;
+  status: string; // "draft" | "pending" | "published" | "failed"
   created_at: string;
+}
+
+export interface PostInsights {
+  views: number;
+  likes: number;
+  replies: number;
+  reposts: number;
+  quotes: number;
 }
 
 export interface WSChatMessage {

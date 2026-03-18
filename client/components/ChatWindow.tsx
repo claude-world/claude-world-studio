@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import Markdown from "react-markdown";
-import rehypeSanitize from "rehype-sanitize";
+import remarkGfm from "remark-gfm";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { ToolUseBlock } from "./ToolUseBlock";
 import type { Language } from "../App";
 
@@ -260,6 +261,77 @@ const UI_TEXT: Record<Language, {
 const STEP_TOOLS = ["trend-pulse", "cf-browser + notebooklm", "publish_to_threads"];
 const STEP_COLORS = ["bg-emerald-500", "bg-blue-500", "bg-pink-500"];
 
+// --- Inline image support ---
+
+/** Allow img tags through rehype-sanitize with safe protocols only */
+const sanitizeSchema = {
+  ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames || []), "img"],
+  attributes: {
+    ...defaultSchema.attributes,
+    img: ["src", "alt", "title", "width", "height"],
+  },
+  protocols: {
+    ...defaultSchema.protocols,
+    src: ["http", "https"],
+  },
+};
+
+/** Extract unique image file paths from text, ignoring code blocks/backticks */
+function extractImagePaths(text: string): string[] {
+  // Strip fenced code blocks and inline backticks to avoid false positives
+  const stripped = text
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`[^`]+`/g, "");
+  const re = /\/[^\s"'<>()]+\.(?:png|jpg|jpeg|gif|webp|svg)/gi;
+  const matches = stripped.match(re);
+  return matches ? [...new Set(matches)] : [];
+}
+
+/** Convert absolute path to file API URL; returns null if outside workspace */
+function toFileApiUrl(
+  absPath: string,
+  sessionId: string,
+  workspacePath?: string,
+): string | null {
+  if (!workspacePath || !sessionId) return null;
+  const wsBase = workspacePath.replace(/\/$/, "");
+  if (!absPath.startsWith(wsBase + "/")) return null;
+  const rel = absPath.slice(wsBase.length + 1);
+  const encoded = rel.split("/").map(encodeURIComponent).join("/");
+  return `/api/sessions/${encodeURIComponent(sessionId)}/files/${encoded}`;
+}
+
+/** Inline image thumbnail — clickable to open preview */
+function InlineImage({
+  src,
+  alt,
+  onClick,
+}: {
+  src: string;
+  alt: string;
+  onClick?: () => void;
+}) {
+  const [error, setError] = useState(false);
+  useEffect(() => { setError(false); }, [src]);
+  if (error) return null;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="block mt-2 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer bg-gray-50 dark:bg-gray-800"
+    >
+      <img
+        src={src}
+        alt={alt}
+        onError={() => setError(true)}
+        className="max-w-full max-h-72 object-contain"
+        loading="lazy"
+      />
+    </button>
+  );
+}
+
 // Detect if text inside backticks looks like a workspace file path with a previewable extension
 const PREVIEW_EXT_RE = /\.(png|jpg|jpeg|gif|webp|svg|pdf|mp3|wav|m4a|mp4|webm|md|txt|json|html|css|py|ts|tsx|js|jsx)$/i;
 function isPreviewablePath(text: string, workspacePath?: string): boolean {
@@ -309,26 +381,66 @@ function MessageBubble({
   message,
   onPreviewFile,
   workspacePath,
+  sessionId,
 }: {
   message: Message;
   onPreviewFile?: (path: string) => void;
   workspacePath?: string;
+  sessionId?: string;
 }) {
   const isUser = message.role === "user";
   const content = message.content || "";
 
+  // Detect image file paths in assistant messages (skip those already in ![](path) markdown)
+  const inlineImages = useMemo(() => {
+    if (isUser || !sessionId || !workspacePath) return [];
+    // Collect paths used in markdown image syntax to avoid duplicates
+    const mdImagePaths = new Set<string>();
+    const mdImageRe = /!\[[^\]]*\]\(([^)]+)\)/g;
+    let m;
+    while ((m = mdImageRe.exec(content)) !== null) mdImagePaths.add(m[1]);
+
+    return extractImagePaths(content)
+      .filter((p) => !mdImagePaths.has(p))
+      .map((p) => ({ path: p, url: toFileApiUrl(p, sessionId, workspacePath) }))
+      .filter((x): x is { path: string; url: string } => x.url !== null);
+  }, [content, isUser, sessionId, workspacePath]);
+
   const markdownComponents = useMemo(() => {
-    if (!onPreviewFile) return undefined;
-    return {
-      code: (props: any) => (
+    const components: Record<string, React.ComponentType<any>> = {};
+
+    // Inline code with file preview
+    if (onPreviewFile) {
+      components.code = (props: any) => (
         <InlineCode
           {...props}
           onPreviewFile={onPreviewFile}
           workspacePath={workspacePath}
         />
-      ),
-    };
-  }, [onPreviewFile, workspacePath]);
+      );
+    }
+
+    // Custom img: resolve local workspace paths through file API
+    // rehype-sanitize runs before component substitution, but guard protocols defensively
+    if (sessionId && workspacePath) {
+      components.img = (props: any) => {
+        const { src, alt } = props;
+        const apiUrl = src ? toFileApiUrl(src, sessionId, workspacePath) : null;
+        // Only allow workspace API URLs or safe http(s) URLs
+        const resolvedSrc = apiUrl || (src?.match(/^https?:\/\//) ? src : null);
+        if (!resolvedSrc) return null;
+        return (
+          <InlineImage
+            src={resolvedSrc}
+            alt={alt || ""}
+            onClick={apiUrl ? () => onPreviewFile?.(src) : undefined}
+          />
+        );
+      };
+    }
+
+    return Object.keys(components).length > 0 ? components : undefined;
+  }, [onPreviewFile, workspacePath, sessionId]);
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
@@ -336,17 +448,32 @@ function MessageBubble({
         className={`max-w-[80%] rounded-lg px-4 py-2 ${
           isUser
             ? "bg-blue-600 text-white"
-            : "bg-gray-100 text-gray-900"
+            : "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100"
         }`}
       >
         {isUser ? (
           <p className="whitespace-pre-wrap break-words">{content}</p>
         ) : (
-          <div className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-2 prose-code:text-violet-700 prose-code:bg-violet-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-pre:bg-gray-800 prose-pre:text-gray-100 prose-pre:rounded-lg prose-a:text-blue-600">
-            <Markdown rehypePlugins={[rehypeSanitize]} components={markdownComponents}>
-              {content}
-            </Markdown>
-          </div>
+          <>
+            <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-2 prose-code:text-violet-700 prose-code:bg-violet-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-pre:bg-gray-800 prose-pre:text-gray-100 prose-pre:rounded-lg prose-a:text-blue-600">
+              <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeSanitize, sanitizeSchema]]} components={markdownComponents}>
+                {content}
+              </Markdown>
+            </div>
+            {/* Auto-detected inline images */}
+            {inlineImages.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-1">
+                {inlineImages.map(({ path: imgPath, url }) => (
+                  <InlineImage
+                    key={imgPath}
+                    src={url}
+                    alt={imgPath.split("/").pop() || "image"}
+                    onClick={() => onPreviewFile?.(imgPath)}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -363,7 +490,7 @@ function ResultBlock({ message }: { message: Message }) {
 
   return (
     <div className="flex justify-center my-2">
-      <div className="text-xs text-gray-400 flex items-center gap-3 bg-gray-50 px-3 py-1 rounded-full">
+      <div className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-3 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-full">
         <span className={data.success ? "text-green-500" : "text-red-500"}>
           {data.success ? "Completed" : "Failed"}
         </span>
@@ -374,10 +501,28 @@ function ResultBlock({ message }: { message: Message }) {
   );
 }
 
-function ToolResultBlock({ message }: { message: Message }) {
+function ToolResultBlock({
+  message,
+  sessionId,
+  workspacePath,
+  onPreviewFile,
+}: {
+  message: Message;
+  sessionId?: string;
+  workspacePath?: string;
+  onPreviewFile?: (path: string) => void;
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
   const content = message.content || "";
   const preview = content.length > 120 ? content.slice(0, 120) + "..." : content;
+
+  // Detect image paths in tool result
+  const resultImages = useMemo(() => {
+    if (!sessionId || !workspacePath) return [];
+    return extractImagePaths(content)
+      .map((p) => ({ path: p, url: toFileApiUrl(p, sessionId, workspacePath) }))
+      .filter((x): x is { path: string; url: string } => x.url !== null);
+  }, [content, sessionId, workspacePath]);
 
   return (
     <div className="my-1">
@@ -386,16 +531,29 @@ function ToolResultBlock({ message }: { message: Message }) {
         tabIndex={0}
         onClick={() => setIsExpanded(!isExpanded)}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setIsExpanded(!isExpanded); } }}
-        className="text-[11px] text-gray-400 hover:text-gray-500 cursor-pointer flex items-center gap-1 px-1"
+        className="text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-500 cursor-pointer flex items-center gap-1 px-1"
       >
         <span>{isExpanded ? "▼" : "▶"}</span>
         <span className="font-medium">result</span>
         {!isExpanded && <span className="truncate max-w-xs">{preview}</span>}
       </div>
       {isExpanded && (
-        <pre className="text-[11px] text-gray-500 bg-gray-50 rounded p-2 mt-1 mx-1 max-h-48 overflow-auto whitespace-pre-wrap break-words">
+        <pre className="text-[11px] text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 rounded p-2 mt-1 mx-1 max-h-48 overflow-auto whitespace-pre-wrap break-words">
           {content}
         </pre>
+      )}
+      {/* Image thumbnails from tool result */}
+      {resultImages.length > 0 && (
+        <div className="flex flex-wrap gap-2 mt-1 px-1">
+          {resultImages.map(({ path: imgPath, url }) => (
+            <InlineImage
+              key={imgPath}
+              src={url}
+              alt={imgPath.split("/").pop() || "image"}
+              onClick={() => onPreviewFile?.(imgPath)}
+            />
+          ))}
+        </div>
       )}
     </div>
   );
@@ -420,14 +578,14 @@ function TypingIndicator({ language }: { language: Language }) {
 function WelcomeScreen({ onNewSession, language }: { onNewSession: () => void; language: Language }) {
   const t = UI_TEXT[language];
   return (
-    <div className="flex-1 flex items-center justify-center bg-gradient-to-b from-gray-50 to-white px-6">
+    <div className="flex-1 flex items-center justify-center bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-gray-900 px-6">
       <div className="max-w-2xl w-full text-center">
         <div className="mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 text-white text-2xl font-bold mb-4 shadow-lg">
             CW
           </div>
-          <h1 className="text-2xl font-bold text-gray-800">{t.welcomeTitle}</h1>
-          <p className="text-gray-500 mt-2">{t.welcomeSubtitle}</p>
+          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">{t.welcomeTitle}</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-2">{t.welcomeSubtitle}</p>
         </div>
 
         <div className="grid grid-cols-3 gap-4 mb-8 max-w-lg mx-auto">
@@ -435,18 +593,18 @@ function WelcomeScreen({ onNewSession, language }: { onNewSession: () => void; l
             <div key={i} className="relative text-center">
               {i > 0 && (
                 <div className="absolute left-0 top-5 -translate-x-1/2 w-full h-[2px]">
-                  <div className="h-full bg-gray-200 mx-2" />
+                  <div className="h-full bg-gray-200 dark:bg-gray-700 mx-2" />
                 </div>
               )}
               <div className={`relative inline-flex items-center justify-center w-10 h-10 rounded-full ${STEP_COLORS[i]} text-white text-sm font-bold mb-2 shadow`}>
                 {i + 1}
               </div>
-              <div className="text-sm font-semibold text-gray-700">{title}</div>
-              <div className="text-[11px] text-gray-400 mt-1 leading-tight px-1">
+              <div className="text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</div>
+              <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 leading-tight px-1">
                 {t.stepsDesc[i]}
               </div>
               <div className="mt-1.5">
-                <span className="inline-block text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+                <span className="inline-block text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                   {STEP_TOOLS[i]}
                 </span>
               </div>
@@ -460,7 +618,7 @@ function WelcomeScreen({ onNewSession, language }: { onNewSession: () => void; l
         >
           {t.welcomeCta}
         </button>
-        <p className="text-xs text-gray-400 mt-3">{t.welcomeHint}</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-3">{t.welcomeHint}</p>
       </div>
     </div>
   );
@@ -484,10 +642,10 @@ function EmptyChat({
   return (
     <div className="flex-1 flex items-center justify-center px-6">
       <div className="max-w-xl w-full">
-        <h2 className="text-lg font-semibold text-gray-700 text-center mb-1">
+        <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 text-center mb-1">
           {t.emptyTitle}
         </h2>
-        <p className="text-sm text-gray-400 text-center mb-6">
+        <p className="text-sm text-gray-400 dark:text-gray-500 text-center mb-6">
           {t.emptySubtitle}
         </p>
 
@@ -503,15 +661,15 @@ function EmptyChat({
                   onFillInput(action.prompt, action.hint || "");
                 }
               }}
-              className="group w-full text-left p-4 rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all bg-white"
+              className="group w-full text-left p-4 rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all bg-white dark:border-gray-700 dark:hover:border-blue-600 dark:bg-gray-800"
             >
               <div className="flex items-center gap-3">
                 <span className="text-2xl shrink-0">{action.icon}</span>
                 <div className="min-w-0">
-                  <div className="font-medium text-gray-800 group-hover:text-blue-600 transition-colors">
+                  <div className="font-medium text-gray-800 dark:text-gray-100 group-hover:text-blue-600 transition-colors">
                     {action.label}
                   </div>
-                  <div className="text-sm text-gray-400 mt-0.5">
+                  <div className="text-sm text-gray-400 dark:text-gray-500 mt-0.5">
                     {action.description}
                   </div>
                 </div>
@@ -522,9 +680,9 @@ function EmptyChat({
 
         {/* Divider */}
         <div className="flex items-center gap-3 mt-6 mb-3">
-          <div className="flex-1 h-px bg-gray-200" />
+          <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
           <span className="text-xs text-gray-400 font-medium">{t.advancedTools}</span>
-          <div className="flex-1 h-px bg-gray-200" />
+          <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
         </div>
 
         {/* Compact chips */}
@@ -619,11 +777,11 @@ export function ChatWindow({
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-white min-w-0">
+    <div className="flex-1 flex flex-col bg-white dark:bg-gray-900 min-w-0">
       {/* Header toolbar */}
-      <div className="px-4 py-2.5 border-b border-gray-200 flex items-center justify-between shrink-0">
+      <div className="px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <h2 className="font-semibold text-gray-800 text-sm">Chat</h2>
+          <h2 className="font-semibold text-gray-800 dark:text-gray-100 text-sm">Chat</h2>
           {isConnected ? (
             <span className="flex items-center gap-1 text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
               <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
@@ -651,7 +809,7 @@ export function ChatWindow({
             className={`text-xs px-2.5 py-1 rounded-lg transition-colors border ${
               showFilesActive
                 ? "bg-blue-50 text-blue-600 border-blue-200"
-                : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
             }`}
             title="Toggle workspace file explorer"
           >
@@ -664,7 +822,7 @@ export function ChatWindow({
           </button>
           <button
             onClick={onShowPublish}
-            className="text-xs px-2.5 py-1 rounded-lg bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100 transition-colors"
+            className="text-xs px-2.5 py-1 rounded-lg bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 transition-colors"
             title={t.publishBtn}
           >
             <span className="flex items-center gap-1">
@@ -705,13 +863,13 @@ export function ChatWindow({
               );
             }
             if (msg.role === "tool_result") {
-              return <ToolResultBlock key={msg.id} message={msg} />;
+              return <ToolResultBlock key={msg.id} message={msg} sessionId={sessionId || undefined} workspacePath={workspacePath} onPreviewFile={onPreviewFile} />;
             }
             if (msg.role === "result") {
               return <ResultBlock key={msg.id} message={msg} />;
             }
             if (msg.role === "user" || msg.role === "assistant") {
-              return <MessageBubble key={msg.id} message={msg} onPreviewFile={onPreviewFile} workspacePath={workspacePath} />;
+              return <MessageBubble key={msg.id} message={msg} onPreviewFile={onPreviewFile} workspacePath={workspacePath} sessionId={sessionId || undefined} />;
             }
             return null;
           })}
@@ -721,7 +879,7 @@ export function ChatWindow({
       )}
 
       {/* Input + Quick Chips */}
-      <div className="border-t border-gray-200 shrink-0 bg-white">
+      <div className="border-t border-gray-200 dark:border-gray-700 shrink-0 bg-white dark:bg-gray-900">
         {/* Quick action chips — hide when empty chat shows its own chips */}
         {messages.length > 0 && <div className="px-4 pt-3 pb-1.5 flex flex-wrap gap-1.5">
           {QUICK_CHIPS[language].map((chip) => (
@@ -759,7 +917,7 @@ export function ChatWindow({
               placeholder={isConnected ? t.placeholder : t.placeholderOffline}
               disabled={!isConnected || isLoading}
               rows={1}
-              className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 resize-none text-sm"
+              className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 dark:bg-gray-800 dark:text-gray-100 dark:disabled:bg-gray-700 resize-none text-sm"
             />
             <button
               type="submit"
@@ -776,10 +934,10 @@ export function ChatWindow({
             </div>
           )}
           <div className="flex items-center justify-between mt-1.5 px-1">
-            <span className="text-[10px] text-gray-400">
+            <span className="text-[10px] text-gray-400 dark:text-gray-500">
               {t.shiftEnter}
             </span>
-            <span className="text-[10px] text-gray-400">
+            <span className="text-[10px] text-gray-400 dark:text-gray-500">
               {t.poweredBy}
             </span>
           </div>

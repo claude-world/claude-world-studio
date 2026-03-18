@@ -1,7 +1,7 @@
 import { existsSync } from "fs";
 import { isAbsolute } from "path";
 import { execFileSync } from "child_process";
-import type { Settings, Language } from "./types.js";
+import type { Settings, Language, Theme, CfBrowserMode } from "./types.js";
 import store from "./db.js";
 
 /** Validate a path setting: must be absolute and exist on disk */
@@ -27,6 +27,8 @@ export function getSettings(): Settings {
   const all = store.getAllSettings();
   return {
     language: (all.language as Language) || "zh-TW",
+    theme: (all.theme as Theme) || "light",
+    cfBrowserMode: (all.cfBrowserMode as CfBrowserMode) || "cf-api",
     trendPulseVenvPython:
       all.trendPulseVenvPython || process.env.TREND_PULSE_PYTHON || "",
     cfBrowserVenvPython:
@@ -37,6 +39,10 @@ export function getSettings(): Settings {
       all.cfBrowserUrl || process.env.CF_BROWSER_URL || "",
     cfBrowserApiKey:
       all.cfBrowserApiKey || process.env.CF_BROWSER_API_KEY || "",
+    cfAccountId:
+      all.cfAccountId || process.env.CF_ACCOUNT_ID || "",
+    cfApiToken:
+      all.cfApiToken || process.env.CF_API_TOKEN || "",
     defaultWorkspace:
       all.defaultWorkspace || process.env.DEFAULT_WORKSPACE || process.cwd(),
   };
@@ -72,14 +78,21 @@ export function buildMcpServers(settings: Settings) {
     {
       name: "cf-browser",
       path: settings.cfBrowserVenvPython,
-      build: () => ({
-        command: settings.cfBrowserVenvPython,
-        args: ["-m", "cf_browser_mcp.server"],
-        env: {
-          CF_BROWSER_URL: settings.cfBrowserUrl,
-          CF_BROWSER_API_KEY: settings.cfBrowserApiKey,
-        },
-      }),
+      build: () => {
+        const env: Record<string, string> = {};
+        if (settings.cfBrowserMode === "worker") {
+          if (settings.cfBrowserUrl) env.CF_BROWSER_URL = settings.cfBrowserUrl;
+          if (settings.cfBrowserApiKey) env.CF_BROWSER_API_KEY = settings.cfBrowserApiKey;
+        } else {
+          if (settings.cfAccountId) env.CF_ACCOUNT_ID = settings.cfAccountId;
+          if (settings.cfApiToken) env.CF_API_TOKEN = settings.cfApiToken;
+        }
+        return {
+          command: settings.cfBrowserVenvPython,
+          args: ["-m", "cf_browser_mcp.server"],
+          env,
+        };
+      },
     },
     {
       name: "notebooklm",
@@ -105,8 +118,13 @@ export function buildMcpServers(settings: Settings) {
     if (uvx && uvxDef) {
       const env: Record<string, string> = {};
       if (cfg.name === "cf-browser") {
-        if (settings.cfBrowserUrl) env.CF_BROWSER_URL = settings.cfBrowserUrl;
-        if (settings.cfBrowserApiKey) env.CF_BROWSER_API_KEY = settings.cfBrowserApiKey;
+        if (settings.cfBrowserMode === "worker") {
+          if (settings.cfBrowserUrl) env.CF_BROWSER_URL = settings.cfBrowserUrl;
+          if (settings.cfBrowserApiKey) env.CF_BROWSER_API_KEY = settings.cfBrowserApiKey;
+        } else {
+          if (settings.cfAccountId) env.CF_ACCOUNT_ID = settings.cfAccountId;
+          if (settings.cfApiToken) env.CF_API_TOKEN = settings.cfApiToken;
+        }
       }
       servers[cfg.name] = {
         command: "uvx",

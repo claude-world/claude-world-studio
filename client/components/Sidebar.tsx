@@ -1,5 +1,5 @@
 import React from "react";
-import type { Language } from "../App";
+import type { Language, Theme } from "../App";
 
 interface Session {
   id: string;
@@ -22,10 +22,13 @@ interface SidebarProps {
   onNewSession: () => void;
   onDeleteSession: (id: string) => void;
   onShowSettings: () => void;
+  onShowSocial: () => void;
   defaultWorkspace: string;
   isConnected: boolean;
   language: Language;
   onLanguageChange: (lang: Language) => void;
+  theme: Theme;
+  onThemeChange: (theme: Theme) => void;
 }
 
 function formatTime(dateStr: string): string {
@@ -40,6 +43,14 @@ function formatTime(dateStr: string): string {
   return d.toLocaleDateString();
 }
 
+const THEME_CYCLE: Theme[] = ["light", "dark", "system"];
+const THEME_ICONS: Record<Theme, string> = {
+  light: "M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z",
+  dark: "M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z",
+  system: "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
+};
+const THEME_LABELS: Record<Theme, string> = { light: "Light", dark: "Dark", system: "System" };
+
 export function Sidebar({
   sessions,
   selectedSessionId,
@@ -47,15 +58,18 @@ export function Sidebar({
   onNewSession,
   onDeleteSession,
   onShowSettings,
+  onShowSocial,
   defaultWorkspace,
   isConnected,
   language,
   onLanguageChange,
+  theme,
+  onThemeChange,
 }: SidebarProps) {
   return (
     <div className="flex flex-col h-full bg-gray-900 text-white">
-      {/* Header */}
-      <div className="p-4 border-b border-gray-700">
+      {/* Header — extra top padding in Electron for traffic lights */}
+      <div className={`p-4 border-b border-gray-700${navigator.userAgent.includes('Electron') ? ' pt-10' : ''}`}>
         <div className="flex items-center gap-2 mb-3">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
             CW
@@ -148,6 +162,26 @@ export function Sidebar({
 
       {/* Footer */}
       <div className="p-3 border-t border-gray-700 space-y-2.5">
+        {/* Theme toggle */}
+        <div>
+          <div className="text-[10px] text-gray-500 uppercase tracking-wider px-1 mb-1.5">
+            Theme
+          </div>
+          <button
+            onClick={() => {
+              const idx = THEME_CYCLE.indexOf(theme);
+              onThemeChange(THEME_CYCLE[(idx + 1) % THEME_CYCLE.length]);
+            }}
+            className="w-full flex items-center justify-center gap-2 text-[11px] py-1.5 rounded text-gray-400 hover:text-white hover:bg-gray-800 transition-all font-medium"
+            title={`Theme: ${THEME_LABELS[theme]}`}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={THEME_ICONS[theme]} />
+            </svg>
+            {THEME_LABELS[theme]}
+          </button>
+        </div>
+
         {/* Language switcher */}
         <div>
           <div className="text-[10px] text-gray-500 uppercase tracking-wider px-1 mb-1.5">
@@ -182,6 +216,15 @@ export function Sidebar({
             {defaultWorkspace.split("/").slice(-2).join("/")}
           </div>
         )}
+        <button
+          onClick={onShowSocial}
+          className="w-full flex items-center justify-center gap-1.5 text-xs text-gray-400 hover:text-white py-1.5 hover:bg-gray-800 rounded transition-colors"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          Social Accounts
+        </button>
         <button
           onClick={onShowSettings}
           className="w-full flex items-center justify-center gap-1.5 text-xs text-gray-400 hover:text-white py-1.5 hover:bg-gray-800 rounded transition-colors"

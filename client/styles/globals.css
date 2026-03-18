@@ -36,6 +36,45 @@
 .typing-dot:nth-child(2) { animation: typing 1.4s infinite 0.2s; }
 .typing-dot:nth-child(3) { animation: typing 1.4s infinite 0.4s; }
 
+/* Dark mode scrollbar */
+.dark ::-webkit-scrollbar-thumb {
+  background: #6b7280;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Markdown tables in chat */
+.prose table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.8125rem;
+}
+.prose th,
+.prose td {
+  border: 1px solid #d1d5db;
+  padding: 0.35rem 0.6rem;
+}
+.prose th {
+  background: #f3f4f6;
+  font-weight: 600;
+}
+.prose tbody tr:nth-child(even) {
+  background: #f9fafb;
+}
+
+/* Dark mode prose tables */
+.dark .prose th,
+.dark .prose td {
+  border-color: #374151;
+}
+.dark .prose th {
+  background: #1f2937;
+}
+.dark .prose tbody tr:nth-child(even) {
+  background: #111827;
+}
+
 /* Workflow step connector */
 .workflow-step + .workflow-step::before {
   content: '';
