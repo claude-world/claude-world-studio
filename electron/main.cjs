@@ -32,17 +32,36 @@ function startServer() {
   // Start Express server via tsx
   // In packaged mode: .bin symlinks are broken, use node + tsx CLI directly
   // In dev mode: .bin/tsx symlink works fine
-  const spawnEnv = { ...process.env, PORT: String(PORT), HOST: "127.0.0.1" };
+  // Get the full login-shell PATH (Electron launched from Finder has a minimal PATH)
+  const { execSync } = require("child_process");
+  let shellPath;
+  try {
+    shellPath = execSync("/bin/zsh -lc 'echo $PATH'", { encoding: "utf-8", timeout: 5000 }).trim();
+  } catch {
+    shellPath = process.env.PATH || "";
+  }
+  // Merge: use the shell PATH (which has nvm/homebrew/etc) as base
+  const mergedPath = shellPath || process.env.PATH || "/usr/local/bin:/usr/bin:/bin";
+  console.log(`[Electron] PATH for server: ${mergedPath.split(":").slice(0, 5).join(":")}...`);
+
+  // Find system node absolute path for the SDK to spawn
+  let systemNode;
+  try {
+    systemNode = execSync("/bin/zsh -lc 'which node'", { encoding: "utf-8", timeout: 5000 }).trim();
+  } catch {
+    systemNode = "/usr/local/bin/node";
+  }
+  console.log(`[Electron] System node: ${systemNode}`);
+
+  const spawnEnv = { ...process.env, PORT: String(PORT), HOST: "127.0.0.1", PATH: mergedPath, STUDIO_NODE_PATH: systemNode };
 
   // Find system node for packaged mode (Electron's Node has different ABI for native modules)
   let spawnCmd, spawnArgs;
   if (app.isPackaged) {
     const tsxCli = path.join(projectDir, "node_modules", "tsx", "dist", "cli.mjs");
-    // Use system node (not Electron's) to avoid native module ABI mismatch
-    const { execSync } = require("child_process");
     let systemNode;
     try {
-      systemNode = execSync("which node", { encoding: "utf-8" }).trim();
+      systemNode = execSync("/bin/zsh -lc 'which node'", { encoding: "utf-8", timeout: 5000, env: { ...process.env, PATH: mergedPath } }).trim();
     } catch {
       systemNode = "/usr/local/bin/node";
     }

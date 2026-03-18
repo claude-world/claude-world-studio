@@ -130,7 +130,7 @@ export function ToolUseBlock({ toolName, toolInput, toolId, onPreviewFile }: Too
       </div>
       {isExpanded && (
         <div className="p-2 border-t border-gray-200/50 dark:border-gray-700">
-          <pre className="text-xs bg-white dark:bg-gray-900 p-2 rounded overflow-x-auto max-h-64 overflow-y-auto">
+          <pre className="text-xs bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 p-2 rounded overflow-x-auto max-h-64 overflow-y-auto">
             {JSON.stringify(toolInput, null, 2)}
           </pre>
         </div>

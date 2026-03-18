@@ -1,5 +1,209 @@
 import React, { useState, useEffect, useCallback } from "react";
 
+// --- i18n ---
+
+const T = {
+  "zh-TW": {
+    pageTitle: "社群帳號",
+    tabAccounts: "帳號",
+    tabReview: "審核佇列",
+    tabHistory: "發文紀錄",
+    backToChat: "返回對話",
+    // Accounts tab
+    filterAll: "全部",
+    addAccount: "+ 新增帳號",
+    noAccountsYet: "尚未設定任何帳號。",
+    noAccountsMatch: "沒有符合篩選條件的帳號。",
+    noPersona: "尚未設定角色提示",
+    autoPublish: "自動發佈",
+    edit: "編輯",
+    delete: "刪除",
+    // Account form
+    newAccount: "新增帳號",
+    editAccount: "編輯：",
+    fieldName: "名稱 *",
+    fieldHandle: "帳號 *",
+    fieldPlatform: "平台 *",
+    fieldStyle: "風格",
+    fieldToken: "Token",
+    fieldTokenKeep: "Token（留空則保留現有）",
+    fieldUserId: "使用者 ID",
+    fieldPersonaPrompt: "角色提示",
+    placeholderPersona: "告訴 AI 如何為此帳號調整內容...",
+    saving: "儲存中...",
+    create: "建立",
+    update: "更新",
+    cancel: "取消",
+    accountSaved: "帳號已儲存。",
+    accountSaveFailed: "儲存帳號失敗。",
+    networkErrorSave: "儲存帳號時發生網路錯誤。",
+    // Review tab
+    noPendingTitle: "目前沒有待審核的貼文",
+    noPendingDesc: "關閉自動發佈的帳號所產生的草稿會在此顯示",
+    filterLabel: "篩選：",
+    allAccounts: "所有帳號",
+    selectAll: "全選",
+    publishing: "發佈中...",
+    publishSelected: "發佈選取",
+    discard: "捨棄",
+    discardTitle: "捨棄草稿",
+    publishedCount: (s: number, f: number) => `已發佈 ${s}，失敗 ${f}`,
+    batchFailed: "批次發佈失敗。",
+    networkErrorBatch: "批次發佈時發生網路錯誤。",
+    // History tab
+    filterByAccount: "篩選帳號：",
+    refresh: "重新整理",
+    noPostsYet: "尚無發文紀錄",
+    // Post row
+    viewPost: "查看貼文",
+    insights: "洞察",
+    hide: "隱藏",
+    // Insights
+    loadingInsights: "載入洞察資料中...",
+    insightsError: "錯誤：",
+    refreshInsights: "重新整理",
+    metricViews: "觀看",
+    metricLikes: "按讚",
+    metricReplies: "回覆",
+    metricReposts: "轉發",
+    metricQuotes: "引用",
+    // Status badges
+    statusPublished: "已發佈",
+    statusDraft: "草稿",
+    statusPending: "待發佈",
+    statusFailed: "失敗",
+  },
+  en: {
+    pageTitle: "Social Accounts",
+    tabAccounts: "Accounts",
+    tabReview: "Review Queue",
+    tabHistory: "Post History",
+    backToChat: "Back to Chat",
+    filterAll: "All",
+    addAccount: "+ Add Account",
+    noAccountsYet: "No accounts configured yet.",
+    noAccountsMatch: "No accounts match this filter.",
+    noPersona: "No persona configured",
+    autoPublish: "Auto-publish",
+    edit: "Edit",
+    delete: "Delete",
+    newAccount: "New Account",
+    editAccount: "Edit: ",
+    fieldName: "Name *",
+    fieldHandle: "Handle *",
+    fieldPlatform: "Platform *",
+    fieldStyle: "Style",
+    fieldToken: "Token",
+    fieldTokenKeep: "Token (leave empty to keep current)",
+    fieldUserId: "User ID",
+    fieldPersonaPrompt: "Persona Prompt",
+    placeholderPersona: "Instructions for AI to adapt content for this account...",
+    saving: "Saving...",
+    create: "Create",
+    update: "Update",
+    cancel: "Cancel",
+    accountSaved: "Account saved.",
+    accountSaveFailed: "Failed to save account.",
+    networkErrorSave: "Network error saving account.",
+    noPendingTitle: "No posts pending review",
+    noPendingDesc: "Posts from accounts with auto-publish OFF will appear here",
+    filterLabel: "Filter:",
+    allAccounts: "All Accounts",
+    selectAll: "Select All",
+    publishing: "Publishing...",
+    publishSelected: "Publish Selected",
+    discard: "Discard",
+    discardTitle: "Discard draft",
+    publishedCount: (s: number, f: number) => `Published ${s}, failed ${f}`,
+    batchFailed: "Batch publish failed.",
+    networkErrorBatch: "Network error during batch publish.",
+    filterByAccount: "Filter by account:",
+    refresh: "Refresh",
+    noPostsYet: "No posts yet",
+    viewPost: "View Post",
+    insights: "Insights",
+    hide: "Hide",
+    loadingInsights: "Loading insights...",
+    insightsError: "Error: ",
+    refreshInsights: "Refresh",
+    metricViews: "Views",
+    metricLikes: "Likes",
+    metricReplies: "Replies",
+    metricReposts: "Reposts",
+    metricQuotes: "Quotes",
+    statusPublished: "published",
+    statusDraft: "draft",
+    statusPending: "pending",
+    statusFailed: "failed",
+  },
+  ja: {
+    pageTitle: "ソーシャルアカウント",
+    tabAccounts: "アカウント",
+    tabReview: "レビューキュー",
+    tabHistory: "投稿履歴",
+    backToChat: "チャットに戻る",
+    filterAll: "すべて",
+    addAccount: "+ アカウント追加",
+    noAccountsYet: "アカウントが未設定です。",
+    noAccountsMatch: "このフィルターに一致するアカウントはありません。",
+    noPersona: "ペルソナ未設定",
+    autoPublish: "自動投稿",
+    edit: "編集",
+    delete: "削除",
+    newAccount: "新規アカウント",
+    editAccount: "編集：",
+    fieldName: "名前 *",
+    fieldHandle: "ハンドル *",
+    fieldPlatform: "プラットフォーム *",
+    fieldStyle: "スタイル",
+    fieldToken: "トークン",
+    fieldTokenKeep: "トークン（空欄で現在の値を維持）",
+    fieldUserId: "ユーザー ID",
+    fieldPersonaPrompt: "ペルソナプロンプト",
+    placeholderPersona: "このアカウント向けにコンテンツを調整する指示...",
+    saving: "保存中...",
+    create: "作成",
+    update: "更新",
+    cancel: "キャンセル",
+    accountSaved: "アカウントを保存しました。",
+    accountSaveFailed: "アカウントの保存に失敗しました。",
+    networkErrorSave: "アカウント保存中にネットワークエラーが発生しました。",
+    noPendingTitle: "レビュー待ちの投稿はありません",
+    noPendingDesc: "自動投稿がオフのアカウントからの投稿がここに表示されます",
+    filterLabel: "フィルター：",
+    allAccounts: "すべてのアカウント",
+    selectAll: "すべて選択",
+    publishing: "投稿中...",
+    publishSelected: "選択した投稿を公開",
+    discard: "破棄",
+    discardTitle: "下書きを破棄",
+    publishedCount: (s: number, f: number) => `${s} 件公開済み、${f} 件失敗`,
+    batchFailed: "一括投稿に失敗しました。",
+    networkErrorBatch: "一括投稿中にネットワークエラーが発生しました。",
+    filterByAccount: "アカウントでフィルター：",
+    refresh: "更新",
+    noPostsYet: "投稿はまだありません",
+    viewPost: "投稿を表示",
+    insights: "インサイト",
+    hide: "非表示",
+    loadingInsights: "インサイトを読み込み中...",
+    insightsError: "エラー：",
+    refreshInsights: "更新",
+    metricViews: "表示回数",
+    metricLikes: "いいね",
+    metricReplies: "返信",
+    metricReposts: "リポスト",
+    metricQuotes: "引用",
+    statusPublished: "公開済み",
+    statusDraft: "下書き",
+    statusPending: "保留中",
+    statusFailed: "失敗",
+  },
+};
+
+type LangKey = keyof typeof T;
+type Translations = typeof T[LangKey];
+
 interface Account {
   id: string;
   name: string;
@@ -45,21 +249,27 @@ const EMPTY_ACCOUNT: Omit<Account, "id"> = {
 
 // --- Sub-components ---
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, t }: { status: string; t: Translations }) {
   const styles: Record<string, string> = {
     published: "bg-green-100 text-green-700",
     draft: "bg-amber-100 text-amber-700",
     pending: "bg-blue-100 text-blue-700",
     failed: "bg-red-100 text-red-700",
   };
+  const labels: Record<string, string> = {
+    published: t.statusPublished,
+    draft: t.statusDraft,
+    pending: t.statusPending,
+    failed: t.statusFailed,
+  };
   return (
     <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${styles[status] || "bg-gray-100 text-gray-600"}`}>
-      {status}
+      {labels[status] || status}
     </span>
   );
 }
 
-function InsightsPanel({ postId }: { postId: string }) {
+function InsightsPanel({ postId, t }: { postId: string; t: Translations }) {
   const [insights, setInsights] = useState<Insights | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -82,16 +292,16 @@ function InsightsPanel({ postId }: { postId: string }) {
 
   useEffect(() => { fetchInsights(); }, [postId]);
 
-  if (loading) return <div className="text-xs text-gray-400 py-2">Loading insights...</div>;
-  if (error) return <div className="text-xs text-red-500 py-2">Error: {error}</div>;
+  if (loading) return <div className="text-xs text-gray-400 py-2">{t.loadingInsights}</div>;
+  if (error) return <div className="text-xs text-red-500 py-2">{t.insightsError}{error}</div>;
   if (!insights) return null;
 
   const metrics = [
-    { label: "Views", value: insights.views, icon: "👁" },
-    { label: "Likes", value: insights.likes, icon: "❤️" },
-    { label: "Replies", value: insights.replies, icon: "💬" },
-    { label: "Reposts", value: insights.reposts, icon: "🔁" },
-    { label: "Quotes", value: insights.quotes, icon: "📝" },
+    { label: t.metricViews, value: insights.views, icon: "👁" },
+    { label: t.metricLikes, value: insights.likes, icon: "❤️" },
+    { label: t.metricReplies, value: insights.replies, icon: "💬" },
+    { label: t.metricReposts, value: insights.reposts, icon: "🔁" },
+    { label: t.metricQuotes, value: insights.quotes, icon: "📝" },
   ];
 
   return (
@@ -102,12 +312,12 @@ function InsightsPanel({ postId }: { postId: string }) {
           <div className="text-[10px] text-gray-500 dark:text-gray-400">{m.icon} {m.label}</div>
         </div>
       ))}
-      <button onClick={fetchInsights} className="self-center text-[10px] text-blue-500 hover:text-blue-700 ml-2">Refresh</button>
+      <button onClick={fetchInsights} className="self-center text-[10px] text-blue-500 hover:text-blue-700 ml-2">{t.refreshInsights}</button>
     </div>
   );
 }
 
-function PostRow({ post, showAccount }: { post: Post; showAccount?: boolean }) {
+function PostRow({ post, showAccount, t }: { post: Post; showAccount?: boolean; t: Translations }) {
   const [showInsights, setShowInsights] = useState(false);
 
   return (
@@ -121,10 +331,10 @@ function PostRow({ post, showAccount }: { post: Post; showAccount?: boolean }) {
             {post.content}
           </p>
           <div className="flex items-center gap-2 mt-1.5">
-            <StatusBadge status={post.status} />
+            <StatusBadge status={post.status} t={t} />
             <span className="text-[10px] text-gray-400">{new Date(post.created_at).toLocaleString()}</span>
             {post.post_url && (
-              <a href={post.post_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-500 hover:underline">View Post</a>
+              <a href={post.post_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-500 hover:underline">{t.viewPost}</a>
             )}
           </div>
         </div>
@@ -133,11 +343,11 @@ function PostRow({ post, showAccount }: { post: Post; showAccount?: boolean }) {
             onClick={() => setShowInsights(!showInsights)}
             className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 text-gray-600 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-800 shrink-0"
           >
-            {showInsights ? "Hide" : "Insights"}
+            {showInsights ? t.hide : t.insights}
           </button>
         )}
       </div>
-      {showInsights && post.post_id && <InsightsPanel postId={post.id} />}
+      {showInsights && post.post_id && <InsightsPanel postId={post.id} t={t} />}
     </div>
   );
 }
@@ -149,11 +359,13 @@ function AccountForm({
   isNew,
   onSave,
   onCancel,
+  t,
 }: {
   account: Account;
   isNew: boolean;
   onSave: (data: Account) => Promise<void>;
   onCancel: () => void;
+  t: Translations;
 }) {
   const [form, setForm] = useState(account);
   const [saving, setSaving] = useState(false);
@@ -167,45 +379,45 @@ function AccountForm({
 
   return (
     <div className="p-4 border border-blue-200 dark:border-blue-800 rounded-lg bg-blue-50/30 dark:bg-blue-950/20 space-y-3">
-      <div className="text-sm font-medium text-gray-700 dark:text-gray-200">{isNew ? "New Account" : `Edit: ${account.handle}`}</div>
+      <div className="text-sm font-medium text-gray-700 dark:text-gray-200">{isNew ? t.newAccount : `${t.editAccount}${account.handle}`}</div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Name *</label>
+          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t.fieldName}</label>
           <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Claude World Taiwan" className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded text-sm" />
         </div>
         <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Handle *</label>
+          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t.fieldHandle}</label>
           <input type="text" value={form.handle} onChange={(e) => setForm({ ...form, handle: e.target.value })} placeholder="@your.account" className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded text-sm" />
         </div>
         <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Platform *</label>
+          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t.fieldPlatform}</label>
           <select value={form.platform} onChange={(e) => setForm({ ...form, platform: e.target.value })} className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded text-sm">
             <option value="threads">Threads</option>
             <option value="instagram">Instagram</option>
           </select>
         </div>
         <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Style</label>
+          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t.fieldStyle}</label>
           <input type="text" value={form.style} onChange={(e) => setForm({ ...form, style: e.target.value })} placeholder="tech-educator, futurist..." className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded text-sm" />
         </div>
         <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Token {!isNew && "(leave empty to keep current)"}</label>
+          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{isNew ? t.fieldToken : t.fieldTokenKeep}</label>
           <input type="password" value={form.token} onChange={(e) => setForm({ ...form, token: e.target.value })} placeholder="API token" className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded text-sm font-mono" />
         </div>
         <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">User ID</label>
+          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t.fieldUserId}</label>
           <input type="text" value={form.user_id} onChange={(e) => setForm({ ...form, user_id: e.target.value })} placeholder="your-threads-user-id" className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded text-sm font-mono" />
         </div>
       </div>
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Persona Prompt</label>
-        <textarea value={form.persona_prompt} onChange={(e) => setForm({ ...form, persona_prompt: e.target.value })} rows={3} placeholder="Instructions for AI to adapt content for this account..." className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded text-sm resize-none" />
+        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t.fieldPersonaPrompt}</label>
+        <textarea value={form.persona_prompt} onChange={(e) => setForm({ ...form, persona_prompt: e.target.value })} rows={3} placeholder={t.placeholderPersona} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded text-sm resize-none" />
       </div>
       <div className="flex gap-2">
         <button onClick={handleSave} disabled={!form.name || !form.handle || saving} className="text-xs px-4 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-40">
-          {saving ? "Saving..." : isNew ? "Create" : "Update"}
+          {saving ? t.saving : isNew ? t.create : t.update}
         </button>
-        <button onClick={onCancel} className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:bg-gray-50 text-gray-600 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-800">Cancel</button>
+        <button onClick={onCancel} className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:bg-gray-50 text-gray-600 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-800">{t.cancel}</button>
       </div>
     </div>
   );
@@ -213,7 +425,8 @@ function AccountForm({
 
 // --- Main Page ---
 
-export function SocialAccountsPage({ onClose }: { onClose: () => void }) {
+export function SocialAccountsPage({ onClose, language }: { onClose: () => void; language?: "zh-TW" | "en" | "ja" }) {
+  const t = T[(language ?? "en") as LangKey];
   const [tab, setTab] = useState<Tab>("accounts");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [editing, setEditing] = useState<Account | null>(null);
@@ -268,13 +481,13 @@ export function SocialAccountsPage({ onClose }: { onClose: () => void }) {
         setEditing(null);
         setIsNew(false);
         fetchAccounts();
-        setNotice({ type: "success", text: "Account saved." });
+        setNotice({ type: "success", text: t.accountSaved });
       } else {
         const err = await res.json().catch(() => ({}));
-        setNotice({ type: "error", text: err.error || "Failed to save account." });
+        setNotice({ type: "error", text: err.error || t.accountSaveFailed });
       }
     } catch {
-      setNotice({ type: "error", text: "Network error saving account." });
+      setNotice({ type: "error", text: t.networkErrorSave });
     }
   };
 
@@ -336,16 +549,16 @@ export function SocialAccountsPage({ onClose }: { onClose: () => void }) {
         const failed = data.results?.filter((r: any) => !r.success).length ?? 0;
         setNotice({
           type: failed > 0 ? "error" : "success",
-          text: `Published ${succeeded}, failed ${failed}`,
+          text: t.publishedCount(succeeded, failed),
         });
       } else {
         const err = await res.json().catch(() => ({}));
-        setNotice({ type: "error", text: err.error || "Batch publish failed." });
+        setNotice({ type: "error", text: err.error || t.batchFailed });
       }
       setSelectedIds(new Set());
       fetchPending();
     } catch {
-      setNotice({ type: "error", text: "Network error during batch publish." });
+      setNotice({ type: "error", text: t.networkErrorBatch });
     }
     setPublishing(false);
   };
@@ -358,9 +571,9 @@ export function SocialAccountsPage({ onClose }: { onClose: () => void }) {
   };
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
-    { key: "accounts", label: "Accounts", count: accounts.length },
-    { key: "review", label: "Review Queue", count: pendingPosts.length },
-    { key: "history", label: "Post History" },
+    { key: "accounts", label: t.tabAccounts, count: accounts.length },
+    { key: "review", label: t.tabReview, count: pendingPosts.length },
+    { key: "history", label: t.tabHistory },
   ];
 
   return (
@@ -368,31 +581,31 @@ export function SocialAccountsPage({ onClose }: { onClose: () => void }) {
       {/* Header */}
       <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-900 z-10">
         <div className="flex items-center gap-4">
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Social Accounts</h2>
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">{t.pageTitle}</h2>
           <div className="flex gap-1">
-            {tabs.map((t) => (
+            {tabs.map((tab_item) => (
               <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
+                key={tab_item.key}
+                onClick={() => setTab(tab_item.key)}
                 className={`text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${
-                  tab === t.key
+                  tab === tab_item.key
                     ? "bg-blue-600 text-white"
                     : "text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-800"
                 }`}
               >
-                {t.label}
-                {t.count !== undefined && t.count > 0 && (
+                {tab_item.label}
+                {tab_item.count !== undefined && tab_item.count > 0 && (
                   <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${
-                    tab === t.key ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400"
+                    tab === tab_item.key ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400"
                   }`}>
-                    {t.count}
+                    {tab_item.count}
                   </span>
                 )}
               </button>
             ))}
           </div>
         </div>
-        <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">Back to Chat</button>
+        <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">{t.backToChat}</button>
       </div>
 
       <div className="p-6 max-w-3xl">
@@ -424,7 +637,7 @@ export function SocialAccountsPage({ onClose }: { onClose: () => void }) {
                           : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
                       }`}
                     >
-                      {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)} ({count})
+                      {f === "all" ? t.filterAll : f.charAt(0).toUpperCase() + f.slice(1)} ({count})
                     </button>
                   );
                 })}
@@ -433,13 +646,13 @@ export function SocialAccountsPage({ onClose }: { onClose: () => void }) {
                 onClick={() => { setEditing({ id: "", ...EMPTY_ACCOUNT }); setIsNew(true); }}
                 className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
               >
-                + Add Account
+                {t.addAccount}
               </button>
             </div>
 
             {filteredAccounts.length === 0 && !editing && (
               <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">
-                {accounts.length === 0 ? "No accounts configured yet." : "No accounts match this filter."}
+                {accounts.length === 0 ? t.noAccountsYet : t.noAccountsMatch}
               </p>
             )}
 
@@ -478,14 +691,14 @@ export function SocialAccountsPage({ onClose }: { onClose: () => void }) {
                             {a.persona_prompt.slice(0, 80)}{a.persona_prompt.length > 80 ? "..." : ""}
                           </div>
                         ) : (
-                          <div className="text-[10px] text-amber-500 mt-0.5">No persona configured</div>
+                          <div className="text-[10px] text-amber-500 mt-0.5">{t.noPersona}</div>
                         )}
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
                       {/* Auto-publish toggle */}
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500 dark:text-gray-400">Auto-publish</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{t.autoPublish}</span>
                         <button
                           onClick={() => handleToggleAutoPublish(a.id, a.auto_publish)}
                           className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${a.auto_publish ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"}`}
@@ -494,12 +707,12 @@ export function SocialAccountsPage({ onClose }: { onClose: () => void }) {
                         </button>
                       </div>
                       <div className="relative">
-                        <button onClick={() => { setEditing({ ...a, token: "" }); setIsNew(false); }} className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 text-gray-600 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-800">Edit</button>
+                        <button onClick={() => { setEditing({ ...a, token: "" }); setIsNew(false); }} className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 text-gray-600 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-800">{t.edit}</button>
                         {!hasToken && (
                           <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[8px] flex items-center justify-center font-bold">!</span>
                         )}
                       </div>
-                      <button onClick={() => handleDelete(a.id)} className="text-xs px-2 py-1 text-red-500 hover:bg-red-50 rounded">Delete</button>
+                      <button onClick={() => handleDelete(a.id)} className="text-xs px-2 py-1 text-red-500 hover:bg-red-50 rounded">{t.delete}</button>
                     </div>
                   </div>
                 </div>
@@ -512,6 +725,7 @@ export function SocialAccountsPage({ onClose }: { onClose: () => void }) {
                 isNew={isNew}
                 onSave={handleSaveAccount}
                 onCancel={() => { setEditing(null); setIsNew(false); }}
+                t={t}
               />
             )}
           </div>
@@ -523,8 +737,8 @@ export function SocialAccountsPage({ onClose }: { onClose: () => void }) {
             {pendingPosts.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-3xl mb-3">&#9989;</div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">No posts pending review</p>
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Posts from accounts with auto-publish OFF will appear here</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t.noPendingTitle}</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{t.noPendingDesc}</p>
               </div>
             ) : (
               <>
@@ -532,13 +746,13 @@ export function SocialAccountsPage({ onClose }: { onClose: () => void }) {
                   <div className="flex items-center gap-3">
                     {/* Account filter */}
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500 dark:text-gray-400">Filter:</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{t.filterLabel}</span>
                       <select
                         value={reviewFilter}
                         onChange={(e) => { setReviewFilter(e.target.value); setSelectedIds(new Set()); }}
                         className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded"
                       >
-                        <option value="all">All Accounts</option>
+                        <option value="all">{t.allAccounts}</option>
                         {accounts.map((a) => (
                           <option key={a.id} value={a.id}>{a.handle} ({a.platform})</option>
                         ))}
@@ -551,7 +765,7 @@ export function SocialAccountsPage({ onClose }: { onClose: () => void }) {
                         onChange={toggleSelectAll}
                         className="rounded"
                       />
-                      Select All ({filteredPending.length})
+                      {t.selectAll} ({filteredPending.length})
                     </label>
                   </div>
                   <button
@@ -559,7 +773,7 @@ export function SocialAccountsPage({ onClose }: { onClose: () => void }) {
                     disabled={selectedIds.size === 0 || publishing}
                     className="text-xs px-4 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-40 font-medium"
                   >
-                    {publishing ? "Publishing..." : `Publish Selected (${selectedIds.size})`}
+                    {publishing ? t.publishing : `${t.publishSelected} (${selectedIds.size})`}
                   </button>
                 </div>
 
@@ -573,14 +787,14 @@ export function SocialAccountsPage({ onClose }: { onClose: () => void }) {
                         className="mt-3 rounded"
                       />
                       <div className="flex-1">
-                        <PostRow post={post} showAccount />
+                        <PostRow post={post} showAccount t={t} />
                       </div>
                       <button
                         onClick={() => handleDiscardDraft(post.id)}
                         className="mt-2 text-[10px] text-red-400 hover:text-red-600 shrink-0"
-                        title="Discard draft"
+                        title={t.discardTitle}
                       >
-                        Discard
+                        {t.discard}
                       </button>
                     </div>
                   ))}
@@ -595,26 +809,26 @@ export function SocialAccountsPage({ onClose }: { onClose: () => void }) {
           <div className="space-y-4">
             {/* Account filter */}
             <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500 dark:text-gray-400">Filter by account:</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">{t.filterByAccount}</span>
               <select
                 value={historyAccount}
                 onChange={(e) => setHistoryAccount(e.target.value)}
                 className="text-xs px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded"
               >
-                <option value="all">All Accounts</option>
+                <option value="all">{t.allAccounts}</option>
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>{a.handle} ({a.platform})</option>
                 ))}
               </select>
-              <button onClick={() => fetchHistory(historyAccount)} className="text-xs text-blue-500 hover:text-blue-700">Refresh</button>
+              <button onClick={() => fetchHistory(historyAccount)} className="text-xs text-blue-500 hover:text-blue-700">{t.refresh}</button>
             </div>
 
             {posts.length === 0 ? (
-              <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">No posts yet</p>
+              <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">{t.noPostsYet}</p>
             ) : (
               <div className="space-y-2">
                 {posts.map((post) => (
-                  <PostRow key={post.id} post={post} showAccount={historyAccount === "all"} />
+                  <PostRow key={post.id} post={post} showAccount={historyAccount === "all"} t={t} />
                 ))}
               </div>
             )}

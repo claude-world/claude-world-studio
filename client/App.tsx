@@ -444,7 +444,7 @@ export default function App() {
           onLanguageChange={handleLanguageChange}
         />
       ) : showSocial ? (
-        <SocialAccountsPage onClose={() => setShowSocial(false)} />
+        <SocialAccountsPage onClose={() => setShowSocial(false)} language={language} />
       ) : (
         <>
           <ChatWindow

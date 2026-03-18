@@ -315,7 +315,7 @@ export class AgentSession {
 
     const options: Record<string, any> = {
       maxTurns: 200,
-      model: "sonnet",
+      model: "opus",
       // bypassPermissions: intentional — local single-user tool.
       // All tool calls execute without prompting. Do NOT expose to untrusted networks.
       permissionMode: "bypassPermissions",
@@ -326,6 +326,9 @@ export class AgentSession {
       // Prevent confusion: trend-pulse publish tool is superseded by studio
       disallowedTools: ["mcp__trend-pulse__publish_to_threads", "mcp__trend-pulse__get_publish_history"],
       mcpServers: allMcpServers,
+      // Use absolute node path — Electron's PATH doesn't include system node
+      // STUDIO_NODE_PATH is set by electron/main.cjs; process.execPath may point to Electron binary
+      executable: process.env.STUDIO_NODE_PATH || process.execPath,
     };
 
     this.outputIterator = query({

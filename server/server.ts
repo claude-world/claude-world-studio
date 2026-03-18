@@ -115,6 +115,14 @@ function removeSession(sessionId: string): void {
 // Expose removeSession so the sessions router can call it on DELETE
 export { removeSession };
 
+// Prevent unhandled SDK errors from crashing the server
+process.on("uncaughtException", (err) => {
+  console.error("[Server] Uncaught exception (non-fatal):", err.message);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[Server] Unhandled rejection (non-fatal):", reason);
+});
+
 // Create HTTP server
 const server = createServer(app);
 
