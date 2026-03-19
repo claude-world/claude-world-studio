@@ -76,6 +76,9 @@
       }
     ]
   },
+  "overrides": {
+    "esbuild": ">=0.25.0"
+  },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.28",
     "@vitejs/plugin-react": "^4.3.0",
