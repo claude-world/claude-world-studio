@@ -101,3 +101,41 @@ export type IncomingWSMessage =
   | WSChatMessage
   | WSSubscribeMessage
   | WSInterruptMessage;
+
+export type TaskExecutionStatus = "running" | "completed" | "published" | "failed" | "rejected";
+export type TaskTrigger = "schedule" | "manual";
+
+export interface ScheduledTask {
+  id: string;
+  name: string;
+  account_id: string;
+  prompt_template: string;
+  schedule: string; // cron expression
+  timezone: string;
+  enabled: number; // 0 or 1
+  min_score: number;
+  max_retries: number;
+  timeout_ms: number;
+  auto_publish: number; // 0 or 1
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskExecution {
+  id: string;
+  task_id: string;
+  account_id: string;
+  status: TaskExecutionStatus;
+  prompt: string;
+  content: string | null;
+  score: number | null;
+  score_breakdown: string | null; // JSON
+  cost_usd: number | null;
+  duration_ms: number | null;
+  publish_record_id: string | null;
+  error: string | null;
+  retry_count: number;
+  triggered_by: TaskTrigger;
+  started_at: string;
+  completed_at: string | null;
+}

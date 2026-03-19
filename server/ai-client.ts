@@ -285,7 +285,7 @@ export class AgentSession {
   private outputIterator: AsyncIterator<any> | null = null;
   private abortController = new AbortController();
 
-  constructor(workspacePath?: string, language?: Language) {
+  constructor(workspacePath?: string, language?: Language, resumeContext?: string) {
     const settings = getSettings();
     const mcpServers = buildMcpServers(settings);
     const cwd = workspacePath || settings.defaultWorkspace || process.cwd();
@@ -313,6 +313,13 @@ export class AgentSession {
       allowedTools.push(`mcp__${name}`);
     }
 
+    let systemPrompt = buildSystemPrompt(lang, accounts);
+
+    // Append conversation history for resumed sessions
+    if (resumeContext) {
+      systemPrompt += `\n\n## Resumed Session — Previous Conversation\nThis session was interrupted (app closed or server restarted). Below is the conversation history from before. Continue naturally from where it left off — do NOT repeat or summarize unless the user asks.\n\n${resumeContext}`;
+    }
+
     const options: Record<string, any> = {
       maxTurns: 200,
       model: "opus",
@@ -320,7 +327,7 @@ export class AgentSession {
       // All tool calls execute without prompting. Do NOT expose to untrusted networks.
       permissionMode: "bypassPermissions",
       abortController: this.abortController,
-      systemPrompt: buildSystemPrompt(lang, accounts),
+      systemPrompt,
       cwd,
       allowedTools,
       // Prevent confusion: trend-pulse publish tool is superseded by studio

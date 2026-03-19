@@ -23,6 +23,7 @@ interface SidebarProps {
   onDeleteSession: (id: string) => void;
   onShowSettings: () => void;
   onShowSocial: () => void;
+  onShowScheduled: () => void;
   defaultWorkspace: string;
   isConnected: boolean;
   language: Language;
@@ -59,6 +60,7 @@ export function Sidebar({
   onDeleteSession,
   onShowSettings,
   onShowSocial,
+  onShowScheduled,
   defaultWorkspace,
   isConnected,
   language,
@@ -224,6 +226,15 @@ export function Sidebar({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
           Social Accounts
+        </button>
+        <button
+          onClick={onShowScheduled}
+          className="w-full flex items-center justify-center gap-1.5 text-xs text-gray-400 hover:text-white py-1.5 hover:bg-gray-800 rounded transition-colors"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Scheduled Tasks
         </button>
         <button
           onClick={onShowSettings}

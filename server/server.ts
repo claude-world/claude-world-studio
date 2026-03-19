@@ -15,6 +15,8 @@ import filesRouter from "./routes/files.js";
 import settingsRouter from "./routes/settings.js";
 import publishRouter from "./routes/publish.js";
 import accountsRouter from "./routes/accounts.js";
+import scheduledTasksRouter, { setScheduler } from "./routes/scheduled-tasks.js";
+import { TaskScheduler } from "./services/scheduler.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,6 +56,7 @@ app.use("/api/sessions", filesRouter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/publish", publishRouter);
 app.use("/api/accounts", accountsRouter);
+app.use("/api/scheduled-tasks", scheduledTasksRouter);
 
 // Session management (long-lived agent sessions)
 const sessions: Map<string, Session> = new Map();
@@ -94,7 +97,9 @@ function getSession(sessionId: string): Session | null {
   if (!dbSession) return null;
 
   const settings = getSettings();
-  session = new Session(sessionId, dbSession.workspace_path, settings.language);
+  // Load previous messages so the agent can resume with context
+  const previousMessages = store.getMessages(sessionId);
+  session = new Session(sessionId, dbSession.workspace_path, settings.language, previousMessages);
   sessions.set(sessionId, session);
   touchSession(sessionId);
   return session;
@@ -171,13 +176,14 @@ wss.on("connection", (ws: WSClient) => {
           }
           session.subscribe(ws);
 
-          // Send existing messages from DB
+          // Send existing messages from DB + running state
           const messages = store.getMessages(message.sessionId);
           ws.send(
             JSON.stringify({
               type: "history",
               messages,
               sessionId: message.sessionId,
+              running: session.isRunning(),
             })
           );
           break;
@@ -259,6 +265,11 @@ wss.on("close", () => {
   clearInterval(idleCleanup);
 });
 
+// Initialize task scheduler
+const taskScheduler = new TaskScheduler();
+setScheduler(taskScheduler);
+taskScheduler.start();
+
 // Start server — bound to localhost for security
 server.listen(PORT, HOST, () => {
   console.log(`Claude World Studio running at http://${HOST}:${PORT}`);
@@ -267,3 +278,12 @@ server.listen(PORT, HOST, () => {
     console.log(`Frontend dev server at http://localhost:5173`);
   }
 });
+
+// Graceful shutdown
+function shutdown() {
+  taskScheduler.stop();
+  wss.close();
+  server.close();
+}
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);

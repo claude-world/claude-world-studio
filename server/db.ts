@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import { fileURLToPath } from "url";
-import type { Session, Message, PublishRecord, SocialAccount } from "./types.js";
+import type { Session, Message, PublishRecord, SocialAccount, ScheduledTask, TaskExecution, TaskExecutionStatus, TaskTrigger } from "./types.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -66,6 +66,50 @@ db.exec(`
     auto_publish INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
   );
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS scheduled_tasks (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    account_id TEXT NOT NULL REFERENCES social_accounts(id),
+    prompt_template TEXT NOT NULL,
+    schedule TEXT NOT NULL,
+    timezone TEXT NOT NULL DEFAULT 'Asia/Taipei',
+    enabled INTEGER NOT NULL DEFAULT 1,
+    min_score INTEGER NOT NULL DEFAULT 80,
+    max_retries INTEGER NOT NULL DEFAULT 2,
+    timeout_ms INTEGER NOT NULL DEFAULT 300000,
+    auto_publish INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS task_executions (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES scheduled_tasks(id) ON DELETE CASCADE,
+    account_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running',
+    prompt TEXT NOT NULL,
+    content TEXT,
+    score REAL,
+    score_breakdown TEXT,
+    cost_usd REAL,
+    duration_ms INTEGER,
+    publish_record_id TEXT,
+    error TEXT,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    triggered_by TEXT NOT NULL DEFAULT 'schedule',
+    started_at TEXT DEFAULT (datetime('now')),
+    completed_at TEXT
+  );
+`);
+
+// Performance indices for scheduled tasks
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
+  CREATE INDEX IF NOT EXISTS idx_task_executions_task_id ON task_executions(task_id);
+  CREATE INDEX IF NOT EXISTS idx_task_executions_status ON task_executions(status);
 `);
 
 // Migrations for existing databases
@@ -152,6 +196,50 @@ const stmts = {
     `UPDATE social_accounts SET token = ? WHERE id = ?`
   ),
   deleteAccount: db.prepare(`DELETE FROM social_accounts WHERE id = ?`),
+
+  // Scheduled Tasks
+  createScheduledTask: db.prepare(
+    `INSERT INTO scheduled_tasks (id, name, account_id, prompt_template, schedule, timezone, enabled, min_score, max_retries, timeout_ms, auto_publish)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ),
+  getScheduledTask: db.prepare(`SELECT * FROM scheduled_tasks WHERE id = ?`),
+  getAllScheduledTasks: db.prepare(`SELECT * FROM scheduled_tasks ORDER BY created_at DESC`),
+  getEnabledScheduledTasks: db.prepare(`SELECT * FROM scheduled_tasks WHERE enabled = 1 ORDER BY created_at ASC`),
+  updateScheduledTask: db.prepare(
+    `UPDATE scheduled_tasks SET name = ?, account_id = ?, prompt_template = ?, schedule = ?, timezone = ?, enabled = ?, min_score = ?, max_retries = ?, timeout_ms = ?, auto_publish = ?, updated_at = datetime('now') WHERE id = ?`
+  ),
+  toggleScheduledTask: db.prepare(
+    `UPDATE scheduled_tasks SET enabled = ?, updated_at = datetime('now') WHERE id = ?`
+  ),
+  deleteScheduledTask: db.prepare(`DELETE FROM scheduled_tasks WHERE id = ?`),
+
+  // Task Executions
+  createExecution: db.prepare(
+    `INSERT INTO task_executions (id, task_id, account_id, status, prompt, triggered_by)
+     VALUES (?, ?, ?, 'running', ?, ?)`
+  ),
+  getExecution: db.prepare(`SELECT * FROM task_executions WHERE id = ?`),
+  getExecutionsByTask: db.prepare(
+    `SELECT * FROM task_executions WHERE task_id = ? ORDER BY started_at DESC LIMIT ?`
+  ),
+  getRecentExecutions: db.prepare(
+    `SELECT * FROM task_executions ORDER BY started_at DESC LIMIT ?`
+  ),
+  getRunningExecutions: db.prepare(
+    `SELECT * FROM task_executions WHERE status = 'running'`
+  ),
+  getRunningExecutionsByTask: db.prepare(
+    `SELECT * FROM task_executions WHERE task_id = ? AND status = 'running'`
+  ),
+  updateExecutionStatus: db.prepare(
+    `UPDATE task_executions SET status = ?, completed_at = datetime('now') WHERE id = ?`
+  ),
+  updateExecutionResult: db.prepare(
+    `UPDATE task_executions SET status = ?, content = ?, score = ?, score_breakdown = ?, cost_usd = ?, duration_ms = ?, publish_record_id = ?, error = ?, retry_count = ?, completed_at = datetime('now') WHERE id = ?`
+  ),
+  markStaleExecutionsFailed: db.prepare(
+    `UPDATE task_executions SET status = 'failed', error = 'Server restarted while execution was running', completed_at = datetime('now') WHERE status = 'running'`
+  ),
 };
 
 export const store = {
@@ -328,6 +416,123 @@ export const store = {
   deleteAccount(id: string): boolean {
     const result = stmts.deleteAccount.run(id);
     return result.changes > 0;
+  },
+
+  // Scheduled Tasks
+  createScheduledTask(data: {
+    name: string;
+    account_id: string;
+    prompt_template: string;
+    schedule: string;
+    timezone?: string;
+    enabled?: number;
+    min_score?: number;
+    max_retries?: number;
+    timeout_ms?: number;
+    auto_publish?: number;
+  }): ScheduledTask {
+    const id = uuidv4();
+    stmts.createScheduledTask.run(
+      id, data.name, data.account_id, data.prompt_template, data.schedule,
+      data.timezone ?? "Asia/Taipei", data.enabled ?? 1, data.min_score ?? 80,
+      data.max_retries ?? 2, data.timeout_ms ?? 300000, data.auto_publish ?? 1
+    );
+    return stmts.getScheduledTask.get(id) as ScheduledTask;
+  },
+
+  getScheduledTask(id: string): ScheduledTask | undefined {
+    return stmts.getScheduledTask.get(id) as ScheduledTask | undefined;
+  },
+
+  getAllScheduledTasks(): ScheduledTask[] {
+    return stmts.getAllScheduledTasks.all() as ScheduledTask[];
+  },
+
+  getEnabledScheduledTasks(): ScheduledTask[] {
+    return stmts.getEnabledScheduledTasks.all() as ScheduledTask[];
+  },
+
+  updateScheduledTask(id: string, data: {
+    name: string;
+    account_id: string;
+    prompt_template: string;
+    schedule: string;
+    timezone: string;
+    enabled: number;
+    min_score: number;
+    max_retries: number;
+    timeout_ms: number;
+    auto_publish: number;
+  }) {
+    stmts.updateScheduledTask.run(
+      data.name, data.account_id, data.prompt_template, data.schedule,
+      data.timezone, data.enabled, data.min_score, data.max_retries,
+      data.timeout_ms, data.auto_publish, id
+    );
+  },
+
+  toggleScheduledTask(id: string, enabled: number) {
+    stmts.toggleScheduledTask.run(enabled, id);
+  },
+
+  deleteScheduledTask(id: string): boolean {
+    const result = stmts.deleteScheduledTask.run(id);
+    return result.changes > 0;
+  },
+
+  // Task Executions
+  createExecution(data: {
+    task_id: string;
+    account_id: string;
+    prompt: string;
+    triggered_by: TaskTrigger;
+  }): TaskExecution {
+    const id = uuidv4();
+    stmts.createExecution.run(id, data.task_id, data.account_id, data.prompt, data.triggered_by);
+    return stmts.getExecution.get(id) as TaskExecution;
+  },
+
+  getExecution(id: string): TaskExecution | undefined {
+    return stmts.getExecution.get(id) as TaskExecution | undefined;
+  },
+
+  getExecutionsByTask(taskId: string, limit = 50): TaskExecution[] {
+    return stmts.getExecutionsByTask.all(taskId, limit) as TaskExecution[];
+  },
+
+  getRecentExecutions(limit = 50): TaskExecution[] {
+    return stmts.getRecentExecutions.all(limit) as TaskExecution[];
+  },
+
+  getRunningExecutions(): TaskExecution[] {
+    return stmts.getRunningExecutions.all() as TaskExecution[];
+  },
+
+  getRunningExecutionsByTask(taskId: string): TaskExecution[] {
+    return stmts.getRunningExecutionsByTask.all(taskId) as TaskExecution[];
+  },
+
+  updateExecutionResult(id: string, data: {
+    status: TaskExecutionStatus;
+    content?: string | null;
+    score?: number | null;
+    score_breakdown?: string | null;
+    cost_usd?: number | null;
+    duration_ms?: number | null;
+    publish_record_id?: string | null;
+    error?: string | null;
+    retry_count?: number;
+  }) {
+    stmts.updateExecutionResult.run(
+      data.status, data.content ?? null, data.score ?? null,
+      data.score_breakdown ?? null, data.cost_usd ?? null,
+      data.duration_ms ?? null, data.publish_record_id ?? null,
+      data.error ?? null, data.retry_count ?? 0, id
+    );
+  },
+
+  markStaleExecutionsFailed() {
+    return stmts.markStaleExecutionsFailed.run();
   },
 };
 

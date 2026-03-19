@@ -7,6 +7,7 @@ import { FilePreviewModal } from "./components/FilePreviewModal";
 import { PublishDialog } from "./components/PublishDialog";
 import { SettingsPage } from "./components/SettingsPage";
 import { SocialAccountsPage } from "./components/SocialAccountsPage";
+import { ScheduledTasksPage } from "./components/ScheduledTasksPage";
 
 export type Language = "zh-TW" | "en" | "ja";
 export type Theme = "light" | "dark" | "system";
@@ -37,7 +38,7 @@ interface Message {
 /** Discriminated union for server→client WebSocket messages */
 type ServerWSMessage =
   | { type: "connected" }
-  | { type: "history"; messages: Message[]; sessionId: string }
+  | { type: "history"; messages: Message[]; sessionId: string; running?: boolean }
   | { type: "user_message"; content: string; sessionId: string }
   | { type: "assistant_message"; content: string; sessionId: string }
   | { type: "tool_use"; toolName: string; toolId: string; toolInput: Record<string, unknown>; sessionId: string }
@@ -62,11 +63,14 @@ export default function App() {
   const [showFiles, setShowFiles] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showSocial, setShowSocial] = useState(false);
+  const [showScheduled, setShowScheduled] = useState(false);
   const [showPublish, setShowPublish] = useState(false);
   const [previewFile, setPreviewFile] = useState<{ relativePath: string; sessionId: string } | null>(null);
   const [defaultWorkspace, setDefaultWorkspace] = useState("");
   const [language, setLanguage] = useState<Language>("zh-TW");
   const [theme, setTheme] = useState<Theme>("light");
+  const [accounts, setAccounts] = useState<{ id: string; name: string; handle: string; platform: string }[]>([]);
+  const [targetAccountId, setTargetAccountId] = useState("");
 
   // Apply dark class to <html>
   useEffect(() => {
@@ -114,6 +118,10 @@ export default function App() {
           const localOnly = prev.filter((m) => !historyIds.has(m.id));
           return [...history, ...localOnly];
         });
+        // Restore loading indicator if the session agent is still running
+        if (message.running) {
+          setIsLoading(true);
+        }
         break;
       }
 
@@ -332,9 +340,12 @@ export default function App() {
     selectedSessionRef.current = sessionId;
     setSelectedSessionId(sessionId);
     setMessages([]);
-    setIsLoading(false);
+    // Don't force isLoading=false here — the server's history response
+    // will include a `running` flag to restore loading state correctly
+    setIsLoading(false); // temporary until history arrives
     setShowSettings(false);
     setShowSocial(false);
+    setShowScheduled(false);
     if (isConnected) {
       sendJsonMessage({ type: "subscribe", sessionId });
     }
@@ -409,9 +420,21 @@ export default function App() {
     setPreviewFile({ relativePath, sessionId: selectedSessionId });
   };
 
+  const fetchAccounts = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/accounts`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setAccounts(data);
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     fetchSessions();
     fetchSettings();
+    fetchAccounts();
   }, []);
 
   return (
@@ -424,8 +447,9 @@ export default function App() {
           onSelectSession={selectSession}
           onNewSession={createSession}
           onDeleteSession={deleteSession}
-          onShowSettings={() => { setShowSettings(true); setShowSocial(false); }}
-          onShowSocial={() => { setShowSocial(true); setShowSettings(false); }}
+          onShowSettings={() => { setShowSettings(true); setShowSocial(false); setShowScheduled(false); }}
+          onShowSocial={() => { setShowSocial(true); setShowSettings(false); setShowScheduled(false); }}
+          onShowScheduled={() => { setShowScheduled(true); setShowSettings(false); setShowSocial(false); }}
           defaultWorkspace={defaultWorkspace}
           isConnected={isConnected}
           language={language}
@@ -445,6 +469,8 @@ export default function App() {
         />
       ) : showSocial ? (
         <SocialAccountsPage onClose={() => setShowSocial(false)} language={language} />
+      ) : showScheduled ? (
+        <ScheduledTasksPage onClose={() => setShowScheduled(false)} language={language} />
       ) : (
         <>
           <ChatWindow
@@ -461,6 +487,9 @@ export default function App() {
             workspacePath={sessions.find((s) => s.id === selectedSessionId)?.workspace_path}
             showFilesActive={showFiles}
             language={language}
+            accounts={accounts}
+            targetAccountId={targetAccountId}
+            onTargetAccountChange={setTargetAccountId}
           />
 
           <FileExplorer

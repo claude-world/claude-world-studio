@@ -20,6 +20,13 @@ interface Message {
   cost_usd?: number;
 }
 
+interface SocialAccount {
+  id: string;
+  name: string;
+  handle: string;
+  platform: string;
+}
+
 interface ChatWindowProps {
   sessionId: string | null;
   messages: Message[];
@@ -34,6 +41,9 @@ interface ChatWindowProps {
   workspacePath?: string;
   showFilesActive: boolean;
   language: Language;
+  accounts?: SocialAccount[];
+  targetAccountId?: string;
+  onTargetAccountChange?: (id: string) => void;
 }
 
 // --- i18n strings ---
@@ -724,6 +734,9 @@ export function ChatWindow({
   workspacePath,
   showFilesActive,
   language,
+  accounts,
+  targetAccountId,
+  onTargetAccountChange,
 }: ChatWindowProps) {
   const t = UI_TEXT[language];
   const [input, setInput] = useState("");
@@ -756,10 +769,35 @@ export function ChatWindow({
     }
   }, [input]);
 
+  // Wrap send to prepend current timestamp + target account context
+  const sendWithAccount = (content: string) => {
+    const now = new Date();
+    const dateStr = now.toISOString().split("T")[0];
+    const timeStr = now.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" });
+    const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const timestamp = `[Current Time: ${dateStr} ${timeStr} ${tzName}]`;
+
+    let prefix = timestamp + "\n";
+
+    if (targetAccountId === "__all__" && accounts && accounts.length > 0) {
+      const accountList = accounts.map((a) => `- ${a.handle} (${a.platform}, ID: ${a.id})`).join("\n");
+      prefix += `[Matrix Publishing: Generate UNIQUE content for EACH account based on their style/persona. Publish to ALL accounts below.]\n${accountList}\n\n`;
+    } else {
+      const account = accounts?.find((a) => a.id === targetAccountId);
+      if (account) {
+        prefix += `[Target Account: ${account.handle} (${account.platform}, ID: ${account.id})]\n\n`;
+      } else {
+        prefix += "\n";
+      }
+    }
+
+    onSendMessage(prefix + content);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || !sessionId || isLoading || !isConnected) return;
-    onSendMessage(input.trim());
+    sendWithAccount(input.trim());
     setInput("");
     setInputHint("");
   };
@@ -796,6 +834,30 @@ export function ChatWindow({
         </div>
 
         <div className="flex items-center gap-1.5">
+          {/* Target account selector */}
+          {accounts && accounts.length > 0 && onTargetAccountChange && (
+            <select
+              value={targetAccountId || ""}
+              onChange={(e) => onTargetAccountChange(e.target.value)}
+              className={`text-[11px] pl-2 pr-6 py-1 rounded-lg border transition-colors font-medium cursor-pointer appearance-none bg-no-repeat bg-right ${
+                targetAccountId === "__all__"
+                  ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700"
+                  : targetAccountId
+                  ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700"
+                  : "bg-gray-50 text-gray-500 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600"
+              }`}
+              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E")`, backgroundSize: "16px", backgroundPosition: "right 4px center" }}
+              title={language === "zh-TW" ? "發佈目標帳號" : language === "ja" ? "投稿先アカウント" : "Target account for publishing"}
+            >
+              <option value="">{language === "zh-TW" ? "-- 帳號 --" : language === "ja" ? "-- アカウント --" : "-- Account --"}</option>
+              {accounts.length > 1 && (
+                <option value="__all__">{language === "zh-TW" ? "全部帳號 (矩陣發文)" : language === "ja" ? "全アカウント (マトリックス)" : "All Accounts (Matrix)"}</option>
+              )}
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>{a.handle} ({a.platform})</option>
+              ))}
+            </select>
+          )}
           {isLoading && (
             <button
               onClick={onInterrupt}
@@ -837,7 +899,7 @@ export function ChatWindow({
 
       {/* Messages or Empty state */}
       {messages.length === 0 ? (
-        <EmptyChat onFillInput={handleFillInput} onSendMessage={onSendMessage} language={language} />
+        <EmptyChat onFillInput={handleFillInput} onSendMessage={sendWithAccount} language={language} />
       ) : (
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {messages.map((msg) => {
@@ -891,7 +953,7 @@ export function ChatWindow({
                   setInput(chip.prompt);
                   textareaRef.current?.focus();
                 } else {
-                  onSendMessage(chip.prompt);
+                  sendWithAccount(chip.prompt);
                 }
               }}
               className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed ${chip.color}`}

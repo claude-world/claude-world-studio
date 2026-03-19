@@ -1,0 +1,371 @@
+import * as cron from "node-cron";
+import { query } from "@anthropic-ai/claude-agent-sdk";
+import { buildMcpServers, getSettings } from "../mcp-config.js";
+import { createStudioMcpServer } from "./studio-mcp.js";
+import store from "../db.js";
+import type { ScheduledTask, TaskExecution, SocialAccount, Language, TaskTrigger } from "../types.js";
+
+// ---------------------------------------------------------------------------
+// Template variable resolution
+// ---------------------------------------------------------------------------
+
+function resolveTemplate(
+  template: string,
+  account: SocialAccount,
+  task: ScheduledTask
+): string {
+  const now = new Date();
+  const localDate = now.toLocaleDateString("en-CA", { timeZone: task.timezone }); // YYYY-MM-DD
+  const dayOfWeek = now.toLocaleDateString("en-US", { timeZone: task.timezone, weekday: "long" });
+
+  return template
+    .replace(/\{\{account_name\}\}/g, account.name)
+    .replace(/\{\{account_handle\}\}/g, account.handle)
+    .replace(/\{\{date\}\}/g, now.toISOString().split("T")[0])
+    .replace(/\{\{date_local\}\}/g, localDate)
+    .replace(/\{\{day_of_week\}\}/g, dayOfWeek)
+    .replace(/\{\{language\}\}/g, getSettings().language || "zh-TW")
+    .replace(/\{\{platform\}\}/g, account.platform);
+}
+
+// ---------------------------------------------------------------------------
+// Task-specific system prompt (streamlined for unattended execution)
+// ---------------------------------------------------------------------------
+
+function buildTaskSystemPrompt(account: SocialAccount, task: ScheduledTask): string {
+  const settings = getSettings();
+  const lang = (settings.language || "zh-TW") as Language;
+
+  const LANG_RULES: Record<Language, string> = {
+    "zh-TW": "你必須使用繁體中文（台灣用語）產出所有內容。禁止簡體中文和 AI 套話（在當今/隨著/值得注意）。",
+    "en": "You must produce all content in English.",
+    "ja": "すべてのコンテンツを日本語で作成してください。",
+  };
+
+  return `${LANG_RULES[lang]}
+
+You are an automated content pipeline executing a scheduled task. Work autonomously — no user interaction.
+
+## MCP Tools Available
+- **trend-pulse**: get_trending(sources="", geo, count=20), search_trends, get_content_brief, get_scoring_guide, get_review_checklist, get_platform_specs
+- **cf-browser**: browser_markdown(url) for deep-reading sources
+- **studio**: publish_to_threads(text, account_id, score, image_url?, poll_options?, link_comment?, tag?)
+
+## Target Account
+- ID: ${account.id}
+- Name: ${account.name}
+- Handle: ${account.handle}
+- Platform: ${account.platform}
+- Style: ${account.style || "none"}
+- Persona: ${account.persona_prompt || "none"}
+
+## Quality Requirements
+- Min score: ${task.min_score}
+- Conversation Durability >= 60
+- All facts must have verified timestamps (discard >48h old)
+- Read at least 1 primary source via browser_markdown before writing
+- Hook: 10-45 chars with number or contrast
+- CTA: clear question or poll
+
+## Meta Patent-Based Scoring (5 dimensions)
+1. Hook Power (25%) — first line has number or contrast
+2. Engagement Trigger (25%) — CTA anyone can answer
+3. Conversation Durability (20%) — has contrast/both sides
+4. Velocity Potential (15%) — timely + short (50-300 chars)
+5. Format Score (15%) — mobile-scannable, no text walls
+
+## Output Format
+After completing the pipeline, output a JSON block between markers:
+
+---TASK_RESULT---
+{
+  "content": "the final post content",
+  "score": 85,
+  "score_breakdown": {
+    "hook_power": 22,
+    "engagement_trigger": 20,
+    "conversation_durability": 18,
+    "velocity_potential": 13,
+    "format_score": 12
+  },
+  "published": true,
+  "publish_url": "https://...",
+  "topic": "topic summary"
+}
+---END_TASK_RESULT---
+
+## Pipeline
+1. Discover trends: get_trending(sources="", geo="TW", count=20)
+2. Pick best topic for this account's style
+3. Read source: browser_markdown(url) — MANDATORY
+4. Get brief: get_content_brief(topic)
+5. Write content following Meta patent dimensions
+6. Self-score using get_scoring_guide
+7. If score >= ${task.min_score}: ${task.auto_publish ? "publish via studio tool" : "output as draft (do NOT publish)"}
+8. If score < ${task.min_score}: note rejection, do NOT publish
+9. Output the ---TASK_RESULT--- JSON block
+
+Current date: ${new Date().toISOString().split("T")[0]}
+`;
+}
+
+// ---------------------------------------------------------------------------
+// Parse structured output from agent response
+// ---------------------------------------------------------------------------
+
+interface TaskResult {
+  content?: string;
+  score?: number;
+  score_breakdown?: Record<string, number>;
+  published?: boolean;
+  publish_url?: string;
+  topic?: string;
+}
+
+function parseTaskResult(fullOutput: string): TaskResult | null {
+  const match = fullOutput.match(/---TASK_RESULT---\s*([\s\S]*?)\s*---END_TASK_RESULT---/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TaskScheduler — core scheduling engine
+// ---------------------------------------------------------------------------
+
+export class TaskScheduler {
+  private jobs = new Map<string, cron.ScheduledTask>();
+  private runningTasks = new Set<string>(); // overlap guard by task_id
+
+  constructor() {
+    // Mark stale executions from previous server run
+    const result = store.markStaleExecutionsFailed();
+    if (result.changes > 0) {
+      console.log(`[Scheduler] Marked ${result.changes} stale execution(s) as failed`);
+    }
+  }
+
+  /** Load all enabled tasks and register cron jobs */
+  start() {
+    const tasks = store.getEnabledScheduledTasks();
+    for (const task of tasks) {
+      this.registerJob(task);
+    }
+    console.log(`[Scheduler] Started with ${tasks.length} enabled task(s)`);
+  }
+
+  /** Stop all cron jobs */
+  stop() {
+    for (const [id, job] of this.jobs) {
+      job.stop();
+    }
+    this.jobs.clear();
+    console.log("[Scheduler] Stopped all jobs");
+  }
+
+  /** Register or re-register a cron job for a task */
+  registerJob(task: ScheduledTask) {
+    // Remove existing job if any
+    this.unregisterJob(task.id);
+
+    if (!task.enabled) return;
+
+    if (!cron.validate(task.schedule)) {
+      console.error(`[Scheduler] Invalid cron expression for task ${task.id}: ${task.schedule}`);
+      return;
+    }
+
+    const job = cron.schedule(task.schedule, () => {
+      this.executeTask(task.id, "schedule").catch((err) => {
+        console.error(`[Scheduler] Error executing task ${task.id}:`, err);
+      });
+    }, {
+      timezone: task.timezone,
+    });
+
+    this.jobs.set(task.id, job);
+    console.log(`[Scheduler] Registered job for "${task.name}" (${task.schedule} ${task.timezone})`);
+  }
+
+  /** Unregister a cron job */
+  unregisterJob(taskId: string) {
+    const existing = this.jobs.get(taskId);
+    if (existing) {
+      existing.stop();
+      this.jobs.delete(taskId);
+    }
+  }
+
+  /** Execute a task (called by cron tick or manual trigger) */
+  async executeTask(taskId: string, triggeredBy: TaskTrigger, retryCount = 0): Promise<TaskExecution> {
+    const task = store.getScheduledTask(taskId);
+    if (!task) throw new Error(`Task ${taskId} not found`);
+
+    const account = store.getAccount(task.account_id);
+    if (!account) throw new Error(`Account ${task.account_id} not found for task ${taskId}`);
+
+    // Overlap guard
+    if (this.runningTasks.has(taskId)) {
+      throw new Error(`Task ${taskId} is already running — skipping`);
+    }
+
+    this.runningTasks.add(taskId);
+    const startTime = Date.now();
+
+    // Resolve template
+    const prompt = resolveTemplate(task.prompt_template, account, task);
+
+    // Create execution record
+    const execution = store.createExecution({
+      task_id: taskId,
+      account_id: task.account_id,
+      prompt,
+      triggered_by: triggeredBy,
+    });
+
+    console.log(`[Scheduler] Starting execution ${execution.id} for task "${task.name}" (${triggeredBy})`);
+
+    try {
+      const result = await this.runAgentSession(prompt, account, task);
+      const durationMs = Date.now() - startTime;
+
+      const taskResult = parseTaskResult(result.fullOutput);
+      const score = taskResult?.score ?? null;
+      const content = taskResult?.content ?? null;
+      const scoreBreakdown = taskResult?.score_breakdown ? JSON.stringify(taskResult.score_breakdown) : null;
+
+      // Determine status based on score and publish state
+      let status: "completed" | "published" | "rejected";
+      let publishRecordId: string | null = null;
+
+      if (score !== null && score < task.min_score) {
+        status = "rejected";
+        console.log(`[Scheduler] Task "${task.name}" rejected: score ${score} < min ${task.min_score}`);
+      } else if (taskResult?.published) {
+        status = "published";
+        console.log(`[Scheduler] Task "${task.name}" published with score ${score}`);
+      } else {
+        status = "completed";
+        console.log(`[Scheduler] Task "${task.name}" completed with score ${score}`);
+      }
+
+      store.updateExecutionResult(execution.id, {
+        status,
+        content,
+        score,
+        score_breakdown: scoreBreakdown,
+        cost_usd: result.costUsd,
+        duration_ms: durationMs,
+        publish_record_id: publishRecordId,
+      });
+
+      return store.getExecution(execution.id) as TaskExecution;
+    } catch (err) {
+      const durationMs = Date.now() - startTime;
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[Scheduler] Task "${task.name}" failed (attempt ${retryCount + 1}):`, errorMsg);
+
+      // Retry logic
+      if (retryCount < task.max_retries) {
+        console.log(`[Scheduler] Retrying task "${task.name}" in 30s (${retryCount + 1}/${task.max_retries})`);
+        store.updateExecutionResult(execution.id, {
+          status: "failed",
+          error: `${errorMsg} (retrying...)`,
+          duration_ms: durationMs,
+          retry_count: retryCount + 1,
+        });
+        this.runningTasks.delete(taskId);
+        await new Promise((r) => setTimeout(r, 30000));
+        return this.executeTask(taskId, triggeredBy, retryCount + 1);
+      }
+
+      store.updateExecutionResult(execution.id, {
+        status: "failed",
+        error: errorMsg,
+        duration_ms: durationMs,
+        retry_count: retryCount,
+      });
+
+      return store.getExecution(execution.id) as TaskExecution;
+    } finally {
+      this.runningTasks.delete(taskId);
+    }
+  }
+
+  /** Run an ephemeral AgentSession and collect output */
+  private async runAgentSession(
+    prompt: string,
+    account: SocialAccount,
+    task: ScheduledTask
+  ): Promise<{ fullOutput: string; costUsd: number | null }> {
+    const settings = getSettings();
+    const mcpServers = buildMcpServers(settings);
+    const cwd = settings.defaultWorkspace || process.cwd();
+    const studioServer = createStudioMcpServer();
+
+    const allMcpServers: Record<string, any> = { ...mcpServers, studio: studioServer };
+    const allowedTools = ["WebSearch", "WebFetch"];
+    for (const name of Object.keys(allMcpServers)) {
+      allowedTools.push(`mcp__${name}`);
+    }
+
+    const abortController = new AbortController();
+
+    // Timeout
+    const timeoutId = setTimeout(() => {
+      abortController.abort();
+    }, task.timeout_ms);
+
+    const systemPrompt = buildTaskSystemPrompt(account, task);
+
+    try {
+      let fullOutput = "";
+      let costUsd: number | null = null;
+
+      const outputStream = query({
+        prompt: prompt,
+        options: {
+          maxTurns: 50,
+          model: "sonnet",
+          permissionMode: "bypassPermissions",
+          abortController,
+          systemPrompt,
+          cwd,
+          allowedTools,
+          disallowedTools: ["mcp__trend-pulse__publish_to_threads", "mcp__trend-pulse__get_publish_history"],
+          mcpServers: allMcpServers,
+          executable: (process.env.STUDIO_NODE_PATH || process.execPath) as any,
+        },
+      });
+
+      for await (const message of outputStream) {
+        if (message.type === "assistant") {
+          const content = message.message?.content;
+          if (typeof content === "string") {
+            fullOutput += content + "\n";
+          } else if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type === "text" && block.text) {
+                fullOutput += block.text + "\n";
+              }
+            }
+          }
+        } else if (message.type === "result") {
+          costUsd = message.total_cost_usd ?? null;
+        }
+      }
+
+      return { fullOutput, costUsd };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  /** Check if a task is currently running */
+  isTaskRunning(taskId: string): boolean {
+    return this.runningTasks.has(taskId);
+  }
+}

@@ -1,6 +1,35 @@
-import type { WSClient, Language } from "./types.js";
+import type { WSClient, Language, Message } from "./types.js";
 import { AgentSession } from "./ai-client.js";
 import store from "./db.js";
+
+/**
+ * Build a compact conversation recap from previous messages.
+ * Keeps last N user/assistant exchanges, skips verbose tool details.
+ */
+function buildResumeContext(messages: Message[], maxMessages = 30): string | undefined {
+  if (messages.length === 0) return undefined;
+
+  // Filter to user + assistant text messages (skip tool_use/tool_result/result noise)
+  const relevant = messages.filter(
+    (m) => (m.role === "user" || m.role === "assistant") && m.content
+  );
+
+  if (relevant.length === 0) return undefined;
+
+  // Take the last N messages to stay within reasonable token limits
+  const recent = relevant.slice(-maxMessages);
+
+  const lines = recent.map((m) => {
+    const role = m.role === "user" ? "User" : "Assistant";
+    // Truncate very long messages (e.g. full articles)
+    const content = m.content!.length > 800
+      ? m.content!.slice(0, 800) + "... [truncated]"
+      : m.content!;
+    return `**${role}**: ${content}`;
+  });
+
+  return lines.join("\n\n");
+}
 
 export class Session {
   public readonly sessionId: string;
@@ -8,9 +37,10 @@ export class Session {
   private agentSession: AgentSession;
   private isListening = false;
 
-  constructor(sessionId: string, workspacePath?: string, language?: Language) {
+  constructor(sessionId: string, workspacePath?: string, language?: Language, previousMessages?: Message[]) {
     this.sessionId = sessionId;
-    this.agentSession = new AgentSession(workspacePath, language);
+    const resumeContext = previousMessages ? buildResumeContext(previousMessages) : undefined;
+    this.agentSession = new AgentSession(workspacePath, language, resumeContext);
   }
 
   private async startListening() {
@@ -138,6 +168,11 @@ export class Session {
 
   hasSubscribers(): boolean {
     return this.subscribers.size > 0;
+  }
+
+  /** Whether the agent is actively processing (listening for SDK output) */
+  isRunning(): boolean {
+    return this.isListening;
   }
 
   private broadcast(message: any) {
