@@ -55,7 +55,8 @@ Headless Chrome via Cloudflare Browser Rendering. Use instead of WebFetch for JS
 
 ### notebooklm (13 tools)
 
-Deep research + 10 artifact types (podcast, slides, report, quiz, flashcards, mindmap, infographic, datasheet, study_guide).
+Deep research + 9 downloadable artifact types (podcast, slides, report, quiz, flashcards, mindmap, datasheet, study_guide).
+⚠️ `infographic` download is unreliable — use `slides` instead.
 
 **Management:** create_notebook, list_notebooks, delete_notebook
 **Research:** add_source, ask, summarize, list_sources, research(mode="fast"|"thorough")
@@ -70,7 +71,8 @@ Deep research + 10 artifact types (podcast, slides, report, quiz, flashcards, mi
 
 ## Visual Content Generation
 
-Use **NotebookLM** to generate all visual content. It produces professional-quality slides, infographics, and mind maps — far better than HTML/CSS artifacts.
+Use **NotebookLM** to generate all visual content. It produces professional-quality slides and mind maps — far better than HTML/CSS artifacts.
+⚠️ Do NOT use `infographic` (download unreliable). Use `slides` for all visual content.
 
 ### Image Cards & Slides (圖卡 / 簡報)
 
@@ -88,7 +90,7 @@ Use **NotebookLM** to generate all visual content. It produces professional-qual
 |------|--------------|--------|
 | Single image card | `slides` (1 slide) | PDF → export as image |
 | Multi-slide carousel | `slides` (N slides) | PDF → split per page |
-| Data visualization | `infographic` | Structured data visual |
+| Data visualization | `slides` | ~~infographic~~ ⚠️ download unreliable — use slides |
 | Topic overview | `mindmap` | Mind map diagram |
 | Detailed report | `report` | Formatted document |
 | Study material | `flashcards` / `study_guide` | Learning cards |
