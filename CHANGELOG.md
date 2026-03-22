@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1] - 2026-03-22
+
+### Added
+
+- **`upload_image` MCP tool** — upload workspace images to temporary public hosting (catbox.moe litterbox, 24h). Returns public URL for Threads publishing.
+- **Auto image pipeline** — system prompt now instructs full automatic flow: NotebookLM PDF → pdftoppm PNG → upload_image → publish_to_threads with image_url. No manual steps.
+
 ## [1.6.0] - 2026-03-22
 
 ### Added
