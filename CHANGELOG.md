@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.1] - 2026-03-22
+
+### Fixed
+
+- **npm package security** — exclude `threads_api.py` from npm package, sanitize account handles in help text
+
 ## [1.5.0] - 2026-03-22
 
 ### Added
