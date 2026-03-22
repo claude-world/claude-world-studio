@@ -16,37 +16,30 @@ Three clear entry points — no complex menus, just pick and go:
 
 | Card | Action | What happens |
 |------|--------|-------------|
-| **Freestyle** | One click, zero input | Auto: trends → read source → verify timeline → patent score → publish |
-| **Custom Topic** | Type your topic | Deep research → score → publish |
+| **Freestyle** | One click, zero input | Auto: trends → read source → verify timeline → patent score → visual → publish |
+| **Custom Topic** | Type your topic | Deep research → score → visual → publish |
 | **Custom + Media** | Type your topic | Research → NotebookLM slides/video/podcast → publish |
-
-### Smart Input Fill
-
-Click "Custom Topic" and the input auto-fills with a template prompt. A hint guides what to type:
-
-![Custom Topic](demo/03-custom-topic-fill.png)
 
 ### Live Agent Execution
 
-Watch Claude work in real-time — tool calls shown as collapsible blocks with MCP server badges. Loading state keeps the Stop button visible throughout long operations:
-
-![Loading State](demo/05-loading-state.png)
+Watch Claude work in real-time — tool calls shown as collapsible blocks with MCP server badges:
 
 ![Tool Calls](demo/06-tool-calls.png)
 
 - **trend-pulse** (green) — 20 real-time trend sources, zero auth
 - **cf-browser** (blue) — Cloudflare Browser Rendering for JS pages
 - **notebooklm** (purple) — Research + artifact generation (podcast/slides/video)
+- **studio** — Built-in publishing + history tools
 
 ### Rich Markdown Responses
 
-Full markdown rendering with syntax highlighting, clickable source links, cost/duration tracking, and inline file path previews:
+Full markdown rendering with syntax highlighting, clickable file path previews, cost/duration tracking, and inline images:
 
 ![Rich Content](demo/07-history-rich.png)
 
 ### Multi-Language (i18n)
 
-Full support for Traditional Chinese, English, and Japanese — all pipeline cards, chips, UI labels, system prompts, and placeholder text adapt:
+Full support for Traditional Chinese, English, and Japanese — all UI, system prompts, and pipeline cards adapt:
 
 <table>
 <tr>
@@ -59,9 +52,9 @@ Full support for Traditional Chinese, English, and Japanese — all pipeline car
 </tr>
 </table>
 
-### Social Publishing
+### Social Publishing (Native TypeScript)
 
-Built-in publish flow with Meta's patent-based scoring. Every post is checked against 5 ranking dimensions before publishing:
+Built-in Threads/Instagram publishing via native `fetch()` — no Python dependency. Every post is checked against Meta's patent-based 5-dimension scoring:
 
 | Dimension | Patent | What it checks |
 |-----------|--------|---------------|
@@ -71,7 +64,16 @@ Built-in publish flow with Meta's patent-based scoring. Every post is checked ag
 | Velocity Potential | Andromeda | Short enough? Timely? |
 | Format Score | Multi-modal | Mobile-scannable? |
 
-Quality gates: Overall >= 70, Conversation Durability >= 55. Supports `--poll` for native polls, `--link-comment` to avoid URL reach penalty.
+Quality gates: Overall >= 70, Conversation Durability >= 55.
+
+**Supported post types**: text, image, video, carousel (2-20 items), poll, GIF, link preview, text attachment, spoiler (media blur + text), ghost (24hr ephemeral), quote post, reply control, topic tag, alt text, link-comment auto-reply.
+
+### Multi-Account & Persona
+
+- Multiple Threads/Instagram accounts with independent personas
+- Per-account style (e.g., "tech-educator", "futurist")
+- Per-account persona prompt for tone adaptation
+- Matrix publishing: same topic → unique content per account
 
 ### Scheduled Tasks
 
@@ -82,14 +84,61 @@ Cron-based task scheduling with per-account targeting:
 - Quality gate enforcement (min score threshold)
 - Auto-publish or manual review mode
 - Execution history with cost/duration tracking
+- Reduced tool set for unattended safety (no Bash/Read/Write)
+
+### Visual Content Generation
+
+NotebookLM integration for auto-generating visuals:
+
+- **Image cards** — slides PDF as single-page visual cards
+- **Carousel** — multi-page slides split into carousel images
+- **Podcast** — AI-generated audio discussion
+- **Video** — slides + podcast combined via ffmpeg
+- **Mind maps, reports, flashcards, study guides**
+
+All downloads stay within the workspace directory.
+
+### Workspace File Browser
+
+Browse and preview workspace files directly in the UI:
+
+- Directory tree with depth control
+- Text file preview (syntax-highlighted)
+- Binary file preview (images, PDFs, audio, video)
+- Clickable file paths in chat responses
+- Workspace-contained — no access outside project folder
 
 ### Source Verification & Timeline Rules
 
-Content integrity is enforced at the system level:
+Content integrity enforced at the system level:
 
-- **Read original sources** — Never write from titles/metadata alone. At least 1 primary source per topic, 2+ for controversial topics.
-- **Timeline verification** — Every fact gets a verified timestamp. Time words are mapped by age (today = "just now", 1-3 days = "recently", etc.).
-- **No AI filler** — System prompt blocks generic phrases like "in today's world" / "it's worth noting".
+- **Read original sources** — Never write from titles/metadata alone. 1+ primary source per topic, 2+ for controversial.
+- **Timeline verification** — Every fact gets a verified timestamp. Time words mapped by age.
+- **No AI filler** — System prompt blocks generic phrases ("in today's world" / "it's worth noting").
+
+### Session Management
+
+- Multiple concurrent sessions with independent workspaces
+- Session resume on app restart (conversation history preserved)
+- Idle session eviction (30min TTL)
+- Query cancellation via interrupt button or CLI
+
+### Dark Mode
+
+System/light/dark theme with persistent preference across sessions.
+
+### IME Support
+
+Full CJK input method support — Enter during Chinese/Japanese character composition does not trigger send. Shift+Enter for newline.
+
+### Workspace Security
+
+- AI agent operates within session workspace only
+- No access to ~/Downloads, ~/Desktop, ~/Documents, or system paths
+- Credentials stored in local SQLite — never searched from filesystem
+- Publishing via built-in MCP tool only (no external scripts)
+- Session workspace validated at creation (blocks system paths)
+- File API restricted to workspace root (symlink-safe realpath check)
 
 ## Architecture
 
@@ -118,7 +167,8 @@ Content integrity is enforced at the system level:
 | Backend | Express + WebSocket + Claude Agent SDK |
 | AI Model | Claude Sonnet 4.6 / Opus 4.6 |
 | MCP Servers | trend-pulse, cf-browser, notebooklm |
-| Database | SQLite (better-sqlite3) |
+| Publishing | Native TypeScript fetch() → Threads Graph API |
+| Database | SQLite (better-sqlite3, WAL mode) |
 | Desktop | Electron 41 |
 | Markdown | react-markdown + rehype-sanitize |
 
@@ -260,91 +310,17 @@ The app uses 3 MCP servers — **all optional**, the app works with any combinat
 
 ### Quick Setup (uvx — recommended)
 
-If you have `uv` installed ([install uv](https://docs.astral.sh/uv/)), the setup wizard handles everything:
-
 ```bash
 npx @claude-world/studio setup-mcp
 ```
 
 This pre-caches all 3 servers via uvx. No cloning, no path config. Studio auto-detects uvx at runtime.
 
-To update cached servers:
-
-```bash
-npx @claude-world/studio setup-mcp --update
-```
+To update: `npx @claude-world/studio setup-mcp --update`
 
 ### Manual Setup (venv)
 
-For users who prefer local venvs or need custom paths:
-
-#### trend-pulse (Trend Discovery) — Recommended
-
-Real-time trends from 20 sources (Google Trends, HN, Reddit, GitHub, etc). **Zero API keys needed.**
-
-```bash
-git clone https://github.com/claude-world/trend-pulse.git
-cd trend-pulse
-python3 -m venv .venv
-.venv/bin/pip install -e ".[mcp]"
-```
-
-Add to `.env`:
-```
-TREND_PULSE_PYTHON=/absolute/path/to/trend-pulse/.venv/bin/python
-```
-
-#### cf-browser (Web Scraping) — Recommended
-
-Cloudflare Browser Rendering for reading JS-rendered pages. Two modes available:
-
-**Mode 1: Cloudflare API (cf-api)** — Uses your Cloudflare account directly (recommended):
-```bash
-git clone https://github.com/claude-world/cf-browser.git
-cd cf-browser/mcp-server
-python3 -m venv .venv
-.venv/bin/pip install -e ../sdk && .venv/bin/pip install -e .
-```
-
-Add to `.env`:
-```
-CF_BROWSER_PYTHON=/absolute/path/to/cf-browser/mcp-server/.venv/bin/python
-CF_ACCOUNT_ID=your-cloudflare-account-id
-CF_API_TOKEN=your-cloudflare-api-token
-```
-
-**Mode 2: Worker** — Uses a deployed Cloudflare Worker:
-```bash
-# Same install as above, plus deploy the Worker
-cd cf-browser
-bash setup.sh
-```
-
-Add to `.env`:
-```
-CF_BROWSER_PYTHON=/absolute/path/to/cf-browser/mcp-server/.venv/bin/python
-CF_BROWSER_URL=https://your-cf-browser.workers.dev
-CF_BROWSER_API_KEY=your-api-key
-```
-
-See [cf-browser README](https://github.com/claude-world/cf-browser) for full Cloudflare setup.
-
-#### notebooklm (Research + Media) — Optional
-
-Google NotebookLM integration for podcast, slides, video generation. Requires a Google account.
-
-```bash
-git clone https://github.com/claude-world/notebooklm-skill.git
-cd notebooklm-skill
-python3 -m venv .venv
-.venv/bin/pip install notebooklm-py playwright fastmcp python-dotenv httpx
-python3 scripts/auth_helper.py    # One-time Google login
-```
-
-Add to `.env`:
-```
-NOTEBOOKLM_SERVER_PATH=/absolute/path/to/notebooklm-skill/mcp-server/server.py
-```
+See [detailed MCP setup guide](docs/content-pipeline-skill.md#mcp-servers-setup) for per-server installation with local venvs.
 
 ### MCP Auto-Detection
 
@@ -354,91 +330,48 @@ Studio resolves MCP servers in this order:
 2. **Environment variables** — `.env` file or exported vars
 3. **uvx fallback** — if `uvx` is on PATH, uses cached packages automatically
 
-The app auto-detects which MCP servers are configured and enables them. Unconfigured servers are silently skipped.
-
 Use `studio settings detect` (CLI) or **Settings > Scan System** (UI) to check what's available.
 
 ---
 
 ## Production Pipeline: End-to-End
 
-Here's how to connect the full pipeline from installation to automated publishing.
-
 ### Step 1: Install & Configure
 
 ```bash
-# Install Studio
 npm install -g @claude-world/studio
-
-# Set up MCP servers
 npx @claude-world/studio setup-mcp
-
-# Start the server
 studio serve
 ```
 
 ### Step 2: Add Social Accounts
 
-Via UI: **Settings > Social Accounts** — add Threads/Instagram accounts with API tokens.
+Via UI: **Settings > Social Accounts**
 
 Via CLI:
 ```bash
 studio account create \
-  --name "My Brand" \
-  --handle "@mybrand" \
-  --platform threads \
-  --token YOUR_THREADS_ACCESS_TOKEN
+  --name "My Brand" --handle "@mybrand" \
+  --platform threads --token YOUR_TOKEN
 ```
-
-You need a Meta Developer App with Threads/Instagram API access. Tokens expire after 60 days (renewable via OAuth).
 
 ### Step 3: Run the Pipeline
 
-#### Web UI (Interactive)
+**Web UI**: Click a pipeline card (Freestyle / Custom Topic / Custom + Media)
 
-Open `http://localhost:5173` and click one of three pipeline cards:
-- **Freestyle** — fully autonomous: discover → research → score → publish
-- **Custom Topic** — you choose the topic, AI handles the rest
-- **Custom + Media** — topic + NotebookLM artifacts (slides/video/podcast)
-
-#### CLI (Headless)
-
+**CLI (headless)**:
 ```bash
-# One-shot: discover, research, write, and publish
-studio chat --message "Find top 3 trending AI topics, research the best one, \
-  write a Threads post, score it, and publish to account @mybrand" --json
-
-# Or step by step:
-SESSION=$(studio session create --title "Daily Pipeline" --json | jq -r '.id')
-studio chat --session $SESSION --message "Find trending topics in Taiwan" --json > trends.jsonl
-studio chat --session $SESSION --message "Research #1 and write a Threads post" --json > post.jsonl
-studio publish --account acc123 --text "Your content here" --score 85 --json
+studio chat --message "Find trending topics, research the best, write and publish" --json
 ```
 
-#### Scheduled (Cron)
+**Scheduled**: Settings > Scheduled Tasks — cron + per-account targeting + quality gates
 
-Set up recurring content generation via **Settings > Scheduled Tasks** in the UI:
-
-1. Create a prompt template (e.g., "Find trending AI topics and write a post")
-2. Set a cron schedule (e.g., `0 9 * * *` for daily 9 AM)
-3. Target a social account
-4. Set quality threshold (min score)
-5. Choose auto-publish or manual review
-
-### Step 4: Monitor & Iterate
+### Step 4: Monitor
 
 ```bash
-# Check server status
-studio status
-
-# View session history
-studio session list --json
-
-# View publish history
-studio history --limit 20 --json
-
-# Update MCP servers
-npx @claude-world/studio setup-mcp --update
+studio status                     # Server health
+studio session list --json        # Sessions
+studio history --limit 20 --json  # Publish history
 ```
 
 ---
@@ -456,24 +389,35 @@ studio status                   # Check if running
 studio session list
 studio session create --title "Research" --workspace /path
 studio session get <ID>
+studio session rename <ID> --title "New"
 studio session delete <ID>
+studio session messages <ID> --limit 20
 
 # Chat (WebSocket streaming)
-studio chat --message "Find trending topics" --json
+studio chat --message "Find trends" --json
 studio chat --session <ID> --message "Publish the best"
 echo "What's trending?" | studio chat --json
+studio interrupt <ID>
 
 # Accounts
 studio account list
-studio account create --name "Main" --handle "@me" --platform threads
+studio account create --name "Main" --handle "@me" --platform threads --token TOKEN
+studio account update <ID> --token NEW_TOKEN
+studio account delete <ID>
 
 # Settings
 studio settings get
 studio settings detect          # Auto-detect MCP tools
 studio settings apply           # Apply detected values
+studio settings set --language en
 
-# Publishing
+# Publishing (all Threads post types)
 studio publish --account <ID> --text "Hello!" --score 85
+studio publish --account <ID> --text "Vote!" --poll "A|B|C"
+studio publish --account <ID> --text "Look!" --image URL
+studio publish --account <ID> --text "Watch" --video URL
+studio publish --account <ID> --text "Slides" --carousel URL1 URL2 URL3
+studio publish --account <ID> --text "Post" --link-comment URL
 studio history --limit 10
 
 # Files
@@ -483,7 +427,9 @@ studio file read <SESSION_ID> src/index.ts
 
 Global flags: `--json`, `--port N` (env: `STUDIO_PORT`), `--host H` (env: `STUDIO_HOST`)
 
-Additional utility: `setup-mcp` — interactive MCP server setup wizard (`npx @claude-world/studio setup-mcp`)
+MCP setup wizard: `npx @claude-world/studio setup-mcp`
+
+---
 
 ## Security
 
@@ -492,14 +438,17 @@ This is a **local-only development tool**. It runs Claude with full tool access 
 - Binds to `127.0.0.1` only (not exposed to network)
 - WebSocket origin verification (exact port whitelist)
 - CORS restricted to localhost dev ports
-- File API: async realpath + workspace containment check (TOCTOU-safe)
+- Workspace containment: AI agent restricted to session workspace
+- File API: realpath + workspace-only containment (symlink-safe)
 - Path traversal rejected on both client and server
+- Session workspace validated at creation (system paths blocked)
+- Publishing via native fetch — no Python/shell dependency
 - XSS protection via `rehype-sanitize`
 - Session isolation: WS messages filtered by sessionId
 - Idle session eviction (30min TTL)
-- Query cancellation via AbortController on interrupt/eviction
+- Credentials stored in local SQLite only
 
-> **Warning**: Do NOT expose this server to the internet. The AI agent has `Bash`, `Read`, `Write`, and `Edit` access to your filesystem.
+> **Warning**: Do NOT expose this server to the internet. The AI agent has `Bash`, `Read`, `Write`, and `Edit` access within the workspace.
 
 ## Contributing
 

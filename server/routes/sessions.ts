@@ -1,6 +1,11 @@
 import { Router } from "express";
+import { existsSync } from "fs";
+import { isAbsolute } from "path";
 import store from "../db.js";
 import { removeSession } from "../server.js";
+
+/** Paths that must never be used as a workspace */
+const BLOCKED_ROOTS = ["/etc", "/usr", "/bin", "/sbin", "/var", "/System", "/Library", "/private"];
 
 const router = Router();
 
@@ -13,6 +18,20 @@ router.get("/", (_req, res) => {
 // Create new session
 router.post("/", (req, res) => {
   const { title, workspacePath } = req.body || {};
+
+  // Validate workspacePath if provided
+  if (workspacePath) {
+    if (typeof workspacePath !== "string" || !isAbsolute(workspacePath)) {
+      return res.status(400).json({ error: "workspacePath must be an absolute path" });
+    }
+    if (!existsSync(workspacePath)) {
+      return res.status(400).json({ error: "workspacePath does not exist" });
+    }
+    if (BLOCKED_ROOTS.some((root) => workspacePath === root || workspacePath.startsWith(root + "/"))) {
+      return res.status(400).json({ error: "workspacePath cannot be a system directory" });
+    }
+  }
+
   const session = store.createSession(title, workspacePath);
   res.status(201).json(session);
 });

@@ -1,14 +1,10 @@
-import { execFile } from "child_process";
-import path from "path";
-import { fileURLToPath } from "url";
 import type { PostInsights } from "../types.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const SCRIPTS_DIR = path.join(__dirname, "../../scripts");
+const API_BASE = "https://graph.threads.net/v1.0";
 const MAX_TEXT_LENGTH = 500;
 const MIN_PUBLISH_SCORE = 70;
+const CONTAINER_POLL_INTERVAL = 5000;
+const CONTAINER_POLL_TIMEOUT = 120000;
 
 export interface PublishOptions {
   text: string;
@@ -41,6 +37,72 @@ export interface PublishResult {
   permalink: string;
 }
 
+// ── API Helpers ──
+
+async function threadsRequest(
+  method: "GET" | "POST",
+  endpoint: string,
+  token: string,
+  params?: Record<string, string>,
+): Promise<any> {
+  const url = new URL(`${API_BASE}${endpoint}`);
+  url.searchParams.set("access_token", token);
+
+  if (method === "GET") {
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        url.searchParams.set(k, v);
+      }
+    }
+    const res = await fetch(url.toString(), { signal: AbortSignal.timeout(30000) });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Threads API error (${res.status}): ${body}`);
+    }
+    return res.json();
+  }
+
+  // POST: params go in form-urlencoded body
+  const body = new URLSearchParams(params || {}).toString();
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`Threads API error (${res.status}): ${errBody}`);
+  }
+  return res.json();
+}
+
+async function getUserId(token: string): Promise<string> {
+  const data = await threadsRequest("GET", "/me", token, { fields: "id" });
+  if (!data.id) throw new Error("Failed to get user ID from Threads API");
+  return data.id;
+}
+
+async function waitForContainer(containerId: string, token: string): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < CONTAINER_POLL_TIMEOUT) {
+    const status = await threadsRequest("GET", `/${containerId}`, token, {
+      fields: "status,error_message",
+    });
+    if (status.status === "FINISHED") return;
+    if (status.status === "ERROR") {
+      throw new Error(`Container error: ${status.error_message || "unknown"}`);
+    }
+    await new Promise((r) => setTimeout(r, CONTAINER_POLL_INTERVAL));
+  }
+  // Timeout — attempt publish anyway (Meta sometimes doesn't return FINISHED)
+  console.warn(`[Publish] Container poll timed out after ${CONTAINER_POLL_TIMEOUT / 1000}s, attempting publish`);
+}
+
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// ── Main Publish Function ──
+
 export async function publishToThreads(opts: PublishOptions): Promise<PublishResult> {
   if (opts.score !== undefined && opts.score < MIN_PUBLISH_SCORE) {
     throw new Error(`Score ${opts.score} below minimum ${MIN_PUBLISH_SCORE}. Improve content before publishing.`);
@@ -52,101 +114,131 @@ export async function publishToThreads(opts: PublishOptions): Promise<PublishRes
     throw new Error("No token provided. Configure token in Settings for this account.");
   }
 
-  return new Promise((resolve, reject) => {
-    const scriptPath = path.join(SCRIPTS_DIR, "threads_api.py");
-    const args = [scriptPath, "publish", "--token", opts.token, "--text", opts.text];
+  const userId = await getUserId(opts.token);
+  const params: Record<string, string> = {};
 
-    // Media
-    if (opts.imageUrl) {
-      args.push("--image", opts.imageUrl);
-    }
-    if (opts.videoUrl) {
-      args.push("--video", opts.videoUrl);
-    }
-    if (opts.carouselUrls && opts.carouselUrls.length >= 2) {
-      args.push("--carousel", ...opts.carouselUrls);
-    }
+  // ── Determine media type ──
 
-    // Attachments (TEXT only)
+  if (opts.carouselUrls && opts.carouselUrls.length >= 2) {
+    // Carousel: create child containers first
+    const childIds: string[] = [];
+    for (const url of opts.carouselUrls.slice(0, 20)) {
+      const isVideo = /\.(mp4|mov)$/i.test(url);
+      const childParams: Record<string, string> = {
+        media_type: isVideo ? "VIDEO" : "IMAGE",
+        [isVideo ? "video_url" : "image_url"]: url,
+        is_carousel_item: "true",
+      };
+      const child = await threadsRequest("POST", `/${userId}/threads`, opts.token, childParams);
+      childIds.push(child.id);
+      if (isVideo) {
+        await waitForContainer(child.id, opts.token);
+      } else {
+        await delay(2000);
+      }
+    }
+    params.media_type = "CAROUSEL";
+    params.children = childIds.join(",");
+    if (opts.text) params.text = opts.text;
+  } else if (opts.videoUrl) {
+    params.media_type = "VIDEO";
+    params.video_url = opts.videoUrl;
+    if (opts.text) params.text = opts.text;
+  } else if (opts.imageUrl) {
+    params.media_type = "IMAGE";
+    params.image_url = opts.imageUrl;
+    if (opts.text) params.text = opts.text;
+  } else {
+    params.media_type = "TEXT";
+    if (opts.text) params.text = opts.text;
+  }
+
+  // ── Attachments (TEXT type only, no media) ──
+  if (!opts.imageUrl && !opts.videoUrl && !(opts.carouselUrls && opts.carouselUrls.length >= 2)) {
     if (opts.pollOptions) {
-      args.push("--poll", opts.pollOptions);
+      const options = opts.pollOptions.split("|").map((s) => s.trim()).slice(0, 4);
+      const poll: Record<string, string> = {};
+      const keys = ["option_a", "option_b", "option_c", "option_d"];
+      options.forEach((opt, i) => { poll[keys[i]] = opt.slice(0, 25); });
+      params.poll_attachment = JSON.stringify(poll);
     }
     if (opts.gifId) {
-      args.push("--gif-id", opts.gifId);
+      params.gif_attachment = JSON.stringify({ gif_id: opts.gifId, provider: "GIPHY" });
     }
     if (opts.linkAttachment) {
-      args.push("--link-attachment", opts.linkAttachment);
+      params.link_attachment = opts.linkAttachment;
     }
     if (opts.textAttachment) {
-      args.push("--text-attachment", opts.textAttachment);
+      params.text_attachment = JSON.stringify({ text: opts.textAttachment.slice(0, 10000) });
     }
-
-    // Spoiler
-    if (opts.spoilerMedia) {
-      args.push("--spoiler-media");
-    }
-    if (opts.spoilerText) {
-      for (const range of opts.spoilerText) {
-        args.push("--spoiler-text", range);
-      }
-    }
-
-    // Special
     if (opts.ghost) {
-      args.push("--ghost");
+      params.is_ghost_post = "true";
     }
-    if (opts.quotePostId) {
-      args.push("--quote-post-id", opts.quotePostId);
-    }
+  }
 
-    // Content controls
-    if (opts.replyControl) {
-      args.push("--reply-control", opts.replyControl);
-    }
-    if (opts.topicTag) {
-      args.push("--topic-tag", opts.topicTag);
-    }
-    if (opts.altText) {
-      args.push("--alt-text", opts.altText);
-    }
-    if (opts.linkComment) {
-      args.push("--link-comment", opts.linkComment);
-    }
+  // ── Content controls ──
+  if (opts.quotePostId) params.quote_post_id = opts.quotePostId;
+  if (opts.replyControl) params.reply_control = opts.replyControl;
+  if (opts.topicTag) params.topic_tag = opts.topicTag;
+  if (opts.altText) params.alt_text = opts.altText;
+  if (opts.spoilerMedia) params.is_spoiler_media = "true";
+  if (opts.spoilerText) {
+    const entities = opts.spoilerText.map((spec) => {
+      const [offset, length] = spec.split(":").map(Number);
+      return { entity_type: "SPOILER", offset, length };
+    });
+    params.text_entities = JSON.stringify(entities);
+  }
 
-    // Video/carousel need more processing time
-    const timeout = opts.videoUrl || opts.carouselUrls ? 180000 : 30000;
+  // ── Step 1: Create container ──
+  const container = await threadsRequest("POST", `/${userId}/threads`, opts.token, params);
+  const containerId = container.id;
+  if (!containerId) throw new Error("Failed to create media container");
 
-    execFile(
-      "python3",
-      args,
-      { timeout },
-      (error, stdout, stderr) => {
-        if (error) {
-          reject(new Error(stderr || error.message));
-          return;
-        }
+  // ── Step 2: Wait for processing ──
+  if (opts.videoUrl || (opts.carouselUrls && opts.carouselUrls.length >= 2)) {
+    await waitForContainer(containerId, opts.token);
+  } else {
+    await delay(3000);
+  }
 
-        try {
-          const result = JSON.parse(stdout.trim());
-          resolve(result);
-        } catch {
-          resolve({ id: stdout.trim(), permalink: "" });
-        }
-      }
-    );
+  // ── Step 3: Publish ──
+  const result = await threadsRequest("POST", `/${userId}/threads_publish`, opts.token, {
+    creation_id: containerId,
   });
+  const postId = result.id;
+  if (!postId) throw new Error("Threads API returned no post ID after publish");
+
+  // ── Step 4: Auto-reply with link (if provided) ──
+  if (opts.linkComment && postId) {
+    await delay(3000);
+    try {
+      const replyContainer = await threadsRequest("POST", `/${userId}/threads`, opts.token, {
+        media_type: "TEXT",
+        text: opts.linkComment,
+        reply_to_id: postId,
+      });
+      await delay(3000);
+      await threadsRequest("POST", `/${userId}/threads_publish`, opts.token, {
+        creation_id: replyContainer.id,
+      });
+    } catch (e) {
+      console.warn(`[Publish] Link reply failed: ${(e as Error).message}`);
+    }
+  }
+
+  return { id: postId, permalink: "" };
 }
 
-/**
- * Fetch insights (views, likes, replies, reposts, quotes) for a published Threads post.
- * Uses the Threads Graph API: GET /{media-id}/threads_insights
- */
+// ── Insights ──
+
 export async function fetchThreadsInsights(postId: string, token: string): Promise<PostInsights> {
   const metrics = "views,likes,replies,reposts,quotes";
-  const url = `https://graph.threads.net/v1.0/${encodeURIComponent(postId)}/threads_insights?metric=${metrics}`;
+  const url = `${API_BASE}/${encodeURIComponent(postId)}/threads_insights?metric=${metrics}`;
 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) {
     const body = await res.text();
@@ -156,7 +248,6 @@ export async function fetchThreadsInsights(postId: string, token: string): Promi
   const json = await res.json();
   const data: Record<string, number> = {};
   for (const entry of json.data || []) {
-    // Threads API returns total_value for lifetime metrics, values array for time-series
     data[entry.name] = entry.total_value?.value ?? entry.values?.[0]?.value ?? 0;
   }
 

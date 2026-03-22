@@ -134,7 +134,7 @@ Use **NotebookLM** to generate all visual content. It produces professional-qual
 ```
 1. create_notebook(title="Post Visual", text_sources=["<post content + key data points>"])
 2. generate_artifact(name_or_id, "slides", lang="zh-TW")   → PDF slides (best for cards)
-3. download_artifact(name_or_id, "slides", "~/Downloads/card.pdf")
+3. download_artifact(name_or_id, "slides", "downloads/card.pdf")
 ```
 
 **Choose artifact type by use case:**

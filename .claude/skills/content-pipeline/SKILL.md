@@ -81,7 +81,7 @@ Use **NotebookLM** to generate all visual content. It produces professional-qual
 ```
 1. create_notebook(title="Post Visual", text_sources=["<post content + key data points>"])
 2. generate_artifact(name_or_id, "slides", lang="zh-TW")   → PDF slides (best for cards)
-3. download_artifact(name_or_id, "slides", "~/Downloads/card.pdf")
+3. download_artifact(name_or_id, "slides", "downloads/card.pdf")
 ```
 
 **Choose artifact type by use case:**
@@ -121,6 +121,9 @@ Combine slides + podcast audio into MP4:
 - **Add URLs as sources**: `add_source(name_or_id, url="...")` for reference material — NotebookLM will incorporate key data into visuals
 
 ## Mandatory Rules
+
+### 0. Workspace Containment
+All files MUST be saved within the session workspace directory. Use relative paths like `downloads/card.pdf`. NEVER use ~/Downloads, ~/Desktop, or any absolute path outside the workspace.
 
 ### 1. Read Original Sources
 NEVER write content based on titles/metadata alone.

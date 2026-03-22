@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.6.0] - 2026-03-22
+
+### Added
+
+- **Native TypeScript publishing** — complete rewrite of Threads Graph API client from Python `execFile` to native `fetch()`. Zero Python dependency. Supports all post types: text, image, video, carousel, poll, GIF, spoiler, ghost, quote, link-comment, reply-control, topic-tag, alt-text
+- **Workspace containment** — AI agent restricted to session workspace directory. No access to ~/Downloads, ~/Desktop, ~/Documents, or system paths
+- **Session workspace validation** — workspace path validated at creation: must exist, must be absolute, blocks system directories (/etc, /usr, /bin, /System, etc.)
+- **Publish timeout** — 60s timeout on MCP publish tool with proper timer cleanup (no leaks)
+- **IME support** — Chinese/Japanese input method composition no longer triggers message send on Enter
+- **Project CLAUDE.md** — architectural rules: no Python deps, workspace containment, credentials from DB, MCP-first publishing
+
+### Fixed
+
+- **Publishing hangs** — replaced Python subprocess with native fetch; added AbortSignal.timeout on all API calls
+- **Carousel video children** — video items in carousel now wait for container processing before publish
+- **Post ID validation** — throw error if Threads API returns no post ID after publish
+- **Insights timeout** — `fetchThreadsInsights` now has 15s timeout (was unbounded)
+- **Quick-chip prompts** — removed all ~/Downloads references from 9 prompt strings (3 languages)
+- **System prompt contradictions** — removed "full absolute file path" instruction, replaced with workspace-relative path examples
+- **Files API** — removed ~/Downloads, ~/Documents, ~/Desktop, ~/Pictures from path whitelist; workspace-only access
+- **Dead code** — removed unused `home` variable and stale comments in files.ts
+- **Duplicate instruction** — removed duplicate `pdftoppm` step in system prompt
+- **maxTurns** — reduced from 200 to 50 to prevent runaway loops
+
+### Security
+
+- All credentials pre-loaded from SQLite DB; AI instructed not to search filesystem for tokens
+- Publishing exclusively through built-in MCP tool; no external script execution
+- File API restricted to workspace root with symlink-safe realpath check
+- npm package excludes `threads_api.py` and account handles
+
 ## [1.5.1] - 2026-03-22
 
 ### Fixed

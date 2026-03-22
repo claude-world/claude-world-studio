@@ -1,6 +1,6 @@
 {
   "name": "@claude-world/studio",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "type": "module",
   "description": "Claude World Studio - Trend Discovery to Content Publishing Pipeline",
   "main": "electron/main.cjs",

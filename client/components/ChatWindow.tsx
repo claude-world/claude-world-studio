@@ -100,14 +100,14 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       label: "自動發文 (Freestyle)",
       description: "一鍵完成：趨勢 → 讀原文 → 驗時間 → 創作 → 專利審查 → 圖卡 → 發文",
       mode: "send",
-      prompt: "執行完整 7 步驟內容產線：\n\n**Step 1 DISCOVER** — get_trending(sources=\"\", geo=\"TW\", count=20) 查全部 20 來源，選最有潛力的 1 個話題\n\n**Step 2 READ SOURCE（必做）** — browser_markdown 讀原文（至少 2-3 個一手來源），不可只看標題。爭議性讀正反各一\n\n**Step 3 VERIFY TIMELINE（必做）** — 驗證每個事實時間戳，套用時間詞對照表，過濾 48h 以上舊資料\n\n**Step 4 CREATE** —\n4a. get_content_brief(topic) 取得寫作策略\n4b. 撰寫高互動 Threads 貼文（繁中，500 字內）\n4c. 專利檢查 5 維度：Hook 數字/反差(EdgeRank)、CTA 人人能答(Dear Algo)、正反轉折(72hr)、短且即時(Andromeda)、手機可掃(Multi-modal)\n4d. 發文類型決策：有圖→image、多圖→carousel、選擇題→poll、有連結→link_comment\n4e. 【圖卡生成（必做）】NotebookLM 可用時自動：create_notebook → generate_artifact(\"slides\", lang=\"zh-TW\") → download_artifact 到 ~/Downloads/\n\n**Step 5 REVIEW** — get_review_checklist + get_scoring_guide 自評。Overall ≥ 70、Conversation Durability ≥ 55。移除 AI 腔（在當今/隨著/值得注意）。不過就重寫\n\n**Step 6 PUBLISH** — 問我是否發布。根據 4d 決策選對參數（poll_options / link_comment / tag）\n\n**Step 7 REPORT** — 輸出：主題、來源URL、專利評分 5 維度、時間詞驗證、圖卡路徑\n\n開始！",
+      prompt: "執行完整 7 步驟內容產線：\n\n**Step 1 DISCOVER** — get_trending(sources=\"\", geo=\"TW\", count=20) 查全部 20 來源，選最有潛力的 1 個話題\n\n**Step 2 READ SOURCE（必做）** — browser_markdown 讀原文（至少 2-3 個一手來源），不可只看標題。爭議性讀正反各一\n\n**Step 3 VERIFY TIMELINE（必做）** — 驗證每個事實時間戳，套用時間詞對照表，過濾 48h 以上舊資料\n\n**Step 4 CREATE** —\n4a. get_content_brief(topic) 取得寫作策略\n4b. 撰寫高互動 Threads 貼文（繁中，500 字內）\n4c. 專利檢查 5 維度：Hook 數字/反差(EdgeRank)、CTA 人人能答(Dear Algo)、正反轉折(72hr)、短且即時(Andromeda)、手機可掃(Multi-modal)\n4d. 發文類型決策：有圖→image、多圖→carousel、選擇題→poll、有連結→link_comment\n4e. 【圖卡生成（必做）】NotebookLM 可用時自動：create_notebook → generate_artifact(\"slides\", lang=\"zh-TW\") → download_artifact 到 downloads/\n\n**Step 5 REVIEW** — get_review_checklist + get_scoring_guide 自評。Overall ≥ 70、Conversation Durability ≥ 55。移除 AI 腔（在當今/隨著/值得注意）。不過就重寫\n\n**Step 6 PUBLISH** — 問我是否發布。根據 4d 決策選對參數（poll_options / link_comment / tag）\n\n**Step 7 REPORT** — 輸出：主題、來源URL、專利評分 5 維度、時間詞驗證、圖卡路徑\n\n開始！",
     },
     {
       icon: "🎯",
       label: "指定主題發文",
       description: "主題 → 讀原文 → 驗時間 → 創作 → 專利審查 → 圖卡 → 發文",
       mode: "fill",
-      prompt: "針對以下主題執行完整 7 步驟產線（跳過 Step 1 趨勢探索）：\nStep 2 讀原文（browser_markdown，至少 2 個一手來源）→ Step 3 驗時間 → Step 4 創作（get_content_brief → 撰寫 → 5 維專利檢查 → 發文類型決策 → NotebookLM 圖卡：create_notebook + generate_artifact(\"slides\") + download 到 ~/Downloads/）→ Step 5 品質門檻（get_scoring_guide ≥70 + get_review_checklist）→ Step 6 問我發布 → Step 7 報告\n\n主題：",
+      prompt: "針對以下主題執行完整 7 步驟產線（跳過 Step 1 趨勢探索）：\nStep 2 讀原文（browser_markdown，至少 2 個一手來源）→ Step 3 驗時間 → Step 4 創作（get_content_brief → 撰寫 → 5 維專利檢查 → 發文類型決策 → NotebookLM 圖卡：create_notebook + generate_artifact(\"slides\") + download 到 downloads/）→ Step 5 品質門檻（get_scoring_guide ≥70 + get_review_checklist）→ Step 6 問我發布 → Step 7 報告\n\n主題：",
       hint: "輸入主題，例如：Claude Code 新功能、AI Agent 趨勢...",
     },
     {
@@ -115,7 +115,7 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       label: "指定主題 + 多媒體",
       description: "主題 → 研究 → 專利審查 → 圖卡 + 簡報 + Podcast → 發文",
       mode: "fill",
-      prompt: "針對以下主題執行完整 7 步驟產線 + 多媒體生成（跳過 Step 1）：\nStep 2 讀原文 → Step 3 驗時間 → Step 4 創作（含 5 維專利檢查 + 發文類型決策）→ Step 4e 多媒體生成：NotebookLM 自動生成 (1) slides 圖卡 (2) slides 多頁簡報 (3) podcast 音頻，全部 download 到 ~/Downloads/ → Step 5 品質門檻 → Step 6 問我發布 → Step 7 報告（含所有檔案路徑）\n\n主題：",
+      prompt: "針對以下主題執行完整 7 步驟產線 + 多媒體生成（跳過 Step 1）：\nStep 2 讀原文 → Step 3 驗時間 → Step 4 創作（含 5 維專利檢查 + 發文類型決策）→ Step 4e 多媒體生成：NotebookLM 自動生成 (1) slides 圖卡 (2) slides 多頁簡報 (3) podcast 音頻，全部 download 到 downloads/ → Step 5 品質門檻 → Step 6 問我發布 → Step 7 報告（含所有檔案路徑）\n\n主題：",
       hint: "輸入主題，例如：AI 程式碼助手比較...",
     },
   ],
@@ -125,14 +125,14 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       label: "Auto Post (Freestyle)",
       description: "One click: Trends → Sources → Timeline → Create → Patent Review → Visual → Publish",
       mode: "send",
-      prompt: "Run the full 7-step content pipeline:\n\n**Step 1 DISCOVER** — get_trending(sources=\"\", geo=\"US\", count=20) all 20 sources, pick the most promising topic\n\n**Step 2 READ SOURCE (MANDATORY)** — browser_markdown for 2-3 original sources, never write from titles alone\n\n**Step 3 VERIFY TIMELINE (MANDATORY)** — verify every fact's timestamp, apply time word rules, discard >48h\n\n**Step 4 CREATE** —\n4a. get_content_brief(topic)\n4b. Write high-engagement Threads post (<500 chars)\n4c. Patent check 5 dimensions: Hook number/contrast(EdgeRank), CTA anyone can answer(Dear Algo), both sides(72hr), short+timely(Andromeda), mobile-scannable(Multi-modal)\n4d. Post type decision: image/carousel/poll/link_comment\n4e. [Image MANDATORY] If NotebookLM available: create_notebook → generate_artifact(\"slides\", lang=\"en\") → download_artifact to ~/Downloads/\n\n**Step 5 REVIEW** — get_review_checklist + get_scoring_guide. Overall ≥70, Conversation Durability ≥55. Remove AI filler. Rewrite if fails\n\n**Step 6 PUBLISH** — Ask me to publish. Use correct params per 4d (poll_options / link_comment / tag)\n\n**Step 7 REPORT** — Topic, source URLs, 5-dimension patent scores, timeline verification, image path\n\nGo!",
+      prompt: "Run the full 7-step content pipeline:\n\n**Step 1 DISCOVER** — get_trending(sources=\"\", geo=\"US\", count=20) all 20 sources, pick the most promising topic\n\n**Step 2 READ SOURCE (MANDATORY)** — browser_markdown for 2-3 original sources, never write from titles alone\n\n**Step 3 VERIFY TIMELINE (MANDATORY)** — verify every fact's timestamp, apply time word rules, discard >48h\n\n**Step 4 CREATE** —\n4a. get_content_brief(topic)\n4b. Write high-engagement Threads post (<500 chars)\n4c. Patent check 5 dimensions: Hook number/contrast(EdgeRank), CTA anyone can answer(Dear Algo), both sides(72hr), short+timely(Andromeda), mobile-scannable(Multi-modal)\n4d. Post type decision: image/carousel/poll/link_comment\n4e. [Image MANDATORY] If NotebookLM available: create_notebook → generate_artifact(\"slides\", lang=\"en\") → download_artifact to downloads/\n\n**Step 5 REVIEW** — get_review_checklist + get_scoring_guide. Overall ≥70, Conversation Durability ≥55. Remove AI filler. Rewrite if fails\n\n**Step 6 PUBLISH** — Ask me to publish. Use correct params per 4d (poll_options / link_comment / tag)\n\n**Step 7 REPORT** — Topic, source URLs, 5-dimension patent scores, timeline verification, image path\n\nGo!",
     },
     {
       icon: "🎯",
       label: "Custom Topic Post",
       description: "Topic → Sources → Timeline → Create → Patent Review → Visual → Publish",
       mode: "fill",
-      prompt: "Run the full 7-step pipeline for this topic (skip Step 1 trend discovery):\nStep 2 read sources (browser_markdown, 2+ primary) → Step 3 verify timeline → Step 4 create (get_content_brief → write → 5-dimension patent check → post type decision → NotebookLM slides: create_notebook + generate_artifact(\"slides\") + download to ~/Downloads/) → Step 5 quality gate (get_scoring_guide ≥70 + get_review_checklist) → Step 6 ask to publish → Step 7 report\n\nTopic: ",
+      prompt: "Run the full 7-step pipeline for this topic (skip Step 1 trend discovery):\nStep 2 read sources (browser_markdown, 2+ primary) → Step 3 verify timeline → Step 4 create (get_content_brief → write → 5-dimension patent check → post type decision → NotebookLM slides: create_notebook + generate_artifact(\"slides\") + download to downloads/) → Step 5 quality gate (get_scoring_guide ≥70 + get_review_checklist) → Step 6 ask to publish → Step 7 report\n\nTopic: ",
       hint: "Enter a topic, e.g. Claude Code new features, AI Agent trends...",
     },
     {
@@ -140,7 +140,7 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       label: "Custom Topic + Media",
       description: "Topic → Research → Patent Review → Infographic + Slides + Podcast → Publish",
       mode: "fill",
-      prompt: "Run the full 7-step pipeline + multimedia for this topic (skip Step 1):\nStep 2 read sources → Step 3 verify timeline → Step 4 create (5-dimension patent check + post type decision) → Step 4e multimedia: NotebookLM auto-generate (1) slides card (2) slides deck (3) podcast, download all to ~/Downloads/ → Step 5 quality gate → Step 6 ask to publish → Step 7 report (include all file paths)\n\nTopic: ",
+      prompt: "Run the full 7-step pipeline + multimedia for this topic (skip Step 1):\nStep 2 read sources → Step 3 verify timeline → Step 4 create (5-dimension patent check + post type decision) → Step 4e multimedia: NotebookLM auto-generate (1) slides card (2) slides deck (3) podcast, download all to downloads/ → Step 5 quality gate → Step 6 ask to publish → Step 7 report (include all file paths)\n\nTopic: ",
       hint: "Enter a topic, e.g. AI coding assistants comparison...",
     },
   ],
@@ -150,14 +150,14 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       label: "自動投稿 (Freestyle)",
       description: "ワンクリック：トレンド → 原文 → 検証 → 作成 → 特許審査 → 図解 → 投稿",
       mode: "send",
-      prompt: "フル7ステップパイプライン実行：\n\n**Step 1 DISCOVER** — get_trending(sources=\"\", geo=\"JP\", count=20) 全20ソース、最有望トピック選択\n\n**Step 2 READ SOURCE（必須）** — browser_markdown で原文2-3件読む（タイトルだけ不可）\n\n**Step 3 VERIFY TIMELINE（必須）** — 全事実のタイムスタンプ検証、時間表現ルール適用、48h超は除外\n\n**Step 4 CREATE** —\n4a. get_content_brief(topic)\n4b. 高エンゲージメントThreads投稿作成（500文字以内）\n4c. 特許チェック5次元：Hook数字/対比(EdgeRank)、CTA誰でも回答可(Dear Algo)、両面/転換(72hr)、短く即時(Andromeda)、モバイル可読(Multi-modal)\n4d. 投稿タイプ決定：image/carousel/poll/link_comment\n4e. 【画像必須】NotebookLM利用可能時：create_notebook → generate_artifact(\"slides\", lang=\"ja\") → download ~/Downloads/\n\n**Step 5 REVIEW** — get_review_checklist + get_scoring_guide。Overall≥70、会話持続性≥55。AI表現除去。不合格→再作成\n\n**Step 6 PUBLISH** — 公開確認。4dの決定に基づきパラメータ選択\n\n**Step 7 REPORT** — トピック、ソースURL、5次元特許スコア、タイムライン検証、画像パス\n\n開始！",
+      prompt: "フル7ステップパイプライン実行：\n\n**Step 1 DISCOVER** — get_trending(sources=\"\", geo=\"JP\", count=20) 全20ソース、最有望トピック選択\n\n**Step 2 READ SOURCE（必須）** — browser_markdown で原文2-3件読む（タイトルだけ不可）\n\n**Step 3 VERIFY TIMELINE（必須）** — 全事実のタイムスタンプ検証、時間表現ルール適用、48h超は除外\n\n**Step 4 CREATE** —\n4a. get_content_brief(topic)\n4b. 高エンゲージメントThreads投稿作成（500文字以内）\n4c. 特許チェック5次元：Hook数字/対比(EdgeRank)、CTA誰でも回答可(Dear Algo)、両面/転換(72hr)、短く即時(Andromeda)、モバイル可読(Multi-modal)\n4d. 投稿タイプ決定：image/carousel/poll/link_comment\n4e. 【画像必須】NotebookLM利用可能時：create_notebook → generate_artifact(\"slides\", lang=\"ja\") → download downloads/\n\n**Step 5 REVIEW** — get_review_checklist + get_scoring_guide。Overall≥70、会話持続性≥55。AI表現除去。不合格→再作成\n\n**Step 6 PUBLISH** — 公開確認。4dの決定に基づきパラメータ選択\n\n**Step 7 REPORT** — トピック、ソースURL、5次元特許スコア、タイムライン検証、画像パス\n\n開始！",
     },
     {
       icon: "🎯",
       label: "トピック指定投稿",
       description: "トピック → 原文 → 検証 → 作成 → 特許審査 → 図解 → 投稿",
       mode: "fill",
-      prompt: "このトピックで7ステップパイプライン実行（Step 1スキップ）：\nStep 2 原文読解（browser_markdown、2件以上）→ Step 3 タイムライン検証 → Step 4 作成（get_content_brief → 執筆 → 5次元特許チェック → 投稿タイプ決定 → NotebookLM図解：create_notebook + generate_artifact(\"slides\") + download ~/Downloads/）→ Step 5 品質ゲート（get_scoring_guide≥70 + get_review_checklist）→ Step 6 公開確認 → Step 7 レポート\n\nトピック：",
+      prompt: "このトピックで7ステップパイプライン実行（Step 1スキップ）：\nStep 2 原文読解（browser_markdown、2件以上）→ Step 3 タイムライン検証 → Step 4 作成（get_content_brief → 執筆 → 5次元特許チェック → 投稿タイプ決定 → NotebookLM図解：create_notebook + generate_artifact(\"slides\") + download downloads/）→ Step 5 品質ゲート（get_scoring_guide≥70 + get_review_checklist）→ Step 6 公開確認 → Step 7 レポート\n\nトピック：",
       hint: "トピックを入力、例：Claude Codeの新機能、AIエージェントのトレンド...",
     },
     {
@@ -165,7 +165,7 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       label: "トピック + マルチメディア",
       description: "トピック → 調査 → 特許審査 → 図解 + スライド + Podcast → 投稿",
       mode: "fill",
-      prompt: "このトピックで7ステップ + マルチメディアパイプライン実行（Step 1スキップ）：\nStep 2 原文読解 → Step 3 検証 → Step 4 作成（5次元特許チェック + 投稿タイプ決定）→ Step 4e マルチメディア：NotebookLM自動生成 (1) slides図解 (2) slides複数ページ (3) podcast音声、全て ~/Downloads/ → Step 5 品質ゲート → Step 6 公開確認 → Step 7 レポート（全ファイルパス含む）\n\nトピック：",
+      prompt: "このトピックで7ステップ + マルチメディアパイプライン実行（Step 1スキップ）：\nStep 2 原文読解 → Step 3 検証 → Step 4 作成（5次元特許チェック + 投稿タイプ決定）→ Step 4e マルチメディア：NotebookLM自動生成 (1) slides図解 (2) slides複数ページ (3) podcast音声、全て downloads/ → Step 5 品質ゲート → Step 6 公開確認 → Step 7 レポート（全ファイルパス含む）\n\nトピック：",
       hint: "トピックを入力、例：AIコーディングアシスタント比較...",
     },
   ],
@@ -356,7 +356,7 @@ function InlineImage({
 const PREVIEW_EXT_RE = /\.(png|jpg|jpeg|gif|webp|svg|pdf|mp3|wav|m4a|mp4|webm|md|txt|json|html|css|py|ts|tsx|js|jsx)$/i;
 function isPreviewablePath(text: string, _workspacePath?: string): boolean {
   if (!text.startsWith("/") || !PREVIEW_EXT_RE.test(text) || text.includes(" ")) return false;
-  // Allow any absolute path with a previewable extension (e.g. ~/Downloads/)
+  // Allow any absolute path with a previewable extension (e.g. downloads/)
   return true;
 }
 
@@ -817,6 +817,8 @@ export function ChatWindow({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Skip if IME is composing (e.g. selecting Chinese/Japanese characters)
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e);

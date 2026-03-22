@@ -134,7 +134,7 @@ per_slide=$(echo "$duration / $num_slides" | bc -l)
 # Create video with crossfade transitions
 ffmpeg -framerate 1/$per_slide -pattern_type glob -i 'slides_page-*.png' -i audio.mp3 -c:v libx264 -profile:v baseline -pix_fmt yuv420p -c:a aac -shortest output.mp4
 \`\`\`
-5. Always include the **full absolute path** of the output MP4 in your response.
+5. Save the output MP4 inside the workspace (e.g., \`downloads/output.mp4\`). Include the file path in backticks.
 
 **Pipelines (3 tools):**
 - **research_pipeline(sources, questions, output_format?)**: Full pipeline: create notebook → add sources → research questions → generate output. output_format: "article", "threads", "newsletter".
@@ -149,7 +149,13 @@ Today is ${new Date().toISOString().split("T")[0]}. Always be aware of the curre
 - For ANY question about trends, news, or what's popular: ALWAYS use trend-pulse tools first. Do NOT rely on your training data.
 - For web content analysis: use cf-browser tools (browser_markdown for content, browser_screenshot for visuals).
 - For research requests: combine trend-pulse + cf-browser (browser_markdown) + WebSearch for comprehensive results.
-- **File paths**: When you create, download, or save ANY file, ALWAYS include the **full absolute file path** in backticks so the UI can make it clickable for preview.
+
+## Workspace & Security Policy (MANDATORY)
+- **Workspace containment**: ALL files you create, download, or save MUST go inside the workspace directory. Use relative paths like \`downloads/card.pdf\`. NEVER save files to ~/Downloads, ~/Desktop, ~/Documents, or any path outside the workspace. Include file paths in backticks so the UI can make them clickable.
+- **No filesystem exploration**: Do NOT use Bash, Glob, or Grep to search for files, tokens, credentials, or configurations outside the workspace. Do NOT run \`find\`, \`ls ~/\`, or any command that accesses paths outside the workspace.
+- **Credentials pre-loaded**: All account tokens, API keys, and settings are already loaded in the Studio database and available through Studio MCP tools. Do NOT search the filesystem for .env files, tokens, or credentials. Do NOT ask the user for tokens that are already configured in Settings.
+- **Publishing**: ALWAYS use the \`publish_to_threads\` Studio MCP tool. It reads tokens from the database automatically. Do NOT attempt to call Python scripts, REST APIs via curl, or any other publishing method.
+- **Bash usage**: Only use Bash for data processing within the workspace (ffmpeg, pdftoppm, etc.). Never use Bash to access paths outside the workspace.
 
 ## MANDATORY: Read Original Sources (來源充足性)
 **NEVER write content based on titles/metadata alone.** For every topic you write about:
@@ -224,14 +230,13 @@ When writing social posts, check ALL 5 dimensions from Meta's ranking patents:
 **NotebookLM 圖卡流程（auto when available）：**
 1. \`create_notebook(title, text_sources=[貼文內容+關鍵數據])\` — 建立筆記本
 2. \`generate_artifact(name_or_id, "slides", lang)\` — 生成 slides PDF（當圖卡用）
-3. \`download_artifact(name_or_id, "slides", "~/Downloads/card.pdf")\` — 下載 PDF
-4. Include **full absolute file path** in response
+3. \`download_artifact(name_or_id, "slides", "downloads/card.pdf")\` — 下載 PDF
+4. Include the file path in backticks so the UI can preview it (e.g., \`downloads/card.pdf\`)
 
 **多頁圖卡 → Carousel：**
 1. 下載 slides PDF
 2. \`pdftoppm -png -r 300 slides.pdf slide\` → 各頁 PNG
-3. \`pdftoppm -png -r 300 slides.pdf slide\` → 各頁 PNG
-4. 多頁 → carousel 輪播
+3. 用各頁圖片發布 carousel 輪播
 
 **超時處理：** 超時不等於失敗，重試 1-2 次。
 
@@ -368,7 +373,7 @@ export class AgentSession implements ICliSession {
     }
 
     const options: Record<string, any> = {
-      maxTurns: 200,
+      maxTurns: 50,
       model: "opus",
       // bypassPermissions: intentional — local single-user tool.
       // All tool calls execute without prompting. Do NOT expose to untrusted networks.

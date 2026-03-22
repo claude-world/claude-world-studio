@@ -27,16 +27,26 @@ const publishTool = tool(
       return { content: [{ type: "text" as const, text: `Error: Account "${account.name}" is ${account.platform}, not threads.` }], isError: true };
     }
 
+    const PUBLISH_TIMEOUT_MS = 60000;
+    let timeoutId: ReturnType<typeof setTimeout>;
+
     try {
-      const result = await publishToThreads({
-        text: args.text,
-        token: account.token,
-        score: args.score,
-        imageUrl: args.image_url,
-        pollOptions: args.poll_options,
-        linkComment: args.link_comment,
-        topicTag: args.tag,
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("Publishing timed out after 60 seconds. Check your network and try again.")), PUBLISH_TIMEOUT_MS);
       });
+      const result = await Promise.race([
+        publishToThreads({
+          text: args.text,
+          token: account.token,
+          score: args.score,
+          imageUrl: args.image_url,
+          pollOptions: args.poll_options,
+          linkComment: args.link_comment,
+          topicTag: args.tag,
+        }),
+        timeoutPromise,
+      ]);
+      clearTimeout(timeoutId!);
 
       // Log to publish history
       store.addPublish({
@@ -63,6 +73,7 @@ const publishTool = tool(
         }],
       };
     } catch (err) {
+      clearTimeout(timeoutId!);
       // Log failed attempt
       store.addPublish({
         session_id: null,

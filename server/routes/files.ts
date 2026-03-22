@@ -124,7 +124,7 @@ router.get("/:sessionId/files/*", async (req, res) => {
     return res.status(400).json({ error: "File path required" });
   }
 
-  // Support absolute paths (e.g. ~/Downloads/card.pdf from NotebookLM)
+  // Support absolute paths — restricted to workspace only
   const isAbsolute = filePath.startsWith("/");
   const requestedPath = isAbsolute ? filePath : path.resolve(session.workspace_path, filePath);
 
@@ -132,18 +132,9 @@ router.get("/:sessionId/files/*", async (req, res) => {
     const resolvedPath = await fsp.realpath(requestedPath);
 
     if (isAbsolute) {
-      // Absolute paths: restrict to workspace + user home subdirectories
-      const home = process.env.HOME || "";
+      // Absolute paths: restrict to workspace only
       const resolvedBase = await fsp.realpath(session.workspace_path);
-      const allowedRoots = [
-        resolvedBase,
-        ...(home ? [
-          path.join(home, "Downloads"),
-          path.join(home, "Documents"),
-          path.join(home, "Desktop"),
-          path.join(home, "Pictures"),
-        ] : []),
-      ].filter((p) => { try { return fs.existsSync(p); } catch { return false; } });
+      const allowedRoots = [resolvedBase];
 
       const isAllowed = allowedRoots.some((root) => {
         try {
