@@ -7,15 +7,29 @@ import { publishToThreads } from "./social-publisher.js";
 
 const publishTool = tool(
   "publish_to_threads",
-  "Publish content to Threads via Graph API. Quality gate: score >= 70 required. Pass account_id from the Social Accounts table.",
+  "Publish content to Threads via Graph API. Quality gate: score >= 70 required. Supports: text, image, video, carousel (2-20 images/videos), poll, link-comment, topic-tag.",
   {
     text: z.string().describe("Post text content (max 500 chars)"),
     account_id: z.string().describe("Account ID from Social Accounts table"),
     score: z.number().describe("Content quality score (must be >= 70)"),
-    image_url: z.string().optional().describe("Public image URL to attach"),
+    // Media (mutually exclusive: pick one)
+    image_url: z.string().optional().describe("Public image URL (single image post)"),
+    video_url: z.string().optional().describe("Public video URL (single video post)"),
+    carousel_urls: z.array(z.string()).optional().describe("2-20 public URLs for carousel. .mp4/.mov auto-detected as video."),
+    // Attachments (TEXT-only posts, no media)
     poll_options: z.string().optional().describe("Poll options separated by | (2-4 options, max 25 chars each)"),
-    link_comment: z.string().optional().describe("Auto-reply with this link (avoids reach penalty)"),
+    gif_id: z.string().optional().describe("GIPHY GIF ID for GIF attachment"),
+    link_attachment: z.string().optional().describe("URL for link preview card attachment"),
+    // Spoiler
+    spoiler_media: z.boolean().optional().describe("Blur image/video/carousel as spoiler"),
+    // Special
+    ghost: z.boolean().optional().describe("24-hour ephemeral post (disappears after 24h)"),
+    quote_post_id: z.string().optional().describe("Quote another post by its ID"),
+    // Content controls
+    reply_control: z.string().optional().describe("Who can reply: everyone|accounts_you_follow|mentioned_only"),
     tag: z.string().optional().describe("Topic tag (no # prefix, one per post)"),
+    alt_text: z.string().optional().describe("Image alt text for accessibility (max 1000 chars)"),
+    link_comment: z.string().optional().describe("Auto-reply with this link (avoids reach penalty from URL in body)"),
   },
   async (args) => {
     const account = store.getAccount(args.account_id);
@@ -42,9 +56,18 @@ const publishTool = tool(
           token: account.token,
           score: args.score,
           imageUrl: args.image_url,
+          videoUrl: args.video_url,
+          carouselUrls: args.carousel_urls,
           pollOptions: args.poll_options,
-          linkComment: args.link_comment,
+          gifId: args.gif_id,
+          linkAttachment: args.link_attachment,
+          spoilerMedia: args.spoiler_media,
+          ghost: args.ghost,
+          quotePostId: args.quote_post_id,
+          replyControl: args.reply_control,
           topicTag: args.tag,
+          altText: args.alt_text,
+          linkComment: args.link_comment,
         }),
         timeoutPromise,
       ]);
