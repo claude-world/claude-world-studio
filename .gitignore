@@ -23,5 +23,14 @@ Thumbs.db
 *.swp
 *.swo
 
+# Dev-only scripts (contain account aliases)
+scripts/threads_api.py
+
+# Screenshots (may contain sensitive info)
+*.png
+
+# Claude Code local settings
+.claude/settings.local.json
+
 # Playwright
 .playwright-mcp/

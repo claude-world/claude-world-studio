@@ -614,7 +614,7 @@ def _add_common_args(parser):
     """Add --token and --account args shared by all subcommands."""
     parser.add_argument("--token", default=None, help="Access token (falls back to .env)")
     parser.add_argument("--account", choices=["cw", "lf"], default="cw",
-                        help="Account: cw=claude.world.taiwan, lf=lucasfutures")
+                        help="Account alias")
 
 
 def _parse_spoiler_text(raw: list) -> list:
