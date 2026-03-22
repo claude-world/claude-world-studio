@@ -1,9 +1,28 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { readFileSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 import { buildMcpServers, getSettings } from "./mcp-config.js";
 import { createStudioMcpServer } from "./services/studio-mcp.js";
 import store from "./db.js";
 import type { Language, SocialAccount } from "./types.js";
 import type { ICliSession } from "./cli-session.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+/** Load the threads-viral-agent SKILL.md at startup (strip frontmatter) */
+function loadViralAgentSkill(): string {
+  try {
+    const skillPath = join(__dirname, "../.claude/skills/threads-viral-agent/SKILL.md");
+    const raw = readFileSync(skillPath, "utf-8");
+    // Strip YAML frontmatter (--- ... ---)
+    return raw.replace(/^---[\s\S]*?---\n*/, "").trim();
+  } catch {
+    return "";
+  }
+}
+const VIRAL_AGENT_SKILL = loadViralAgentSkill();
 
 const LANGUAGE_INSTRUCTIONS: Record<Language, string> = {
   "zh-TW": `**語言規則（最高優先級）**：
@@ -211,73 +230,21 @@ When writing social posts, check ALL 5 dimensions from Meta's ranking patents:
 - Character limit: Threads ≤500, IG ≤2200
 - 台灣繁中語氣 (no 簡體/AI filler like 在當今/隨著/值得注意)
 
-## Post Type Decision (每篇必做)
+## Publishing: Use threads-viral-agent Skill
 
-根據內容特性選擇最佳發文方式：
+For ALL publishing tasks (post type decision, image generation, uploading, carousel, publishing), follow the threads-viral-agent skill instructions below **exactly**. The skill has the complete, tested workflow including:
+- Post type decision table (image/carousel/poll/link-comment/gif/spoiler/ghost/quote)
+- NotebookLM slides → pdftoppm → curl upload to catbox.moe → publish
+- All Threads API commands via \`python3 scripts/threads_api.py\`
+- Quality gates, penalty checks, A/B variant strategy
 
-| 內容特性 | 發文參數 | 理由 |
-|---|---|---|
-| 有 2+ 張圖 | carousel | 輪播觸及 > 單張 |
-| 有 1 張圖 | image_url | 圖文並茂 >> 純文字（官方數據） |
-| A/B/C 選擇題 | poll_options | **永遠**用原生投票，不用文字版 |
-| 需附連結 | link_comment | URL 放本文降觸及，放回覆不影響 |
-| 話題分類 | tag | 幫演算法分類，觸及感興趣受眾 |
+**Publishing commands use \`python3 scripts/threads_api.py\` via Bash (NOT the MCP publish_to_threads tool).**
+**Image upload uses \`curl\` to catbox.moe via Bash.**
+**All files saved to workspace directory, not ~/Downloads.**
 
-**組合規則：**
-- 有圖 → 一律加 tag
-- 有 URL 要分享 → 用 link_comment（不放本文）
-- A/B/C 選項 → 用 poll_options，不用文字版
+---
 
-## Image Generation (MANDATORY — NotebookLM Slides)
-
-**每篇貼文都必須有圖。** 純文字僅限純投票或極短問題（<50字）。
-
-**⚠️ 不可用 infographic（API 不支援下載）。必須用 slides。**
-
-**NotebookLM 圖卡流程（自動執行，不要停下來問）：**
-1. \`create_notebook(title, text_sources=[貼文內容+關鍵數據])\` — 建立筆記本
-2. \`generate_artifact(name_or_id, "slides", lang)\` — 生成 slides PDF
-3. \`download_artifact(name_or_id, "slides", "downloads/card.pdf")\` — 下載 PDF 到 workspace
-4. \`pdftoppm -png -r 300 downloads/card.pdf downloads/card\` — PDF 轉 PNG（via Bash）
-5. \`upload_image(file_path="downloads/card-1.png")\` — 上傳取得公開 URL
-6. 用返回的 URL 作為 \`publish_to_threads\` 的 \`image_url\` 參數
-
-**重要：整個流程自動完成，不要在中間停下來問使用者。直接轉 PNG → 上傳 → 用 URL 發布。**
-
-**多頁圖卡 → Carousel（完整自動流程）：**
-1. \`download_artifact(name_or_id, "slides", "downloads/slides.pdf")\` — 下載 PDF
-2. \`pdftoppm -png -r 300 downloads/slides.pdf downloads/slide\` — 轉各頁 PNG（via Bash）
-3. 每頁 PNG 都 \`upload_image(file_path="downloads/slide-1.png")\` 取得公開 URL
-4. \`publish_to_threads(carousel_urls=[url1, url2, ...], text=..., account_id=..., score=...)\` — 用 carousel_urls 陣列發布
-**Threads API 原生支援 Carousel（2-20 張），不需要手動上傳。全部自動完成。**
-
-**超時處理：** 超時不等於失敗，重試 1-2 次。
-
-## Publishing Rules
-- **Polls**: ALWAYS use native poll_options for A/B/C, NEVER text-based polls in post body
-- **Links**: NEVER put URLs in post body (kills reach). Use link_comment to auto-reply with link.
-- **Tags**: Use tag for topic categorization (no # prefix, one per post).
-- **Optimal times**: Threads 21:00 → IG 12:00 next day
-- **Media priority**: carousel > image > video > GIF > text-only
-
-## Threads Official Creator Tips (from creators.instagram.com/threads)
-- Post 2-5 times/week for optimal reach
-- Replies account for ~50% of all Threads views — reply to others
-- Video/photo/carousel WITH text >> without text
-- Original platform-native content >> cross-posted content
-- Humorous, "in the moment" content gets higher views
-- Use topic tags for discovery beyond followers
-- Avoid: clickbait, engagement bait, contests/giveaways (limits distribution)
-
-## Full Pipeline Workflow (7 Steps — ALL BLOCKING)
-
-1. **Discover**: get_trending(sources="", geo, count=20) — ALL 20 sources
-2. **Read Source**: browser_markdown(url) for each candidate — MANDATORY, never skip
-3. **Verify Timeline**: Check dates, map to time words, discard stale data
-4. **Create**: get_content_brief(topic) → LLM writes → patent check (5 dimensions) → post type decision → generate image (MANDATORY)
-5. **Review**: get_review_checklist + get_scoring_guide → ALL quality gates must pass (≥${minOverall}, convo ≥${minConversation})
-6. **Publish**: publish_to_threads(text, account_id, score, image_url?, poll_options?, link_comment?, tag?)
-7. **Report**: output summary with scores, sources, timeline verification, image path
+${VIRAL_AGENT_SKILL}
 
 Be concise but thorough. Explain which tools you're using and why.`;
 }

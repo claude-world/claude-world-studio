@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.7.0] - 2026-03-22
+
+### Added
+
+- **threads-viral-agent skill integration** — system prompt now loads the complete, battle-tested SKILL.md at runtime. Publishing uses `python3 scripts/threads_api.py` via Bash (same as Claude Code CLI) instead of fragmented MCP tool instructions.
+- **Image upload via curl + catbox.moe** — same approach as the working skill: `curl -F "reqtype=fileupload" ... https://litterbox.catbox.moe/...` (24h temp hosting)
+- **All Threads post types via script** — carousel, image, video, poll, GIF, spoiler, ghost, quote, link-comment, reply-control, topic-tag, alt-text, text-attachment, thread
+
+### Changed
+
+- **Quick-chip prompts simplified** — pipeline cards now reference the skill directly instead of duplicating 7-step instructions. Claude follows the skill's tested flow.
+- **Clean Electron build** — dist/ is now cleaned before build to prevent stale JS bundles from accumulating
+
 ## [1.6.1] - 2026-03-22
 
 ### Added
