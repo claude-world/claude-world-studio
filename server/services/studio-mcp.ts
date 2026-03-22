@@ -1,5 +1,7 @@
 import { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
+import fs from "fs";
+import path from "path";
 import store from "../db.js";
 import { publishToThreads } from "./social-publisher.js";
 
@@ -112,9 +114,75 @@ const historyTool = tool(
   }
 );
 
+const uploadImageTool = tool(
+  "upload_image",
+  "Upload a local image file to a public hosting service and return the public URL. Use this to get a public URL for images before publishing to Threads. The file must be inside the session workspace.",
+  {
+    file_path: z.string().describe("Path to the image file (relative to workspace, e.g. 'downloads/card-1.png')"),
+  },
+  async (args) => {
+    const filePath = args.file_path;
+
+    // Resolve relative to CWD (workspace)
+    const resolved = path.resolve(filePath);
+    if (!fs.existsSync(resolved)) {
+      return { content: [{ type: "text" as const, text: `Error: File not found: ${resolved}` }], isError: true };
+    }
+
+    const stat = fs.statSync(resolved);
+    if (stat.size > 10 * 1024 * 1024) {
+      return { content: [{ type: "text" as const, text: `Error: File too large (${(stat.size / 1024 / 1024).toFixed(1)}MB, max 10MB)` }], isError: true };
+    }
+
+    const ext = path.extname(resolved).toLowerCase();
+    if (![".png", ".jpg", ".jpeg", ".gif", ".webp"].includes(ext)) {
+      return { content: [{ type: "text" as const, text: `Error: Unsupported image type: ${ext}. Use .png, .jpg, .gif, or .webp` }], isError: true };
+    }
+
+    try {
+      const fileBuffer = fs.readFileSync(resolved);
+      const fileName = path.basename(resolved);
+
+      // Use catbox.moe litterbox — 24h temporary file hosting (same as threads-viral-agent skill)
+      const formData = new FormData();
+      formData.append("reqtype", "fileupload");
+      formData.append("time", "24h");
+      formData.append("fileToUpload", new Blob([fileBuffer]), fileName);
+
+      const res = await fetch("https://litterbox.catbox.moe/resources/internals/api.php", {
+        method: "POST",
+        body: formData,
+        signal: AbortSignal.timeout(60000),
+      });
+
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`Upload failed (${res.status}): ${body}`);
+      }
+
+      const publicUrl = (await res.text()).trim();
+      if (!publicUrl.startsWith("http")) {
+        throw new Error(`Upload returned invalid URL: ${publicUrl}`);
+      }
+
+      return {
+        content: [{
+          type: "text" as const,
+          text: JSON.stringify({ success: true, url: publicUrl, file: fileName }),
+        }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: "text" as const, text: `Error uploading: ${(err as Error).message}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
 export function createStudioMcpServer() {
   return createSdkMcpServer({
     name: "studio",
-    tools: [publishTool, historyTool],
+    tools: [publishTool, historyTool, uploadImageTool],
   });
 }
