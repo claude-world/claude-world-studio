@@ -44,6 +44,7 @@ interface ChatWindowProps {
   accounts?: SocialAccount[];
   targetAccountId?: string;
   onTargetAccountChange?: (id: string) => void;
+  cliName?: string;
 }
 
 // --- i18n strings ---
@@ -97,24 +98,24 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
     {
       icon: "🔥",
       label: "自動發文 (Freestyle)",
-      description: "一鍵完成：趨勢探索 → 深度研究 → 評分 → 發文",
+      description: "一鍵完成：趨勢 → 讀原文 → 驗時間 → 創作 → 專利審查 → 圖卡 → 發文",
       mode: "send",
-      prompt: "執行完整內容產線（趨勢→讀原文→驗時間→創作→評分→發布）：\n1. get_trending(sources=\"\", geo=\"TW\", count=20) 查詢全部 20 個來源\n2. 確認時間線（今天幾號？），過濾 48h 以上舊資料\n3. 選出最有潛力且最即時的 1 個話題\n4. 【必做】browser_markdown 讀原文（至少 2-3 個一手來源），不可只看標題\n5. 【必做】驗證每個事實的時間戳，套用時間詞對照表\n6. get_content_brief(topic) 取得寫作策略\n7. 撰寫高互動 Threads 貼文（繁中，500 字內），按 Meta 5 維專利逐項檢查：\n   - Hook 有數字或反差？(EdgeRank)\n   - CTA 人人都能回答？(Dear Algo)\n   - 有正反兩面/轉折？(72hr window)\n   - 夠短且即時？(Andromeda)\n   - 手機可掃描？(Multi-modal)\n8. get_scoring_guide 自我評分（Overall ≥ 70, Conversation Durability ≥ 55）\n9. get_review_checklist 最終品質檢查，移除 AI 腔（在當今/隨著/值得注意）\n10. 問我是否要用 publish_to_threads 發布（--poll 做投票, --link-comment 放連結）\n\n開始！",
+      prompt: "執行完整 7 步驟內容產線：\n\n**Step 1 DISCOVER** — get_trending(sources=\"\", geo=\"TW\", count=20) 查全部 20 來源，選最有潛力的 1 個話題\n\n**Step 2 READ SOURCE（必做）** — browser_markdown 讀原文（至少 2-3 個一手來源），不可只看標題。爭議性讀正反各一\n\n**Step 3 VERIFY TIMELINE（必做）** — 驗證每個事實時間戳，套用時間詞對照表，過濾 48h 以上舊資料\n\n**Step 4 CREATE** —\n4a. get_content_brief(topic) 取得寫作策略\n4b. 撰寫高互動 Threads 貼文（繁中，500 字內）\n4c. 專利檢查 5 維度：Hook 數字/反差(EdgeRank)、CTA 人人能答(Dear Algo)、正反轉折(72hr)、短且即時(Andromeda)、手機可掃(Multi-modal)\n4d. 發文類型決策：有圖→image、多圖→carousel、選擇題→poll、有連結→link_comment\n4e. 【圖卡生成（必做）】NotebookLM 可用時自動：create_notebook → generate_artifact(\"slides\", lang=\"zh-TW\") → download_artifact 到 ~/Downloads/\n\n**Step 5 REVIEW** — get_review_checklist + get_scoring_guide 自評。Overall ≥ 70、Conversation Durability ≥ 55。移除 AI 腔（在當今/隨著/值得注意）。不過就重寫\n\n**Step 6 PUBLISH** — 問我是否發布。根據 4d 決策選對參數（poll_options / link_comment / tag）\n\n**Step 7 REPORT** — 輸出：主題、來源URL、專利評分 5 維度、時間詞驗證、圖卡路徑\n\n開始！",
     },
     {
       icon: "🎯",
       label: "指定主題發文",
-      description: "輸入你的主題 → 深度研究 → 評分 → 發文",
+      description: "主題 → 讀原文 → 驗時間 → 創作 → 專利審查 → 圖卡 → 發文",
       mode: "fill",
-      prompt: "研究以下主題，深度分析後產出高評分貼文：",
+      prompt: "針對以下主題執行完整 7 步驟產線（跳過 Step 1 趨勢探索）：\nStep 2 讀原文（browser_markdown，至少 2 個一手來源）→ Step 3 驗時間 → Step 4 創作（get_content_brief → 撰寫 → 5 維專利檢查 → 發文類型決策 → NotebookLM 圖卡：create_notebook + generate_artifact(\"slides\") + download 到 ~/Downloads/）→ Step 5 品質門檻（get_scoring_guide ≥70 + get_review_checklist）→ Step 6 問我發布 → Step 7 報告\n\n主題：",
       hint: "輸入主題，例如：Claude Code 新功能、AI Agent 趨勢...",
     },
     {
       icon: "🎬",
       label: "指定主題 + 多媒體",
-      description: "主題 → 研究 → NotebookLM 簡報/影片/Podcast → 發文",
+      description: "主題 → 研究 → 專利審查 → 圖卡 + 簡報 + Podcast → 發文",
       mode: "fill",
-      prompt: "研究以下主題，產出 NotebookLM 簡報/影片/Podcast + 高評分貼文：",
+      prompt: "針對以下主題執行完整 7 步驟產線 + 多媒體生成（跳過 Step 1）：\nStep 2 讀原文 → Step 3 驗時間 → Step 4 創作（含 5 維專利檢查 + 發文類型決策）→ Step 4e 多媒體生成：NotebookLM 自動生成 (1) slides 圖卡 (2) slides 多頁簡報 (3) podcast 音頻，全部 download 到 ~/Downloads/ → Step 5 品質門檻 → Step 6 問我發布 → Step 7 報告（含所有檔案路徑）\n\n主題：",
       hint: "輸入主題，例如：AI 程式碼助手比較...",
     },
   ],
@@ -122,24 +123,24 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
     {
       icon: "🔥",
       label: "Auto Post (Freestyle)",
-      description: "One click: Trends → Research → Score → Publish",
+      description: "One click: Trends → Sources → Timeline → Create → Patent Review → Visual → Publish",
       mode: "send",
-      prompt: "Run the full content pipeline (Trends→Read Source→Verify Timeline→Create→Score→Publish):\n1. get_trending(sources=\"\", geo=\"US\", count=20) — ALL 20 sources\n2. Check timestamps (today's date?), discard >48h old data\n3. Pick the most promising & freshest topic\n4. [MANDATORY] browser_markdown — read 2-3 original sources (never write from titles alone)\n5. [MANDATORY] Verify every fact's timestamp, use correct time words\n6. get_content_brief(topic) for writing strategy\n7. Write a high-engagement Threads post (under 500 chars), check Meta's 5 patent dimensions:\n   - Hook has number/contrast? (EdgeRank)\n   - CTA anyone can answer? (Dear Algo)\n   - Has both sides/contrast? (72hr window)\n   - Short & timely? (Andromeda)\n   - Mobile-scannable? (Multi-modal)\n8. get_scoring_guide — self-score (Overall ≥70, Conversation Durability ≥55)\n9. get_review_checklist — final quality check, remove AI filler\n10. Ask me whether to publish_to_threads (use --poll for polls, --link-comment for URLs)\n\nGo!",
+      prompt: "Run the full 7-step content pipeline:\n\n**Step 1 DISCOVER** — get_trending(sources=\"\", geo=\"US\", count=20) all 20 sources, pick the most promising topic\n\n**Step 2 READ SOURCE (MANDATORY)** — browser_markdown for 2-3 original sources, never write from titles alone\n\n**Step 3 VERIFY TIMELINE (MANDATORY)** — verify every fact's timestamp, apply time word rules, discard >48h\n\n**Step 4 CREATE** —\n4a. get_content_brief(topic)\n4b. Write high-engagement Threads post (<500 chars)\n4c. Patent check 5 dimensions: Hook number/contrast(EdgeRank), CTA anyone can answer(Dear Algo), both sides(72hr), short+timely(Andromeda), mobile-scannable(Multi-modal)\n4d. Post type decision: image/carousel/poll/link_comment\n4e. [Image MANDATORY] If NotebookLM available: create_notebook → generate_artifact(\"slides\", lang=\"en\") → download_artifact to ~/Downloads/\n\n**Step 5 REVIEW** — get_review_checklist + get_scoring_guide. Overall ≥70, Conversation Durability ≥55. Remove AI filler. Rewrite if fails\n\n**Step 6 PUBLISH** — Ask me to publish. Use correct params per 4d (poll_options / link_comment / tag)\n\n**Step 7 REPORT** — Topic, source URLs, 5-dimension patent scores, timeline verification, image path\n\nGo!",
     },
     {
       icon: "🎯",
       label: "Custom Topic Post",
-      description: "Enter your topic → Research → Score → Publish",
+      description: "Topic → Sources → Timeline → Create → Patent Review → Visual → Publish",
       mode: "fill",
-      prompt: "Research this topic, do a deep analysis and create a high-scoring post: ",
+      prompt: "Run the full 7-step pipeline for this topic (skip Step 1 trend discovery):\nStep 2 read sources (browser_markdown, 2+ primary) → Step 3 verify timeline → Step 4 create (get_content_brief → write → 5-dimension patent check → post type decision → NotebookLM slides: create_notebook + generate_artifact(\"slides\") + download to ~/Downloads/) → Step 5 quality gate (get_scoring_guide ≥70 + get_review_checklist) → Step 6 ask to publish → Step 7 report\n\nTopic: ",
       hint: "Enter a topic, e.g. Claude Code new features, AI Agent trends...",
     },
     {
       icon: "🎬",
       label: "Custom Topic + Media",
-      description: "Topic → Research → NotebookLM slides/video/podcast → Publish",
+      description: "Topic → Research → Patent Review → Infographic + Slides + Podcast → Publish",
       mode: "fill",
-      prompt: "Research this topic, create NotebookLM slides/video/podcast + a high-scoring post: ",
+      prompt: "Run the full 7-step pipeline + multimedia for this topic (skip Step 1):\nStep 2 read sources → Step 3 verify timeline → Step 4 create (5-dimension patent check + post type decision) → Step 4e multimedia: NotebookLM auto-generate (1) slides card (2) slides deck (3) podcast, download all to ~/Downloads/ → Step 5 quality gate → Step 6 ask to publish → Step 7 report (include all file paths)\n\nTopic: ",
       hint: "Enter a topic, e.g. AI coding assistants comparison...",
     },
   ],
@@ -147,24 +148,24 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
     {
       icon: "🔥",
       label: "自動投稿 (Freestyle)",
-      description: "ワンクリック：トレンド → 調査 → スコア → 投稿",
+      description: "ワンクリック：トレンド → 原文 → 検証 → 作成 → 特許審査 → 図解 → 投稿",
       mode: "send",
-      prompt: "フルコンテンツパイプライン（トレンド→原文読解→タイムライン検証→作成→採点→公開）：\n1. get_trending(sources=\"\", geo=\"JP\", count=20) で全20ソース取得\n2. タイムスタンプ確認（今日の日付は？）、48h超は除外\n3. 最も有望で最新のトピックを1つ選択\n4. 【必須】browser_markdown で原文を2-3件読む（タイトルだけで書かない）\n5. 【必須】各事実のタイムスタンプを検証、時間表現を確認\n6. get_content_brief(topic) で執筆戦略取得\n7. 高エンゲージメントThreads投稿を作成（500文字以内）、Meta特許5次元チェック：\n   - Hookに数字/対比？(EdgeRank)\n   - CTAは誰でも回答可能？(Dear Algo)\n   - 両面/転換点がある？(72hr window)\n   - 短く即時的？(Andromeda)\n   - モバイルでスキャン可能？(Multi-modal)\n8. get_scoring_guide で自己採点（Overall≥70, 会話持続性≥55）\n9. get_review_checklist で最終品質チェック、AI表現を除去\n10. publish_to_threads で公開するか確認（--pollで投票、--link-commentでURL）\n\n開始！",
+      prompt: "フル7ステップパイプライン実行：\n\n**Step 1 DISCOVER** — get_trending(sources=\"\", geo=\"JP\", count=20) 全20ソース、最有望トピック選択\n\n**Step 2 READ SOURCE（必須）** — browser_markdown で原文2-3件読む（タイトルだけ不可）\n\n**Step 3 VERIFY TIMELINE（必須）** — 全事実のタイムスタンプ検証、時間表現ルール適用、48h超は除外\n\n**Step 4 CREATE** —\n4a. get_content_brief(topic)\n4b. 高エンゲージメントThreads投稿作成（500文字以内）\n4c. 特許チェック5次元：Hook数字/対比(EdgeRank)、CTA誰でも回答可(Dear Algo)、両面/転換(72hr)、短く即時(Andromeda)、モバイル可読(Multi-modal)\n4d. 投稿タイプ決定：image/carousel/poll/link_comment\n4e. 【画像必須】NotebookLM利用可能時：create_notebook → generate_artifact(\"slides\", lang=\"ja\") → download ~/Downloads/\n\n**Step 5 REVIEW** — get_review_checklist + get_scoring_guide。Overall≥70、会話持続性≥55。AI表現除去。不合格→再作成\n\n**Step 6 PUBLISH** — 公開確認。4dの決定に基づきパラメータ選択\n\n**Step 7 REPORT** — トピック、ソースURL、5次元特許スコア、タイムライン検証、画像パス\n\n開始！",
     },
     {
       icon: "🎯",
       label: "トピック指定投稿",
-      description: "トピック入力 → 調査 → スコア → 投稿",
+      description: "トピック → 原文 → 検証 → 作成 → 特許審査 → 図解 → 投稿",
       mode: "fill",
-      prompt: "以下のトピックを調査し、深く分析して高スコアの投稿を作成してください：",
+      prompt: "このトピックで7ステップパイプライン実行（Step 1スキップ）：\nStep 2 原文読解（browser_markdown、2件以上）→ Step 3 タイムライン検証 → Step 4 作成（get_content_brief → 執筆 → 5次元特許チェック → 投稿タイプ決定 → NotebookLM図解：create_notebook + generate_artifact(\"slides\") + download ~/Downloads/）→ Step 5 品質ゲート（get_scoring_guide≥70 + get_review_checklist）→ Step 6 公開確認 → Step 7 レポート\n\nトピック：",
       hint: "トピックを入力、例：Claude Codeの新機能、AIエージェントのトレンド...",
     },
     {
       icon: "🎬",
       label: "トピック + マルチメディア",
-      description: "トピック → 調査 → NotebookLM スライド/動画/Podcast → 投稿",
+      description: "トピック → 調査 → 特許審査 → 図解 + スライド + Podcast → 投稿",
       mode: "fill",
-      prompt: "以下のトピックを調査し、NotebookLM スライド/動画/Podcast + 高スコア投稿を作成：",
+      prompt: "このトピックで7ステップ + マルチメディアパイプライン実行（Step 1スキップ）：\nStep 2 原文読解 → Step 3 検証 → Step 4 作成（5次元特許チェック + 投稿タイプ決定）→ Step 4e マルチメディア：NotebookLM自動生成 (1) slides図解 (2) slides複数ページ (3) podcast音声、全て ~/Downloads/ → Step 5 品質ゲート → Step 6 公開確認 → Step 7 レポート（全ファイルパス含む）\n\nトピック：",
       hint: "トピックを入力、例：AIコーディングアシスタント比較...",
     },
   ],
@@ -185,8 +186,11 @@ const UI_TEXT: Record<Language, {
   filesBtn: string;
   publishBtn: string;
   shiftEnter: string;
-  poweredBy: string;
-  thinkingLabel: string;
+  poweredBy: (cli: string) => string;
+  thinkingLabel: (cli: string) => string;
+  chatTitle: string;
+  liveStatus: string;
+  offlineStatus: string;
   startConversation: string;
   steps: string[];
   stepsDesc: string[];
@@ -206,8 +210,11 @@ const UI_TEXT: Record<Language, {
     filesBtn: "檔案",
     publishBtn: "發文",
     shiftEnter: "Shift+Enter 換行",
-    poweredBy: "由 Claude Agent SDK + MCP 驅動",
-    thinkingLabel: "Claude 正在思考...",
+    poweredBy: (cli: string) => `由 ${cli} + MCP 驅動`,
+    thinkingLabel: (cli: string) => `${cli} 正在思考...`,
+    chatTitle: "聊天",
+    liveStatus: "連線中",
+    offlineStatus: "離線",
     startConversation: "開始對話",
     steps: ["發現", "研究", "發佈"],
     stepsDesc: [
@@ -231,8 +238,11 @@ const UI_TEXT: Record<Language, {
     filesBtn: "Files",
     publishBtn: "Publish",
     shiftEnter: "Shift+Enter for newline",
-    poweredBy: "Powered by Claude Agent SDK + MCP",
-    thinkingLabel: "Claude is working...",
+    poweredBy: (cli: string) => `Powered by ${cli} + MCP`,
+    thinkingLabel: (cli: string) => `${cli} is working...`,
+    chatTitle: "Chat",
+    liveStatus: "Live",
+    offlineStatus: "Offline",
     startConversation: "Start a conversation",
     steps: ["Discover", "Research", "Publish"],
     stepsDesc: [
@@ -256,8 +266,11 @@ const UI_TEXT: Record<Language, {
     filesBtn: "ファイル",
     publishBtn: "投稿",
     shiftEnter: "Shift+Enterで改行",
-    poweredBy: "Claude Agent SDK + MCP 搭載",
-    thinkingLabel: "Claude が作業中...",
+    poweredBy: (cli: string) => `${cli} + MCP 搭載`,
+    thinkingLabel: (cli: string) => `${cli} が作業中...`,
+    chatTitle: "チャット",
+    liveStatus: "接続中",
+    offlineStatus: "オフライン",
     startConversation: "会話を始めましょう",
     steps: ["発見", "調査", "公開"],
     stepsDesc: [
@@ -298,17 +311,14 @@ function extractImagePaths(text: string): string[] {
   return matches ? [...new Set(matches)] : [];
 }
 
-/** Convert absolute path to file API URL; returns null if outside workspace */
+/** Convert absolute path to file API URL; supports any absolute path */
 function toFileApiUrl(
   absPath: string,
   sessionId: string,
-  workspacePath?: string,
+  _workspacePath?: string,
 ): string | null {
-  if (!workspacePath || !sessionId) return null;
-  const wsBase = workspacePath.replace(/\/$/, "");
-  if (!absPath.startsWith(wsBase + "/")) return null;
-  const rel = absPath.slice(wsBase.length + 1);
-  const encoded = rel.split("/").map(encodeURIComponent).join("/");
+  if (!sessionId || !absPath.startsWith("/")) return null;
+  const encoded = absPath.split("/").map(encodeURIComponent).join("/");
   return `/api/sessions/${encodeURIComponent(sessionId)}/files/${encoded}`;
 }
 
@@ -344,13 +354,9 @@ function InlineImage({
 
 // Detect if text inside backticks looks like a workspace file path with a previewable extension
 const PREVIEW_EXT_RE = /\.(png|jpg|jpeg|gif|webp|svg|pdf|mp3|wav|m4a|mp4|webm|md|txt|json|html|css|py|ts|tsx|js|jsx)$/i;
-function isPreviewablePath(text: string, workspacePath?: string): boolean {
+function isPreviewablePath(text: string, _workspacePath?: string): boolean {
   if (!text.startsWith("/") || !PREVIEW_EXT_RE.test(text) || text.includes(" ")) return false;
-  // Only treat as previewable if path is within the workspace
-  if (workspacePath) {
-    const wsBase = workspacePath.replace(/\/$/, "");
-    return text.startsWith(wsBase + "/");
-  }
+  // Allow any absolute path with a previewable extension (e.g. ~/Downloads/)
   return true;
 }
 
@@ -569,7 +575,7 @@ function ToolResultBlock({
   );
 }
 
-function TypingIndicator({ language }: { language: Language }) {
+function TypingIndicator({ language, cliLabel = "Claude" }: { language: Language; cliLabel?: string }) {
   const t = UI_TEXT[language];
   return (
     <div className="flex items-center gap-1.5 py-2 px-1">
@@ -578,7 +584,7 @@ function TypingIndicator({ language }: { language: Language }) {
         <span className="typing-dot w-2 h-2 bg-gray-400 rounded-full inline-block" />
         <span className="typing-dot w-2 h-2 bg-gray-400 rounded-full inline-block" />
       </div>
-      <span className="text-sm text-gray-400 ml-1">{t.thinkingLabel}</span>
+      <span className="text-sm text-gray-400 ml-1">{t.thinkingLabel(cliLabel)}</span>
     </div>
   );
 }
@@ -588,7 +594,12 @@ function TypingIndicator({ language }: { language: Language }) {
 function WelcomeScreen({ onNewSession, language }: { onNewSession: () => void; language: Language }) {
   const t = UI_TEXT[language];
   return (
-    <div className="flex-1 flex items-center justify-center bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-gray-900 px-6">
+    <div className="flex-1 flex flex-col bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-gray-900 px-6">
+      {/* Drag region for Electron window */}
+      {navigator.userAgent.includes('Electron') && (
+        <div className="h-10 shrink-0" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties} />
+      )}
+      <div className="flex-1 flex items-center justify-center">
       <div className="max-w-2xl w-full text-center">
         <div className="mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 text-white text-2xl font-bold mb-4 shadow-lg">
@@ -629,6 +640,7 @@ function WelcomeScreen({ onNewSession, language }: { onNewSession: () => void; l
           {t.welcomeCta}
         </button>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-3">{t.welcomeHint}</p>
+      </div>
       </div>
     </div>
   );
@@ -737,8 +749,10 @@ export function ChatWindow({
   accounts,
   targetAccountId,
   onTargetAccountChange,
+  cliName = "claude",
 }: ChatWindowProps) {
   const t = UI_TEXT[language];
+  const cliLabel = cliName === "claude" ? "Claude" : cliName === "codex" ? "Codex" : cliName === "gemini" ? "Gemini" : cliName === "opencode" ? "OpenCode" : cliName;
   const [input, setInput] = useState("");
   const [inputHint, setInputHint] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -816,24 +830,27 @@ export function ChatWindow({
 
   return (
     <div className="flex-1 flex flex-col bg-white dark:bg-gray-900 min-w-0">
-      {/* Header toolbar */}
-      <div className="px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between shrink-0">
+      {/* Header toolbar — drag region for Electron window */}
+      <div
+        className="px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between shrink-0"
+        style={navigator.userAgent.includes('Electron') ? { WebkitAppRegion: 'drag' } as React.CSSProperties : undefined}
+      >
         <div className="flex items-center gap-2">
-          <h2 className="font-semibold text-gray-800 dark:text-gray-100 text-sm">Chat</h2>
+          <h2 className="font-semibold text-gray-800 dark:text-gray-100 text-sm">{t.chatTitle}</h2>
           {isConnected ? (
-            <span className="flex items-center gap-1 text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
+            <span className="flex items-center gap-1 text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full dark:bg-green-900/30">
               <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-              Live
+              {t.liveStatus}
             </span>
           ) : (
-            <span className="flex items-center gap-1 text-[10px] text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full">
+            <span className="flex items-center gap-1 text-[10px] text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full dark:bg-red-900/30">
               <span className="w-1.5 h-1.5 bg-red-500 rounded-full" />
-              Offline
+              {t.offlineStatus}
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           {/* Target account selector */}
           {accounts && accounts.length > 0 && onTargetAccountChange && (
             <select
@@ -935,7 +952,7 @@ export function ChatWindow({
             }
             return null;
           })}
-          {isLoading && <TypingIndicator language={language} />}
+          {isLoading && <TypingIndicator language={language} cliLabel={cliLabel} />}
           <div ref={messagesEndRef} />
         </div>
       )}
@@ -1000,7 +1017,7 @@ export function ChatWindow({
               {t.shiftEnter}
             </span>
             <span className="text-[10px] text-gray-400 dark:text-gray-500">
-              {t.poweredBy}
+              {t.poweredBy(cliLabel)}
             </span>
           </div>
         </div>

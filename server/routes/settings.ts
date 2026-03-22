@@ -35,15 +35,34 @@ function maskValue(value: string): string {
 // Get all settings (tokens masked)
 router.get("/", (_req, res) => {
   const settings = getSettings();
-  const masked: Record<string, string> = { ...settings };
+  // Include all DB settings (CLI routing, etc.) that getSettings() doesn't cover
+  const allDbSettings = store.getAllSettings();
+  const merged: Record<string, any> = { ...allDbSettings, ...settings };
 
   for (const key of SENSITIVE_KEYS) {
-    if (masked[key]) {
-      masked[key] = maskValue(masked[key]);
+    if (merged[key]) {
+      merged[key] = maskValue(merged[key]);
     }
   }
 
-  res.json(masked);
+  res.json(merged);
+});
+
+// Open native folder picker (macOS only — other platforms return empty)
+router.get("/pick-folder", async (_req, res) => {
+  if (process.platform !== "darwin") {
+    return res.json({ path: "" });
+  }
+  try {
+    const result = execFileSync(
+      "osascript",
+      ["-e", 'POSIX path of (choose folder with prompt "Select workspace folder")'],
+      { encoding: "utf-8", timeout: 120000 }
+    ).trim();
+    res.json({ path: result.replace(/\/$/, "") });
+  } catch {
+    res.json({ path: "" }); // User cancelled
+  }
 });
 
 // Auto-detect installed MCP tools
@@ -169,15 +188,16 @@ router.post("/detect/apply", (_req, res) => {
         const content = readFileSync(envPath, "utf-8");
         const urlMatch = content.match(/^CF_BROWSER_URL=(.+)/m);
         const keyMatch = content.match(/^CF_BROWSER_API_KEY=(.+)/m);
-        if (urlMatch) { store.setSetting("cfBrowserUrl", urlMatch[1].trim()); applied++; }
-        if (keyMatch) { store.setSetting("cfBrowserApiKey", keyMatch[1].trim()); applied++; }
+        // Only apply if user hasn't already set a value
+        if (urlMatch && !store.getSetting("cfBrowserUrl")) { store.setSetting("cfBrowserUrl", urlMatch[1].trim()); applied++; }
+        if (keyMatch && !store.getSetting("cfBrowserApiKey")) { store.setSetting("cfBrowserApiKey", keyMatch[1].trim()); applied++; }
       } catch (err) {
         console.warn("[Settings] Error reading cf-browser .env:", err);
       }
     }
   }
 
-  // MCP paths
+  // MCP paths — only apply if user hasn't already set a value
   const mcpRoots = [workspace, join(home, "github"), join(home, "projects")]
     .filter((p) => isAbsolute(p) && existsSync(p));
 
@@ -185,13 +205,13 @@ router.post("/detect/apply", (_req, res) => {
     join(r, "trend-pulse/.venv/bin/python"),
     join(r, "trend-pulse/.venv/bin/python3"),
   ]).find(existsSync);
-  if (tpPath) { store.setSetting("trendPulseVenvPython", tpPath); applied++; }
+  if (tpPath && !store.getSetting("trendPulseVenvPython")) { store.setSetting("trendPulseVenvPython", tpPath); applied++; }
 
   const cbPath = mcpRoots.flatMap((r) => [
     join(r, "cf-browser/mcp-server/.venv/bin/python"),
     join(r, "cf-browser/mcp-server/.venv/bin/python3"),
   ]).find(existsSync);
-  if (cbPath) { store.setSetting("cfBrowserVenvPython", cbPath); applied++; }
+  if (cbPath && !store.getSetting("cfBrowserVenvPython")) { store.setSetting("cfBrowserVenvPython", cbPath); applied++; }
 
   const nlmPath = [
     ...mcpRoots.flatMap((r) => [join(r, "notebooklm-skill/mcp-server/server.py")]),
@@ -203,7 +223,7 @@ router.post("/detect/apply", (_req, res) => {
       } catch { return []; }
     }),
   ].find(existsSync);
-  if (nlmPath) { store.setSetting("notebooklmServerPath", nlmPath); applied++; }
+  if (nlmPath && !store.getSetting("notebooklmServerPath")) { store.setSetting("notebooklmServerPath", nlmPath); applied++; }
 
   res.json({ success: true, applied });
 });
@@ -275,6 +295,8 @@ router.put("/", (req, res) => {
     "cliRoutingMode",
     "cliEnabledList",
     "cliPrimary",
+    "minOverallScore",
+    "minConversationScore",
   ];
 
   const pathKeys = [
@@ -287,6 +309,9 @@ router.put("/", (req, res) => {
   for (const [key, value] of Object.entries(updates)) {
     if (!allowedKeys.includes(key) || typeof value !== "string") continue;
 
+    // Skip masked sensitive values — don't overwrite real keys with masked placeholders
+    if (SENSITIVE_KEYS.includes(key as any) && value.includes("...")) continue;
+
     if (pathKeys.includes(key) && value) {
       if (!isAbsolute(value) || /[;&|`$(){}]/.test(value)) continue;
     }
@@ -296,6 +321,12 @@ router.put("/", (req, res) => {
     if (key === "cliEnabledList" && value) {
       const parts = value.split(",").filter(Boolean);
       if (!parts.every((p) => VALID_CLI_COMMANDS.has(p))) continue;
+    }
+
+    // Validate numeric score range
+    if ((key === "minOverallScore" || key === "minConversationScore") && value) {
+      const n = parseInt(value, 10);
+      if (isNaN(n) || n < 0 || n > 100) continue;
     }
 
     store.setSetting(key, value);

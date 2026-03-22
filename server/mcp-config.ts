@@ -1,6 +1,7 @@
-import { existsSync } from "fs";
-import { isAbsolute } from "path";
+import { existsSync, writeFileSync } from "fs";
+import { isAbsolute, join } from "path";
 import { execFileSync } from "child_process";
+import { tmpdir } from "os";
 import type { Settings, Language, Theme, CfBrowserMode } from "./types.js";
 import store from "./db.js";
 
@@ -45,6 +46,8 @@ export function getSettings(): Settings {
       all.cfApiToken || process.env.CF_API_TOKEN || "",
     defaultWorkspace:
       all.defaultWorkspace || process.env.DEFAULT_WORKSPACE || process.cwd(),
+    minOverallScore: parseInt(all.minOverallScore as string) || 70,
+    minConversationScore: parseInt(all.minConversationScore as string) || 55,
   };
 }
 
@@ -97,11 +100,17 @@ export function buildMcpServers(settings: Settings) {
     {
       name: "notebooklm",
       path: settings.notebooklmServerPath,
-      build: () => ({
-        command: "python3",
-        args: [settings.notebooklmServerPath],
-        env: {},
-      }),
+      build: () => {
+        // Use the venv python from the same project directory as server.py
+        const serverDir = settings.notebooklmServerPath.replace(/\/mcp_server\/server\.py$/, "");
+        const venvPython = `${serverDir}/.venv/bin/python`;
+        const cmd = existsSync(venvPython) ? venvPython : "python3";
+        return {
+          command: cmd,
+          args: [settings.notebooklmServerPath],
+          env: {},
+        };
+      },
     },
   ];
 
@@ -142,4 +151,24 @@ export function buildMcpServers(settings: Settings) {
   }
 
   return servers;
+}
+
+/**
+ * Write MCP server config to a temp JSON file for external CLIs.
+ * Returns the absolute path to the config file.
+ */
+export function writeMcpConfigFile(settings: Settings): string {
+  const servers = buildMcpServers(settings);
+  const mcpConfig: Record<string, any> = { mcpServers: {} };
+
+  for (const [name, config] of Object.entries(servers)) {
+    mcpConfig.mcpServers[name] = config;
+  }
+
+  const { mkdtempSync } = require("fs");
+  const dir = mkdtempSync(join(tmpdir(), "studio-mcp-"), { mode: 0o700 });
+  const configPath = join(dir, "mcp-config.json");
+  writeFileSync(configPath, JSON.stringify(mcpConfig, null, 2), { mode: 0o600 });
+  console.log(`[MCP] Config written to ${configPath}`);
+  return configPath;
 }

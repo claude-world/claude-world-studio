@@ -20,9 +20,11 @@ export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewMo
   const [loading, setLoading] = useState(true);
   const [fileType, setFileType] = useState<"image" | "pdf" | "audio" | "video" | "text" | "binary">("text");
 
-  const safePath = sanitizePath(filePath);
+  // Absolute paths (e.g. /Users/.../Downloads/card.pdf) bypass sanitization
+  const isAbsolutePath = filePath.startsWith("/");
+  const safePath = isAbsolutePath ? filePath : sanitizePath(filePath);
 
-  // Reject traversal paths immediately
+  // Reject traversal paths immediately (only for relative paths)
   if (!safePath) {
     return (
       <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6" onClick={onClose}>
@@ -35,7 +37,9 @@ export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewMo
   }
 
   const ext = safePath.split(".").pop()?.toLowerCase() || "";
-  const encodedPath = safePath.split("/").map(encodeURIComponent).join("/");
+  const encodedPath = isAbsolutePath
+    ? filePath.split("/").map(encodeURIComponent).join("/")
+    : safePath.split("/").map(encodeURIComponent).join("/");
   const fileUrl = `/api/sessions/${encodeURIComponent(sessionId)}/files/${encodedPath}`;
 
   useEffect(() => {

@@ -124,16 +124,43 @@ router.get("/:sessionId/files/*", async (req, res) => {
     return res.status(400).json({ error: "File path required" });
   }
 
-  const requestedPath = path.resolve(session.workspace_path, filePath);
+  // Support absolute paths (e.g. ~/Downloads/card.pdf from NotebookLM)
+  const isAbsolute = filePath.startsWith("/");
+  const requestedPath = isAbsolute ? filePath : path.resolve(session.workspace_path, filePath);
 
   try {
-    // Resolve symlinks FIRST, then use the resolved path for all ops (eliminates TOCTOU)
     const resolvedPath = await fsp.realpath(requestedPath);
-    const resolvedBase = await fsp.realpath(session.workspace_path);
 
-    // Security: verify resolved path is within workspace
-    if (resolvedPath !== resolvedBase && !resolvedPath.startsWith(resolvedBase + path.sep)) {
-      return res.status(403).json({ error: "Path traversal not allowed" });
+    if (isAbsolute) {
+      // Absolute paths: restrict to workspace + user home subdirectories
+      const home = process.env.HOME || "";
+      const resolvedBase = await fsp.realpath(session.workspace_path);
+      const allowedRoots = [
+        resolvedBase,
+        ...(home ? [
+          path.join(home, "Downloads"),
+          path.join(home, "Documents"),
+          path.join(home, "Desktop"),
+          path.join(home, "Pictures"),
+        ] : []),
+      ].filter((p) => { try { return fs.existsSync(p); } catch { return false; } });
+
+      const isAllowed = allowedRoots.some((root) => {
+        try {
+          const resolvedRoot = fs.realpathSync(root);
+          return resolvedPath === resolvedRoot || resolvedPath.startsWith(resolvedRoot + path.sep);
+        } catch { return false; }
+      });
+
+      if (!isAllowed) {
+        return res.status(403).json({ error: "Absolute path not in allowed directories" });
+      }
+    } else {
+      // Relative paths: verify within workspace (original security check)
+      const resolvedBase = await fsp.realpath(session.workspace_path);
+      if (resolvedPath !== resolvedBase && !resolvedPath.startsWith(resolvedBase + path.sep)) {
+        return res.status(403).json({ error: "Path traversal not allowed" });
+      }
     }
 
     const stat = await fsp.stat(resolvedPath);

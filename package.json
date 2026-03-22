@@ -1,6 +1,6 @@
 {
   "name": "@claude-world/studio",
-  "version": "1.2.0",
+  "version": "1.5.0",
   "type": "module",
   "description": "Claude World Studio - Trend Discovery to Content Publishing Pipeline",
   "main": "electron/main.cjs",
@@ -46,7 +46,7 @@
     "start": "tsx server/server.ts",
     "build": "vite build",
     "electron:dev": "npm run build && electron .",
-    "electron:build": "npm run build && electron-builder --mac",
+    "electron:build": "npm run build && node scripts/electron-build.cjs",
     "typecheck": "tsc --noEmit",
     "test:cli": "node bin/cli.js help > /dev/null"
   },
@@ -54,6 +54,11 @@
     "appId": "com.claude-world.studio",
     "productName": "Claude World Studio",
     "npmRebuild": false,
+    "asar": true,
+    "asarUnpack": [
+      "**"
+    ],
+    "electronVersion": "41.0.2",
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": "dmg"
@@ -63,9 +68,9 @@
       "electron/**/*",
       "server/**/*",
       "scripts/**/*",
-      "dist/**/*",
+      "dist/index.html",
+      "dist/assets/**/*",
       "data/**/*",
-      "node_modules/**/*",
       ".env",
       "package.json"
     ],
@@ -81,26 +86,13 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.28",
-    "@vitejs/plugin-react": "^4.3.0",
-    "autoprefixer": "^10.4.20",
     "better-sqlite3": "^11.7.0",
-    "concurrently": "^9.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
     "node-cron": "^4.2.1",
-    "playwright": "^1.58.2",
-    "postcss": "^8.4.47",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-markdown": "^10.1.0",
-    "react-use-websocket": "^4.13.0",
-    "rehype-sanitize": "^6.0.0",
-    "remark-gfm": "^4.0.1",
-    "tailwindcss": "^3.4.14",
     "tsx": "^4.19.0",
     "uuid": "^10.0.0",
-    "vite": "^5.4.0",
     "ws": "^8.18.0",
     "zod": "^4.3.6"
   },
@@ -115,8 +107,21 @@
     "@types/react-dom": "^18.3.0",
     "@types/uuid": "^10.0.0",
     "@types/ws": "^8.5.12",
+    "@vitejs/plugin-react": "^4.3.0",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.0.0",
     "electron": "^41.0.2",
     "electron-builder": "^26.8.1",
-    "typescript": "^5.5.0"
+    "playwright": "^1.58.2",
+    "postcss": "^8.4.47",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "react-use-websocket": "^4.13.0",
+    "rehype-sanitize": "^6.0.0",
+    "remark-gfm": "^4.0.1",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5.5.0",
+    "vite": "^5.4.0"
   }
 }

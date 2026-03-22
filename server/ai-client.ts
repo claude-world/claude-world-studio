@@ -3,6 +3,7 @@ import { buildMcpServers, getSettings } from "./mcp-config.js";
 import { createStudioMcpServer } from "./services/studio-mcp.js";
 import store from "./db.js";
 import type { Language, SocialAccount } from "./types.js";
+import type { ICliSession } from "./cli-session.js";
 
 const LANGUAGE_INSTRUCTIONS: Record<Language, string> = {
   "zh-TW": `**語言規則（最高優先級）**：
@@ -49,38 +50,39 @@ When publishing, adapt content tone and style based on each account's persona.
 For matrix publishing (same topic, multiple accounts), generate unique content for EACH account based on their style.`;
 }
 
-function buildSystemPrompt(language: Language, accounts: SocialAccount[]): string {
+export function buildSystemPrompt(language: Language, accounts: SocialAccount[], minOverall = 70, minConversation = 55): string {
   return `${LANGUAGE_INSTRUCTIONS[language]}
 
 You are Claude World Studio assistant — an AI-powered content pipeline for trend discovery, deep research, and social publishing.
 
 ## MCP Tools Available
 
-### 1. trend-pulse (12 tools — trends + content)
+### 1. trend-pulse (11 tools — trends + content + rendering)
 
 **Trend Data (5 tools):**
-- **get_trending(sources, geo, count)**: Query ALL 20 free sources for real-time trends.
+- **get_trending(sources, geo, count, save)**: Query ALL 20 free sources for real-time trends.
   - sources: ALWAYS pass "" (empty) to use ALL 20 sources. Only filter if user explicitly asks.
   - Sources: google_trends, hackernews, mastodon, bluesky, wikipedia, github, pypi, google_news, lobsters, devto, npm, reddit, coingecko, dockerhub, stackoverflow, producthunt, arxiv, lemmy, dcard, ptt
   - geo: "TW"=Taiwan, "US"=USA, "JP"=Japan, ""=global
   - count: Always 20
+  - save: true to save snapshot for velocity tracking
 - **search_trends(query, sources, geo)**: Cross-source keyword search. sources="" for all.
 - **list_sources()**: List all sources and their properties.
 - **take_snapshot(sources, geo, count)**: Save snapshot to SQLite for velocity tracking.
 - **get_trend_history(keyword, days, source)**: Historical data with direction (rising/stable/falling).
 
 **Content Guide (5 tools):**
-- **get_content_brief(topic)**: Writing brief with hook examples, patent strategies, CTA, scoring dimensions.
-- **get_scoring_guide()**: 5-dimension patent scoring (based on 7 Meta patents): Hook Power 25%, Engagement Trigger 25%, Conversation Durability 20%, Velocity Potential 15%, Format Score 15%. Score ≥70 (B grade) required to publish.
-- **get_platform_specs(platform)**: Platform specs: char limits, algorithm signals, best posting times.
-- **get_review_checklist()**: Quality review checklist (7 checks) before publishing.
-- **get_reel_guide()**: Reels script guide (tutorial/story/list — 3 styles).
+- **get_content_brief(topic, content_type?, platform?, lang?)**: Writing brief with hook examples, patent strategies, CTA, scoring dimensions. content_type: opinion, story, debate, howto, list, question, news, meme (default: debate). platform: threads/instagram/facebook. lang: auto/en/zh-TW.
+- **get_scoring_guide(lang?, topic?)**: 5-dimension patent scoring. Hook Power 25%, Engagement Trigger 25%, Conversation Durability 20%, Velocity Potential 15%, Format Score 15%. Score ≥${minOverall} required to publish.
+- **get_platform_specs(platform?, lang?)**: Platform specs: char limits, algorithm signals, best posting times.
+- **get_review_checklist(platform?, lang?, topic?)**: Quality review checklist (9 checks) before publishing.
+- **get_reel_guide(style?, duration?, lang?, topic?)**: Reels script guide. style: educational/storytelling/listicle. duration: seconds (default 30).
 
-**Threads Search (1 tool):**
-- **search_threads_posts(query)**: Search Threads posts, sorted by heat score.
+**Browser Rendering (1 tool):**
+- **render_page(url, format?)**: Render JS-heavy pages via Cloudflare Browser. format: markdown (default), content (HTML), json (structured).
 
 ### 4. studio (2 tools — publishing + history, in-process)
-- **publish_to_threads(text, account_id, score, image_url?, poll_options?, link_comment?, tag?)**: Publish to Threads via Graph API. Quality gate: score ≥ 70 required. Use account ID from the Social Accounts table below. Token is read from DB automatically.
+- **publish_to_threads(text, account_id, score, image_url?, poll_options?, link_comment?, tag?)**: Publish to Threads via Graph API. Quality gate: score ≥ ${minOverall} required. Use account ID from the Social Accounts table below. Token is read from DB automatically.
 - **get_publish_history(limit?)**: Query local publish records (no API token needed).
 
 ## Social Accounts
@@ -187,8 +189,8 @@ When writing social posts, check ALL 5 dimensions from Meta's ranking patents:
 | 5 | Mobile-scannable? | Multi-modal | Line breaks, arrow lists, no text walls | Split long sentences, add separators |
 
 **Quality Gates (ALL must pass before publishing):**
-- Overall Score ≥ 70
-- **Conversation Durability ≥ 55** (most commonly missed — add 轉折/爭議面 if below)
+- Overall Score ≥ ${minOverall}
+- **Conversation Durability ≥ ${minConversation}** (most commonly missed — add 轉折/爭議面 if below)
 - Hook: 10-45 chars with number or contrast
 - CTA: clear question or poll
 - Timeline: all time words verified per table above
@@ -255,7 +257,7 @@ When writing social posts, check ALL 5 dimensions from Meta's ranking patents:
 2. **Read Source**: browser_markdown(url) for each candidate — MANDATORY, never skip
 3. **Verify Timeline**: Check dates, map to time words, discard stale data
 4. **Create**: get_content_brief(topic) → LLM writes → patent check (5 dimensions) → post type decision → generate image (MANDATORY)
-5. **Review**: get_review_checklist + get_scoring_guide → ALL quality gates must pass (≥70, convo ≥55)
+5. **Review**: get_review_checklist + get_scoring_guide → ALL quality gates must pass (≥${minOverall}, convo ≥${minConversation})
 6. **Publish**: publish_to_threads(text, account_id, score, image_url?, poll_options?, link_comment?, tag?)
 7. **Report**: output summary with scores, sources, timeline verification, image path
 
@@ -324,7 +326,8 @@ class MessageQueue {
   }
 }
 
-export class AgentSession {
+export class AgentSession implements ICliSession {
+  readonly cliName = "claude";
   private queue = new MessageQueue();
   private outputIterator: AsyncIterator<any> | null = null;
   private abortController = new AbortController();
@@ -357,7 +360,7 @@ export class AgentSession {
       allowedTools.push(`mcp__${name}`);
     }
 
-    let systemPrompt = buildSystemPrompt(lang, accounts);
+    let systemPrompt = buildSystemPrompt(lang, accounts, settings.minOverallScore, settings.minConversationScore);
 
     // Append conversation history for resumed sessions
     if (resumeContext) {

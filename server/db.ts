@@ -4,10 +4,39 @@ import path from "path";
 import { fileURLToPath } from "url";
 import type { Session, Message, PublishRecord, SocialAccount, ScheduledTask, TaskExecution, TaskExecutionStatus, TaskTrigger } from "./types.js";
 
+import { existsSync, mkdirSync, copyFileSync } from "fs";
+import { homedir } from "os";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const DB_PATH = path.join(__dirname, "../data/studio.db");
+// In packaged Electron app, store DB in user data dir (survives reinstalls).
+// In dev mode, use project-local data/.
+function resolveDbPath(): string {
+  const localPath = path.join(__dirname, "../data/studio.db");
+
+  // Detect Electron packaged app (asar in path)
+  if (__dirname.includes("app.asar")) {
+    const userDataDir = path.join(homedir(), "Library", "Application Support", "Claude World Studio");
+    if (!existsSync(userDataDir)) mkdirSync(userDataDir, { recursive: true });
+    const userDbPath = path.join(userDataDir, "studio.db");
+
+    // Migrate: copy bundled DB to user dir on first launch (but don't overwrite existing)
+    if (!existsSync(userDbPath)) {
+      const bundledDb = localPath.replace("app.asar", "app.asar.unpacked");
+      if (existsSync(bundledDb)) {
+        copyFileSync(bundledDb, userDbPath);
+        console.log(`[DB] Migrated bundled DB to ${userDbPath}`);
+      }
+    }
+    console.log(`[DB] Using user data: ${userDbPath}`);
+    return userDbPath;
+  }
+
+  return localPath;
+}
+
+const DB_PATH = resolveDbPath();
 
 const db = new Database(DB_PATH);
 

@@ -1,5 +1,8 @@
-import type { WSClient, Language, Message } from "./types.js";
-import { AgentSession } from "./ai-client.js";
+import type { WSClient, Language, Message, CliCommand } from "./types.js";
+import type { ICliSession } from "./cli-session.js";
+import { AgentSession, buildSystemPrompt } from "./ai-client.js";
+import { SubprocessCliSession } from "./subprocess-cli-session.js";
+import { getSettings, buildMcpServers, writeMcpConfigFile } from "./mcp-config.js";
 import store from "./db.js";
 
 /**
@@ -33,14 +36,41 @@ function buildResumeContext(messages: Message[], maxMessages = 30): string | und
 
 export class Session {
   public readonly sessionId: string;
+  public readonly cliName: string;
   private subscribers: Set<WSClient> = new Set();
-  private agentSession: AgentSession;
+  private cliSession: ICliSession;
   private isListening = false;
 
   constructor(sessionId: string, workspacePath?: string, language?: Language, previousMessages?: Message[]) {
     this.sessionId = sessionId;
-    const resumeContext = previousMessages ? buildResumeContext(previousMessages) : undefined;
-    this.agentSession = new AgentSession(workspacePath, language, resumeContext);
+    const settings = getSettings();
+    const ALLOWED_CLIS: CliCommand[] = ["claude", "codex", "gemini", "opencode", "aider", "gh-copilot"];
+    const rawCli = (settings as any).cliPrimary || "claude";
+    const cliPrimary: CliCommand = ALLOWED_CLIS.includes(rawCli) ? rawCli : "claude";
+
+    if (cliPrimary === "claude") {
+      // Use Claude Agent SDK (existing behavior)
+      const resumeContext = previousMessages ? buildResumeContext(previousMessages) : undefined;
+      this.cliSession = new AgentSession(workspacePath, language, resumeContext);
+      this.cliName = "claude";
+    } else {
+      // Use external CLI subprocess
+      const lang = language || settings.language || "zh-TW";
+      const accounts = store.getAllAccounts();
+      const systemPrompt = buildSystemPrompt(lang, accounts, settings.minOverallScore, settings.minConversationScore);
+      const cwd = workspacePath || settings.defaultWorkspace || process.cwd();
+
+      // Write MCP config file for external CLIs
+      let mcpConfigPath: string | undefined;
+      try {
+        mcpConfigPath = writeMcpConfigFile(settings);
+      } catch (err) {
+        console.warn(`[Session] MCP config write failed, MCP tools unavailable:`, (err as Error).message);
+      }
+
+      this.cliSession = new SubprocessCliSession(cliPrimary, cwd, systemPrompt, mcpConfigPath);
+      this.cliName = cliPrimary;
+    }
   }
 
   private async startListening() {
@@ -48,7 +78,7 @@ export class Session {
     this.isListening = true;
 
     try {
-      for await (const message of this.agentSession.getOutputStream()) {
+      for await (const message of this.cliSession.getOutputStream()) {
         this.handleSDKMessage(message);
       }
     } catch (error) {
@@ -69,7 +99,7 @@ export class Session {
       sessionId: this.sessionId,
     });
 
-    this.agentSession.sendMessage(content);
+    this.cliSession.sendMessage(content);
 
     if (!this.isListening) {
       this.startListening();
@@ -197,6 +227,6 @@ export class Session {
   }
 
   close() {
-    this.agentSession.close();
+    this.cliSession.close();
   }
 }

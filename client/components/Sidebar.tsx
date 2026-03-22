@@ -71,7 +71,10 @@ export function Sidebar({
   return (
     <div className="flex flex-col h-full bg-gray-900 text-white">
       {/* Header — extra top padding in Electron for traffic lights */}
-      <div className={`p-4 border-b border-gray-700${navigator.userAgent.includes('Electron') ? ' pt-10' : ''}`}>
+      <div
+        className={`p-4 border-b border-gray-700${navigator.userAgent.includes('Electron') ? ' pt-12' : ''}`}
+        style={navigator.userAgent.includes('Electron') ? { WebkitAppRegion: 'drag' } as React.CSSProperties : undefined}
+      >
         <div className="flex items-center gap-2 mb-3">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
             CW
@@ -89,6 +92,7 @@ export function Sidebar({
         <button
           onClick={onNewSession}
           className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors text-sm font-medium"
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

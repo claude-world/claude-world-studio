@@ -11,8 +11,32 @@ Full CLI for Claude World Studio. Maps 1:1 to the REST API + WebSocket.
 ## Install
 
 ```bash
-npm install -g @claude-world/studio   # global install
-# or: node bin/cli.js <command>       # from source
+# Option A: npm global (recommended)
+npm install -g @claude-world/studio
+studio <command>
+
+# Option B: From source
+git clone https://github.com/claude-world/claude-world-studio.git
+cd claude-world-studio && npm install
+node bin/cli.js <command>
+# or: npm link && studio <command>
+
+# Option C: Electron Desktop App
+npm run electron:dev            # development
+npm run electron:build          # production (.app + .dmg)
+```
+
+## MCP Server Setup
+
+```bash
+# One-command setup (uvx preferred, auto-cached)
+npx @claude-world/studio setup-mcp
+
+# Or legacy venv mode
+npx @claude-world/studio setup-mcp --venv
+
+# Update installed servers
+npx @claude-world/studio setup-mcp --update
 ```
 
 ## Quick Reference
@@ -103,20 +127,38 @@ The `chat` command connects via WebSocket for real-time streaming.
 
 **Ctrl+C** sends an interrupt to the session and exits with code 130.
 
-## Headless Pipeline Example
+## Production Pipeline Examples
+
+### Headless: Research → Publish
 
 ```bash
-# Full pipeline: create session → chat → publish
 SESSION=$(studio session create --title "Auto Pipeline" --json | jq -r '.id')
-
-# Research
 studio chat --session $SESSION --message "Find top 3 trending AI topics in Taiwan" --json > trends.jsonl
-
-# Get the assistant's final response
 RESPONSE=$(grep '"type":"assistant_message"' trends.jsonl | tail -1 | jq -r '.content')
-
-# Publish
 studio publish --account acc123 --text "$RESPONSE" --score 80 --json
+```
+
+### Freestyle: Full Autopilot
+
+```bash
+studio chat --message "Freestyle: find trending topics, research the best, \
+  write a Threads post, score it, and publish to @mybrand" --json
+```
+
+### Scheduled: Daily Content via Cron
+
+```bash
+# System cron (daily 9 AM)
+0 9 * * * studio chat --message "Freestyle pipeline for @mybrand" --json >> ~/studio.log 2>&1
+```
+
+Or use Studio's built-in scheduler: **Settings > Scheduled Tasks** with per-account targeting and quality gates.
+
+### Multi-Account: Different Personas
+
+```bash
+studio publish --account brand-tech --text "Technical deep-dive..." --score 85
+studio publish --account brand-casual --text "Hey did you hear..." --score 75
 ```
 
 ## Settings Keys
@@ -124,11 +166,14 @@ studio publish --account acc123 --text "$RESPONSE" --score 80 --json
 | CLI Flag | API Key | Description |
 |----------|---------|-------------|
 | `--language` | language | UI language (en, zh-TW, ja) |
+| `--theme` | theme | UI theme (light, dark, system) |
 | `--trend-pulse-python` | trendPulseVenvPython | trend-pulse venv python path |
 | `--cf-browser-python` | cfBrowserVenvPython | cf-browser venv python path |
 | `--notebooklm-path` | notebooklmServerPath | NotebookLM server.py path |
 | `--cf-browser-url` | cfBrowserUrl | CF Browser worker URL |
 | `--cf-browser-key` | cfBrowserApiKey | CF Browser API key |
+| `--cf-account-id` | cfAccountId | Cloudflare account ID (cf-api mode) |
+| `--cf-api-token` | cfApiToken | Cloudflare API token (cf-api mode) |
 | `--default-workspace` | defaultWorkspace | Default workspace path |
 
 ## Instructions for Claude Code

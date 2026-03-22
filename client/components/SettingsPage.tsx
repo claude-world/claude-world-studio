@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import type { Language } from "../App";
 
 const T = {
@@ -58,10 +58,16 @@ const T = {
     cfBrowserPath: "cf-browser Python 路徑",
     notebooklmPath: "NotebookLM 伺服器路徑",
     defaultWorkspace: "預設工作目錄",
+    minOverallScore: "最低總分門檻",
+    minConversationScore: "最低對話持久性門檻",
+    qualityGates: "品質門檻",
     notInstalled: "未安裝",
     primaryCantDisable: "主要 CLI 無法停用",
+    primary: "主要",
     disable: "停用",
     enable: "啟用",
+    tooltipDetected: "已偵測",
+    tooltipNotFound: "未找到",
   },
   en: {
     settings: "Settings",
@@ -119,10 +125,16 @@ const T = {
     cfBrowserPath: "cf-browser Python path",
     notebooklmPath: "NotebookLM server path",
     defaultWorkspace: "Default workspace path",
+    minOverallScore: "Min overall score",
+    minConversationScore: "Min conversation durability",
+    qualityGates: "Quality Gates",
     notInstalled: "Not installed",
     primaryCantDisable: "Primary CLI cannot be disabled",
+    primary: "Primary",
     disable: "Disable",
     enable: "Enable",
+    tooltipDetected: "Detected",
+    tooltipNotFound: "Not found",
   },
   ja: {
     settings: "設定",
@@ -180,10 +192,16 @@ const T = {
     cfBrowserPath: "cf-browser Python パス",
     notebooklmPath: "NotebookLM サーバーパス",
     defaultWorkspace: "デフォルトワークスペースパス",
+    minOverallScore: "最低総合スコア",
+    minConversationScore: "最低会話持続性スコア",
+    qualityGates: "品質ゲート",
     notInstalled: "未インストール",
     primaryCantDisable: "プライマリ CLI は無効にできません",
+    primary: "プライマリ",
     disable: "無効化",
     enable: "有効化",
+    tooltipDetected: "検出済み",
+    tooltipNotFound: "未検出",
   },
 };
 
@@ -204,6 +222,8 @@ interface SettingsData {
   cfApiToken: string;
   cfBrowserMode: "cf-api" | "worker";
   defaultWorkspace: string;
+  minOverallScore: string;
+  minConversationScore: string;
 }
 
 type DetectedMap = Record<string, { value: string; found: boolean }>;
@@ -222,6 +242,11 @@ interface FieldDef {
   label: string;
   placeholder: string;
   sensitive?: boolean;
+  browseDir?: boolean;
+  inputType?: string;
+  min?: number;
+  max?: number;
+  step?: number;
 }
 
 interface SettingGroup {
@@ -268,7 +293,14 @@ function getSettingGroups(t: typeof T["en"]): SettingGroup[] {
     {
       title: t.general,
       fields: [
-        { key: "defaultWorkspace", label: t.defaultWorkspace, placeholder: "/path/to/workspace" },
+        { key: "defaultWorkspace", label: t.defaultWorkspace, placeholder: "/path/to/workspace", browseDir: true },
+      ],
+    },
+    {
+      title: t.qualityGates,
+      fields: [
+        { key: "minOverallScore", label: t.minOverallScore, placeholder: "70", inputType: "number", min: 0, max: 100, step: 1 },
+        { key: "minConversationScore", label: t.minConversationScore, placeholder: "55", inputType: "number", min: 0, max: 100, step: 1 },
       ],
     },
   ];
@@ -280,9 +312,9 @@ const LANGUAGE_OPTIONS: { code: Language; label: string }[] = [
   { code: "ja", label: "日本語 (Japanese)" },
 ];
 
-function StatusDot({ found }: { found: boolean }) {
+function StatusDot({ found, tooltipFound, tooltipNotFound }: { found: boolean; tooltipFound?: string; tooltipNotFound?: string }) {
   return (
-    <span className={`inline-block w-2 h-2 rounded-full ${found ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"}`} title={found ? "Detected" : "Not found"} />
+    <span className={`inline-block w-2 h-2 rounded-full ${found ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"}`} title={found ? (tooltipFound || "") : (tooltipNotFound || "")} />
   );
 }
 
@@ -333,35 +365,41 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
   const [cliRoutingMode, setCliRoutingMode] = useState<"primary" | "auto-dispatch">("primary");
   const [cliEnabledSet, setCliEnabledSet] = useState<Set<string>>(new Set());
   const [cliPrimary, setCliPrimary] = useState("");
+  const hasSavedCliConfig = useRef(false);
 
   useEffect(() => {
     if (!isVisible) return;
-    setDetectingClis(true);
-    // Fetch settings + CLI detection in parallel, apply together to avoid race
-    Promise.all([
-      fetch("/api/settings").then((r) => r.ok ? r.json() : {}).catch(() => ({})),
-      fetch("/api/settings/detect-clis").then((r) => r.ok ? r.json() : []).catch(() => []),
-    ]).then(([settingsData, cliData]: [any, CliInfo[]]) => {
-      // Apply settings
+    hasSavedCliConfig.current = false;
+
+    // Phase 1: Load settings from DB immediately (instant render)
+    fetch("/api/settings").then((r) => r.ok ? r.json() : {}).catch(() => ({})).then((settingsData: any) => {
       setSettings(settingsData);
       if (settingsData.cliRoutingMode) setCliRoutingMode(settingsData.cliRoutingMode);
-      // Apply CLI detection
+      if (settingsData.cliPrimary) setCliPrimary(settingsData.cliPrimary);
+      if (settingsData.cliEnabledList) {
+        setCliEnabledSet(new Set(settingsData.cliEnabledList.split(",").filter(Boolean)));
+        hasSavedCliConfig.current = true;
+      }
+    });
+
+    // Phase 2: Detect CLIs in background (updates version/install status)
+    setDetectingClis(true);
+    fetch("/api/settings/detect-clis").then((r) => r.ok ? r.json() : []).catch(() => []).then((cliData: CliInfo[]) => {
       setClis(cliData);
       const installedCommands = cliData.filter((c) => c.installed).map((c) => c.command);
-      // CLI enabled list: use saved config, or auto-enable all installed
-      if (settingsData.cliEnabledList) {
-        const saved = new Set<string>(settingsData.cliEnabledList.split(",").filter(Boolean));
-        setCliEnabledSet(saved);
-      } else {
-        setCliEnabledSet(new Set(installedCommands));
+
+      // Only auto-enable if user has no saved CLI config
+      if (!hasSavedCliConfig.current) {
+        setCliEnabledSet((prev) => {
+          if (prev.size === 0) return new Set(installedCommands);
+          return prev;
+        });
       }
-      // Primary: use saved, or first installed CLI
-      const savedPrimary = settingsData.cliPrimary;
-      if (savedPrimary && installedCommands.includes(savedPrimary)) {
-        setCliPrimary(savedPrimary);
-      } else {
-        setCliPrimary(installedCommands[0] || "claude");
-      }
+      // If no saved primary, use first installed (but preserve user's saved choice)
+      setCliPrimary((prev) => {
+        if (!prev) return installedCommands[0] || "claude";
+        return prev;
+      });
     }).finally(() => setDetectingClis(false));
   }, [isVisible]);
 
@@ -369,6 +407,7 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
   useEffect(() => {
     if (cliEnabledSet.size <= 1 && cliRoutingMode === "auto-dispatch") {
       setCliRoutingMode("primary");
+      saveCliSettings(cliPrimary, "primary", cliEnabledSet);
     }
   }, [cliEnabledSet.size, cliRoutingMode]);
 
@@ -386,11 +425,24 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
     setDetecting(false);
   };
 
+  const saveCliSettings = (primary: string, routing: string, enabled: Set<string>) => {
+    fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        cliPrimary: primary,
+        cliRoutingMode: routing,
+        cliEnabledList: [...enabled].join(","),
+      }),
+    }).catch(() => {});
+  };
+
   const toggleCliEnabled = (command: string) => {
     if (command === cliPrimary) return; // Primary CLI cannot be disabled
     setCliEnabledSet((prev) => {
       const next = new Set(prev);
       next.has(command) ? next.delete(command) : next.add(command);
+      saveCliSettings(cliPrimary, cliRoutingMode, next);
       return next;
     });
   };
@@ -398,13 +450,16 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
   const handleSetPrimary = (command: string) => {
     setCliPrimary(command);
     // Ensure primary is always enabled
-    setCliEnabledSet((prev) => new Set([...prev, command]));
+    const newEnabled = new Set([...cliEnabledSet, command]);
+    setCliEnabledSet(newEnabled);
+    saveCliSettings(command, cliRoutingMode, newEnabled);
   };
 
   const handleApplyDetected = async () => {
     const updates: Partial<SettingsData> = {};
     for (const [key, info] of Object.entries(detected)) {
-      if (info.found && info.value) {
+      // Only apply detected values for keys that the user hasn't already set
+      if (info.found && info.value && !(settings as any)[key]) {
         (updates as any)[key] = info.value;
       }
     }
@@ -476,7 +531,7 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
           </div>
           {detected["uvxAvailable"]?.found && (
             <div className="mt-2 px-3 py-2 bg-emerald-100 border border-emerald-300 rounded-md flex items-center gap-2 text-xs text-emerald-800 dark:bg-emerald-900/50 dark:border-emerald-600 dark:text-emerald-300">
-              <StatusDot found={true} />
+              <StatusDot found={true} tooltipFound={t.tooltipDetected} tooltipNotFound={t.tooltipNotFound} />
               <span>{t.uvxDetected}</span>
             </div>
           )}
@@ -489,7 +544,7 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
                 const isUvxAuto = UVX_AUTO_KEYS.has(key) && detected["uvxAvailable"]?.found && info.value?.startsWith("uvx:");
                 return (
                   <div key={key} className="flex items-center gap-1.5 text-xs">
-                    <StatusDot found={info.found} />
+                    <StatusDot found={info.found} tooltipFound={t.tooltipDetected} tooltipNotFound={t.tooltipNotFound} />
                     <span className={info.found ? "text-gray-700 dark:text-gray-200" : "text-gray-400 dark:text-gray-500"}>
                       {label}
                       {isUvxAuto && <span className="ml-1 text-emerald-600 dark:text-emerald-400 font-medium">(uvx)</span>}
@@ -556,7 +611,7 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
                           )}
                           {isPrimary && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 font-medium">
-                              Primary
+                              {t.primary}
                             </span>
                           )}
                         </div>
@@ -602,7 +657,7 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
                 }`}>
                   <input type="radio" name="cliRoutingMode" value="primary"
                     checked={cliRoutingMode === "primary"}
-                    onChange={() => setCliRoutingMode("primary")}
+                    onChange={() => { setCliRoutingMode("primary"); saveCliSettings(cliPrimary, "primary", cliEnabledSet); }}
                     className="mt-0.5 text-purple-600" />
                   <div>
                     <div className="text-sm font-medium text-gray-700 dark:text-gray-200">{t.primaryOnly}</div>
@@ -618,7 +673,7 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
                 }`}>
                   <input type="radio" name="cliRoutingMode" value="auto-dispatch"
                     checked={cliRoutingMode === "auto-dispatch"}
-                    onChange={() => setCliRoutingMode("auto-dispatch")}
+                    onChange={() => { setCliRoutingMode("auto-dispatch"); saveCliSettings(cliPrimary, "auto-dispatch", cliEnabledSet); }}
                     className="mt-0.5 text-purple-600" />
                   <div>
                     <div className="text-sm font-medium text-gray-700 dark:text-gray-200">{t.autoDispatch}</div>
@@ -659,27 +714,47 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
                 return (
                   <div key={field.key}>
                     <label className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2 mb-1">
-                      {uvxHandled ? <StatusDot found={true} /> : hasValue ? <StatusDot found={true} /> : det ? <StatusDot found={det.found} /> : null}
+                      {uvxHandled ? <StatusDot found={true} tooltipFound={t.tooltipDetected} tooltipNotFound={t.tooltipNotFound} /> : hasValue ? <StatusDot found={true} tooltipFound={t.tooltipDetected} tooltipNotFound={t.tooltipNotFound} /> : det ? <StatusDot found={det.found} tooltipFound={t.tooltipDetected} tooltipNotFound={t.tooltipNotFound} /> : null}
                       {field.label}
-                      {uvxHandled && <span className="text-xs text-emerald-600 font-medium">auto (uvx)</span>}
+                      {uvxHandled && <span className="text-xs text-emerald-600 font-medium">{t.autoUvx}</span>}
                       {!uvxHandled && det?.found && !hasValue && (
                         <button onClick={() => setSettings((prev) => ({ ...prev, [field.key]: det.value }))} className="text-xs text-emerald-600 hover:text-emerald-800 font-medium ml-1">
-                          use detected
+                          {t.useDetected}
                         </button>
                       )}
                     </label>
                     {uvxHandled ? (
                       <div className="px-3 py-2 border border-emerald-200 bg-emerald-50/30 rounded-lg text-sm text-emerald-700 font-mono dark:border-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300">
-                        uvx auto-configured
+                        {t.uvxAutoConfigured}
                       </div>
                     ) : (
-                      <input
-                        type={field.sensitive ? "password" : "text"}
-                        value={(settings as any)[field.key] || ""}
-                        onChange={(e) => setSettings((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                        placeholder={field.placeholder}
-                        className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono ${hasValue ? "border-green-300 bg-green-50/30 dark:border-green-600 dark:bg-green-900/20 dark:text-gray-100" : "border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"}`}
-                      />
+                      <div className={field.browseDir ? "flex gap-2" : ""}>
+                        <input
+                          type={field.sensitive ? "password" : field.inputType || "text"}
+                          value={(settings as any)[field.key] || ""}
+                          onChange={(e) => setSettings((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                          placeholder={field.placeholder}
+                          {...(field.min !== undefined ? { min: field.min } : {})}
+                          {...(field.max !== undefined ? { max: field.max } : {})}
+                          {...(field.step !== undefined ? { step: field.step } : {})}
+                          className={`${field.browseDir ? "flex-1" : "w-full"} px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono ${hasValue ? "border-green-300 bg-green-50/30 dark:border-green-600 dark:bg-green-900/20 dark:text-gray-100" : "border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"}`}
+                        />
+                        {field.browseDir && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                const r = await fetch("/api/settings/pick-folder");
+                                const d = await r.json();
+                                if (d.path) setSettings((prev) => ({ ...prev, [field.key]: d.path }));
+                              } catch {}
+                            }}
+                            className="px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-600 dark:text-gray-300 shrink-0"
+                          >
+                            📂
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 );
@@ -721,7 +796,7 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
                 {(settings as any).cfBrowserMode === "worker" ? (
                   <div className="space-y-3 ml-7">
                     <div>
-                      <label className="text-sm text-gray-600 dark:text-gray-400 mb-1 block">Worker URL</label>
+                      <label className="text-sm text-gray-600 dark:text-gray-400 mb-1 block">{t.workerUrl}</label>
                       <input type="text"
                         value={(settings as any).cfBrowserUrl || ""}
                         onChange={(e) => setSettings((prev) => ({ ...prev, cfBrowserUrl: e.target.value }))}
@@ -730,7 +805,7 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
                       />
                     </div>
                     <div>
-                      <label className="text-sm text-gray-600 dark:text-gray-400 mb-1 block">Worker API Key</label>
+                      <label className="text-sm text-gray-600 dark:text-gray-400 mb-1 block">{t.workerApiKey}</label>
                       <input type="password"
                         value={(settings as any).cfBrowserApiKey || ""}
                         onChange={(e) => setSettings((prev) => ({ ...prev, cfBrowserApiKey: e.target.value }))}
@@ -742,7 +817,7 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
                 ) : (
                   <div className="space-y-3 ml-7">
                     <div>
-                      <label className="text-sm text-gray-600 dark:text-gray-400 mb-1 block">Account ID</label>
+                      <label className="text-sm text-gray-600 dark:text-gray-400 mb-1 block">{t.accountId}</label>
                       <input type="text"
                         value={(settings as any).cfAccountId || ""}
                         onChange={(e) => setSettings((prev) => ({ ...prev, cfAccountId: e.target.value }))}
@@ -750,15 +825,15 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
                         className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                       />
                       <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                        Found in your Cloudflare dashboard sidebar.
+                        {t.accountIdHint}
                       </p>
                     </div>
                     <div>
                       <label className="text-sm text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-2">
-                        API Token
+                        {t.apiToken}
                         <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer"
                           className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
-                          Get API Token
+                          {t.getApiToken}
                           <svg className="w-3 h-3 inline ml-0.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                           </svg>
@@ -771,7 +846,7 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
                         className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                       />
                       <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                        Create a token with <strong>Account / Workers Browser Rendering / Edit</strong> permission.
+                        {t.apiTokenHint}
                       </p>
                     </div>
                   </div>
@@ -784,7 +859,7 @@ export function SettingsPage({ isVisible, onClose, language, onLanguageChange }:
         {/* Save */}
         <div className="flex items-center gap-3">
           <button onClick={handleSave} disabled={saving} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm">
-            {saving ? "Saving..." : "Save Settings"}
+            {saving ? t.saving : t.saveSettings}
           </button>
           {message && <span className="text-sm text-gray-600 dark:text-gray-400">{message}</span>}
         </div>

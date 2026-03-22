@@ -27,6 +27,7 @@ export interface Message {
 }
 
 export type Language = "zh-TW" | "en" | "ja";
+export type CliCommand = "claude" | "codex" | "gemini" | "opencode" | "aider" | "gh-copilot";
 
 export type Platform = "threads" | "instagram";
 
@@ -58,6 +59,9 @@ export interface Settings {
   cfAccountId: string;
   cfApiToken: string;
   defaultWorkspace: string;
+  // Quality gate thresholds
+  minOverallScore: number;
+  minConversationScore: number;
 }
 
 export interface PublishRecord {

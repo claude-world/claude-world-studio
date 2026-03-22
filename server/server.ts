@@ -184,6 +184,7 @@ wss.on("connection", (ws: WSClient) => {
               messages,
               sessionId: message.sessionId,
               running: session.isRunning(),
+              cliName: session.cliName,
             })
           );
           break;

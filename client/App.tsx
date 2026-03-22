@@ -38,7 +38,7 @@ interface Message {
 /** Discriminated union for server→client WebSocket messages */
 type ServerWSMessage =
   | { type: "connected" }
-  | { type: "history"; messages: Message[]; sessionId: string; running?: boolean }
+  | { type: "history"; messages: Message[]; sessionId: string; running?: boolean; cliName?: string }
   | { type: "user_message"; content: string; sessionId: string }
   | { type: "assistant_message"; content: string; sessionId: string }
   | { type: "tool_use"; toolName: string; toolId: string; toolInput: Record<string, unknown>; sessionId: string }
@@ -60,6 +60,7 @@ export default function App() {
   const selectedSessionRef = useRef<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [cliName, setCliName] = useState("claude");
   const [showFiles, setShowFiles] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showSocial, setShowSocial] = useState(false);
@@ -121,6 +122,10 @@ export default function App() {
         // Restore loading indicator if the session agent is still running
         if (message.running) {
           setIsLoading(true);
+        }
+        // Track which CLI is being used
+        if (message.cliName) {
+          setCliName(message.cliName);
         }
         break;
       }
@@ -343,6 +348,7 @@ export default function App() {
     // Don't force isLoading=false here — the server's history response
     // will include a `running` flag to restore loading state correctly
     setIsLoading(false); // temporary until history arrives
+    setCliName("claude"); // reset until history arrives with actual cliName
     setShowSettings(false);
     setShowSocial(false);
     setShowScheduled(false);
@@ -490,6 +496,7 @@ export default function App() {
             accounts={accounts}
             targetAccountId={targetAccountId}
             onTargetAccountChange={setTargetAccountId}
+            cliName={cliName}
           />
 
           <FileExplorer

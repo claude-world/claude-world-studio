@@ -8,13 +8,66 @@ user_invocable: true
 
 AI-powered content pipeline: trend discovery -> deep research -> algorithm-optimized writing -> social publishing.
 
-## MCP Servers Required
+## MCP Servers Setup
 
-Install via uvx (one-time, auto-cached):
+### Quick Setup (uvx — recommended)
+
+If you have `uv` installed, run the setup wizard:
+
+```bash
+npx @claude-world/studio setup-mcp
+```
+
+Or install individually (one-time, auto-cached):
+
 ```bash
 uvx --from 'trend-pulse[mcp]' trend-pulse-server
 uvx --from cf-browser-mcp cf-browser-mcp
 uvx --from notebooklm-skill notebooklm-mcp
+```
+
+### Manual Setup (venv)
+
+```bash
+# trend-pulse (zero auth)
+git clone https://github.com/claude-world/trend-pulse.git
+cd trend-pulse && python3 -m venv .venv && .venv/bin/pip install -e ".[mcp]"
+
+# cf-browser (requires Cloudflare account)
+git clone https://github.com/claude-world/cf-browser.git
+cd cf-browser/mcp-server && python3 -m venv .venv
+.venv/bin/pip install -e ../sdk && .venv/bin/pip install -e .
+
+# notebooklm (requires Google account)
+git clone https://github.com/claude-world/notebooklm-skill.git
+cd notebooklm-skill && python3 -m venv .venv
+.venv/bin/pip install notebooklm-py playwright fastmcp python-dotenv httpx
+```
+
+### For Claude Code CLI (MCP-only, no Studio UI)
+
+Add to your project's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "trend-pulse": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["--from", "trend-pulse[mcp]", "trend-pulse-server"]
+    },
+    "cf-browser": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["--from", "cf-browser-mcp", "cf-browser-mcp"]
+    },
+    "notebooklm": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["--from", "notebooklm-skill", "notebooklm-mcp"]
+    }
+  }
+}
 ```
 
 ## MCP Tools Reference
@@ -173,3 +226,34 @@ get_trending with sources="" to query ALL 20 sources. Do NOT filter unless user 
 8. **Review**: get_review_checklist — final check
 9. **NotebookLM** (optional): create notebook -> generate artifacts
 10. **Publish**: provide ready-to-post content or use publish tool
+
+## Production Integration
+
+### Headless CLI Pipeline
+
+```bash
+# Full automation: create session → research → publish
+SESSION=$(studio session create --title "Auto Pipeline" --json | jq -r '.id')
+studio chat --session $SESSION --message "Find top 3 trending AI topics in Taiwan" --json > trends.jsonl
+RESPONSE=$(grep '"type":"assistant_message"' trends.jsonl | tail -1 | jq -r '.content')
+studio publish --account acc123 --text "$RESPONSE" --score 80 --json
+```
+
+### Scheduled Automation
+
+Set up recurring pipelines via the Scheduled Tasks UI or cron:
+
+```bash
+# Run daily at 9 AM via system cron
+0 9 * * * studio chat --message "Freestyle: find and publish trending content" --json >> /var/log/studio.log 2>&1
+```
+
+Or use Studio's built-in scheduler (Settings > Scheduled Tasks) for per-account targeting with quality gates.
+
+### Multi-Account Publishing
+
+```bash
+# Publish to multiple accounts with different personas
+studio publish --account brand-a --text "Technical angle" --score 85
+studio publish --account brand-b --text "Casual angle" --score 75
+```
