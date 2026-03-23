@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.8.0] - 2026-03-24
+
+### Added
+
+- **Account Posts page** — view publish history per account with insights (views, likes, replies, reposts)
+- **Traffic Dashboard page** — aggregated traffic metrics across all accounts
+- **Post insights cache** — SQLite table caches Threads API insights data, with batch fetch and per-account queries
+- **Sidebar navigation** — Posts and Traffic buttons in sidebar for quick access
+- **Test suite** — 32 process lifecycle tests covering all shutdown paths (`npm test`)
+
+### Fixed
+
+- **Orphan process prevention** — comprehensive fix across all process lifecycle paths (4 rounds of review):
+  - **Server shutdown**: `shutdown()` now closes all active sessions, clears intervals, and calls `process.exit()` with 5s forced-exit backstop. Added `SIGHUP` handler for terminal close.
+  - **Electron quit**: `killServer()` is now Promise-based — `before-quit` waits for server process to actually exit before allowing quit. 6s safety timer prevents hang if exit event is missed.
+  - **CLI subprocesses**: unified `killProcess()` with SIGTERM → 3s SIGKILL fallback (`.unref()`'d). Captured `queue` ref prevents stale exit handlers from corrupting the next turn's EventQueue.
+  - **Task scheduler**: `stop()` aborts all running Agent SDK sessions via tracked AbortControllers. `executeTask()` has stopped guard. Retry logic skips when scheduler is stopping (pre-sleep + post-sleep checks).
+
+### Changed
+
+- **threads-viral-agent skill** — mandatory `link_comment` for source URLs, clearer checklist formatting
+
 ## [1.7.0] - 2026-03-22
 
 ### Added

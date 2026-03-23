@@ -139,6 +139,8 @@ function parseTaskResult(fullOutput: string): TaskResult | null {
 export class TaskScheduler {
   private jobs = new Map<string, cron.ScheduledTask>();
   private runningTasks = new Set<string>(); // overlap guard by task_id
+  private runningAbortControllers = new Map<string, AbortController>();
+  private stopped = false;
 
   constructor() {
     // Mark stale executions from previous server run
@@ -157,13 +159,19 @@ export class TaskScheduler {
     console.log(`[Scheduler] Started with ${tasks.length} enabled task(s)`);
   }
 
-  /** Stop all cron jobs */
+  /** Stop all cron jobs and abort running tasks */
   stop() {
+    this.stopped = true;
     for (const [id, job] of this.jobs) {
       job.stop();
     }
     this.jobs.clear();
-    console.log("[Scheduler] Stopped all jobs");
+    // Abort all running agent sessions
+    for (const [id, controller] of this.runningAbortControllers) {
+      controller.abort();
+    }
+    this.runningAbortControllers.clear();
+    console.log("[Scheduler] Stopped all jobs and aborted running tasks");
   }
 
   /** Register or re-register a cron job for a task */
@@ -201,6 +209,8 @@ export class TaskScheduler {
 
   /** Execute a task (called by cron tick or manual trigger) */
   async executeTask(taskId: string, triggeredBy: TaskTrigger, retryCount = 0): Promise<TaskExecution> {
+    if (this.stopped) throw new Error("Scheduler is stopped");
+
     const task = store.getScheduledTask(taskId);
     if (!task) throw new Error(`Task ${taskId} not found`);
 
@@ -268,8 +278,8 @@ export class TaskScheduler {
       const errorMsg = err instanceof Error ? err.message : String(err);
       console.error(`[Scheduler] Task "${task.name}" failed (attempt ${retryCount + 1}):`, errorMsg);
 
-      // Retry logic
-      if (retryCount < task.max_retries) {
+      // Retry logic (skip if scheduler is stopping)
+      if (!this.stopped && retryCount < task.max_retries) {
         console.log(`[Scheduler] Retrying task "${task.name}" in 30s (${retryCount + 1}/${task.max_retries})`);
         store.updateExecutionResult(execution.id, {
           status: "failed",
@@ -279,6 +289,16 @@ export class TaskScheduler {
         });
         this.runningTasks.delete(taskId);
         await new Promise((r) => setTimeout(r, 30000));
+        // Re-check after sleep — stop() may have been called during the 30s wait
+        if (this.stopped) {
+          store.updateExecutionResult(execution.id, {
+            status: "failed",
+            error: "Scheduler stopped during retry wait",
+            duration_ms: Date.now() - startTime,
+            retry_count: retryCount + 1,
+          });
+          return store.getExecution(execution.id) as TaskExecution;
+        }
         return this.executeTask(taskId, triggeredBy, retryCount + 1);
       }
 
@@ -313,6 +333,7 @@ export class TaskScheduler {
     }
 
     const abortController = new AbortController();
+    this.runningAbortControllers.set(task.id, abortController);
 
     // Timeout
     const timeoutId = setTimeout(() => {
@@ -361,6 +382,7 @@ export class TaskScheduler {
       return { fullOutput, costUsd };
     } finally {
       clearTimeout(timeoutId);
+      this.runningAbortControllers.delete(task.id);
     }
   }
 

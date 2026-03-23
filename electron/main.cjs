@@ -191,16 +191,40 @@ function buildMenu() {
 }
 
 function killServer() {
-  if (serverProcess) {
-    serverProcess.kill("SIGTERM");
-    // Force kill after 3 seconds
-    setTimeout(() => {
-      if (serverProcess) {
-        serverProcess.kill("SIGKILL");
-      }
+  return new Promise((resolve) => {
+    if (!serverProcess) return resolve();
+
+    const proc = serverProcess;
+    let settled = false;
+    let forceKillTimer;
+    let safetyTimer;
+
+    function done() {
+      if (settled) return;
+      settled = true;
+      clearTimeout(forceKillTimer);
+      clearTimeout(safetyTimer);
+      resolve();
+    }
+
+    // Absolute backstop: resolve even if exit event was missed
+    // (e.g. process died before our .once("exit") was registered).
+    // Declared before .once("exit") to avoid TDZ if exit fires synchronously.
+    safetyTimer = setTimeout(done, 6000);
+
+    // Resolve once the process actually exits
+    proc.once("exit", done);
+
+    proc.kill("SIGTERM");
+
+    // Force kill after 3s if SIGTERM didn't work
+    forceKillTimer = setTimeout(() => {
+      try { proc.kill("SIGKILL"); } catch {}
     }, 3000);
-  }
+  });
 }
+
+let isQuitting = false;
 
 app.whenReady().then(async () => {
   buildMenu();
@@ -216,12 +240,16 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
-  killServer();
   app.quit();
 });
 
-app.on("before-quit", () => {
-  killServer();
+app.on("before-quit", (event) => {
+  // Wait for server to actually exit before allowing quit
+  if (serverProcess && !isQuitting) {
+    isQuitting = true;
+    event.preventDefault();
+    killServer().then(() => app.quit());
+  }
 });
 
 app.on("activate", () => {

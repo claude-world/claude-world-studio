@@ -245,6 +245,7 @@ export class SubprocessCliSession implements ICliSession {
   readonly cliName: string;
   private eventQueue = new EventQueue();
   private process: ChildProcess | null = null;
+  private forceKillTimer: ReturnType<typeof setTimeout> | null = null;
   private workspacePath: string;
   private systemPrompt: string;
   private mcpConfigPath?: string;
@@ -264,10 +265,7 @@ export class SubprocessCliSession implements ICliSession {
 
   sendMessage(content: string) {
     // Kill previous process if still running
-    if (this.process) {
-      this.process.kill("SIGTERM");
-      this.process = null;
-    }
+    this.killProcess();
     // Reset event queue for new turn
     this.eventQueue.reset();
 
@@ -307,6 +305,9 @@ export class SubprocessCliSession implements ICliSession {
     }
 
     const parser = PARSERS[this.cliName] || parseClaudeLine;
+    // Capture queue reference so stale exit handlers from a killed process
+    // don't corrupt a reset queue belonging to the next sendMessage() call.
+    const queue = this.eventQueue;
 
     // Parse stdout JSONL line by line
     if (this.process.stdout) {
@@ -318,7 +319,7 @@ export class SubprocessCliSession implements ICliSession {
           const data = JSON.parse(trimmed);
           const events = parser(data);
           for (const event of events) {
-            this.eventQueue.push(event);
+            queue.push(event);
           }
         } catch {
           // Non-JSON line, ignore
@@ -338,20 +339,25 @@ export class SubprocessCliSession implements ICliSession {
 
     this.process.on("exit", (code) => {
       console.log(`[${this.cliName}] Process exited with code ${code}`);
+      this.process = null;
+      if (this.forceKillTimer) {
+        clearTimeout(this.forceKillTimer);
+        this.forceKillTimer = null;
+      }
 
       // If no result event was emitted, create one
-      this.eventQueue.push({
+      queue.push({
         type: "result",
         subtype: code === 0 ? "success" : "error",
         total_cost_usd: 0,
         duration_ms: 0,
       });
-      this.eventQueue.finish();
+      queue.finish();
     });
 
     this.process.on("error", (err) => {
       console.error(`[${this.cliName}] Spawn error:`, err.message);
-      this.eventQueue.push({
+      queue.push({
         type: "assistant",
         message: {
           content: [{
@@ -360,13 +366,13 @@ export class SubprocessCliSession implements ICliSession {
           }],
         },
       });
-      this.eventQueue.push({
+      queue.push({
         type: "result",
         subtype: "error",
         total_cost_usd: 0,
         duration_ms: 0,
       });
-      this.eventQueue.finish();
+      queue.finish();
     });
   }
 
@@ -375,13 +381,26 @@ export class SubprocessCliSession implements ICliSession {
   }
 
   close() {
-    if (this.process) {
-      this.process.kill("SIGTERM");
-      setTimeout(() => {
-        if (this.process) this.process.kill("SIGKILL");
-      }, 3000);
-    }
+    this.killProcess();
     this.eventQueue.finish();
+  }
+
+  /** Kill the current subprocess with SIGTERM → 3s SIGKILL fallback */
+  private killProcess() {
+    if (this.forceKillTimer) {
+      clearTimeout(this.forceKillTimer);
+      this.forceKillTimer = null;
+    }
+    if (this.process) {
+      const proc = this.process;
+      this.process = null;
+      try { proc.kill("SIGTERM"); } catch {}
+      this.forceKillTimer = setTimeout(() => {
+        this.forceKillTimer = null;
+        try { proc.kill("SIGKILL"); } catch {}
+      }, 3000);
+      this.forceKillTimer.unref(); // Don't block server shutdown
+    }
   }
 
   private buildFullPrompt(userMessage: string): string {

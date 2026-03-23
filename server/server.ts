@@ -261,6 +261,7 @@ const heartbeat = setInterval(() => {
   });
 }, 30000);
 
+// Also cleared in shutdown() — intentional redundancy for non-graceful wss close
 wss.on("close", () => {
   clearInterval(heartbeat);
   clearInterval(idleCleanup);
@@ -281,10 +282,42 @@ server.listen(PORT, HOST, () => {
 });
 
 // Graceful shutdown
+let isShuttingDown = false;
+
 function shutdown() {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  console.log("[Server] Shutting down...");
+
+  // 1. Stop scheduled tasks
   taskScheduler.stop();
+
+  // 2. Close all active sessions (stops CLI subprocesses & Agent SDK)
+  for (const [id, session] of sessions) {
+    session.close();
+  }
+  sessions.clear();
+  sessionLastActivity.clear();
+
+  // 3. Clear intervals that keep the event loop alive
+  clearInterval(idleCleanup);
+  clearInterval(heartbeat);
+
+  // 4. Close WebSocket & HTTP servers
   wss.close();
-  server.close();
+  server.close(() => {
+    console.log("[Server] Clean exit");
+    process.exit(0);
+  });
+
+  // 5. Force exit if server.close() hangs (open connections, etc.)
+  setTimeout(() => {
+    console.error("[Server] Forced exit after timeout");
+    process.exit(1);
+  }, 5000).unref();
 }
+
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
+process.on("SIGHUP", shutdown);

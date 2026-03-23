@@ -1,6 +1,6 @@
 {
   "name": "@claude-world/studio",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "type": "module",
   "description": "Claude World Studio - Trend Discovery to Content Publishing Pipeline",
   "main": "electron/main.cjs",
@@ -49,6 +49,7 @@
     "electron:dev": "npm run build && electron .",
     "electron:build": "npm run build && node scripts/electron-build.cjs",
     "typecheck": "tsc --noEmit",
+    "test": "npx tsx --test test/process-lifecycle.test.ts",
     "test:cli": "node bin/cli.js help > /dev/null"
   },
   "build": {
