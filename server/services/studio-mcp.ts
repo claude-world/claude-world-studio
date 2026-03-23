@@ -83,6 +83,8 @@ const publishTool = tool(
         post_id: result.id,
         post_url: result.permalink,
         status: "published",
+        link_comment: args.link_comment || null,
+        source_url: args.link_comment || null,
       });
 
       return {
@@ -109,6 +111,8 @@ const publishTool = tool(
         post_id: null,
         post_url: null,
         status: "failed",
+        link_comment: args.link_comment || null,
+        source_url: args.link_comment || null,
       });
 
       return {

@@ -74,7 +74,19 @@ export interface PublishRecord {
   post_id: string | null;
   post_url: string | null;
   status: string; // "draft" | "pending" | "published" | "failed"
+  link_comment: string | null;
+  source_url: string | null;
   created_at: string;
+}
+
+export interface InsightsCache {
+  publish_id: string;
+  views: number;
+  likes: number;
+  replies: number;
+  reposts: number;
+  quotes: number;
+  fetched_at: string;
 }
 
 export interface PostInsights {

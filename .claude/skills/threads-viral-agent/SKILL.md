@@ -277,7 +277,7 @@ curl -F "reqtype=fileupload" -F "time=24h" -F "fileToUpload=@/tmp/slide-1.png" \
 - [ ] **有圖嗎？** 沒有 → 回 4f 製圖（除非純投票）
 - [ ] 根據 4e 決策表，選對了發文方式？
 - [ ] A/B/C 選項 → 用了 `--poll`？
-- [ ] 有 URL → 用了 `--link-comment`？
+- [ ] **有來源 URL → 用了 `link_comment` / `--link-comment`？（MANDATORY — 來源連結必須出現在留言）**
 - [ ] 有圖 → 加了 `--alt-text`？
 - [ ] 加了 `--topic-tag`？
 - [ ] 時間詞與 Step 3 驗證結果一致？
@@ -335,6 +335,21 @@ Source: https://creators.instagram.com/threads
 
 ### Step 6: PUBLISH
 
+**⚠️ MANDATORY: Source URL → link_comment**
+If the content references ANY source URL (from Step 2), you MUST include it as `link_comment` (MCP tool) or `--link-comment` (CLI). This is NOT optional — every post that has a source gets the source URL auto-replied in comments. The source URL is the original article/repo/announcement URL you read in Step 2.
+
+**When using MCP `publish_to_threads` tool:**
+```
+publish_to_threads(
+  text: "...",
+  account_id: "...",
+  score: 85,
+  link_comment: "https://source-url-from-step-2",  // ← MANDATORY if source exists
+  ...
+)
+```
+
+**When using CLI:**
 ```bash
 # Threads — 支援所有發文類型 (auto-loads token from .env)
 # 基本文字
@@ -421,7 +436,8 @@ curl -F "reqtype=fileupload" -F "time=24h" -F "fileToUpload=@img.png" \
 - 語氣檢查：✅ 有人味 / ⚠️ [缺個人觀點|公司腔|無幽默]
 - 專利評分：Hook=X Engage=X Convo=X Velocity=X Format=X → Overall=X (Grade)
 - 時間詞驗證：✅ / ⚠️ [哪些需注意]
-- 附加功能：✅ --poll / --link-comment / --spoiler / --carousel / --ghost / --quote / N/A
+- 來源留言：✅ link_comment=[URL] / ❌ 無來源 URL
+- 附加功能：✅ --poll / --spoiler / --carousel / --ghost / --quote / N/A
 - Topic Tag：✅ [tag name] / ❌ 缺
 ```
 
@@ -512,7 +528,7 @@ Execute ALL 7 steps in order:
 - 有圖卡 → `--image` + `--alt-text` + `--topic-tag`
 - 多張圖 → `--carousel` + `--alt-text` + `--topic-tag`
 - 選擇題 → `--poll`，不用文字版
-- 有參考連結 → `--link-comment`
+- **有來源 URL（Step 2 讀的原文） → 必須用 `link_comment` 發到留言**
 - 爭議話題 → `--reply-control mentioned_only`
 - 劇透/洩露 → `--spoiler-media` 或 `--spoiler-text`
 - 限時活動 → `--ghost`

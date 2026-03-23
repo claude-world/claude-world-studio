@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import { fileURLToPath } from "url";
-import type { Session, Message, PublishRecord, SocialAccount, ScheduledTask, TaskExecution, TaskExecutionStatus, TaskTrigger } from "./types.js";
+import type { Session, Message, PublishRecord, SocialAccount, ScheduledTask, TaskExecution, TaskExecutionStatus, TaskTrigger, InsightsCache } from "./types.js";
 
 import { existsSync, mkdirSync, copyFileSync } from "fs";
 import { homedir } from "os";
@@ -141,9 +141,25 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_task_executions_status ON task_executions(status);
 `);
 
+// Insights cache table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS post_insights_cache (
+    publish_id TEXT PRIMARY KEY REFERENCES publish_history(id),
+    views INTEGER NOT NULL DEFAULT 0,
+    likes INTEGER NOT NULL DEFAULT 0,
+    replies INTEGER NOT NULL DEFAULT 0,
+    reposts INTEGER NOT NULL DEFAULT 0,
+    quotes INTEGER NOT NULL DEFAULT 0,
+    fetched_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_insights_fetched ON post_insights_cache(fetched_at);
+`);
+
 // Migrations for existing databases
 try { db.exec(`ALTER TABLE social_accounts ADD COLUMN auto_publish INTEGER NOT NULL DEFAULT 0`); } catch { /* column already exists */ }
 try { db.exec(`ALTER TABLE publish_history ADD COLUMN image_url TEXT`); } catch { /* column already exists */ }
+try { db.exec(`ALTER TABLE publish_history ADD COLUMN link_comment TEXT`); } catch { /* column already exists */ }
+try { db.exec(`ALTER TABLE publish_history ADD COLUMN source_url TEXT`); } catch { /* column already exists */ }
 
 // Performance indices
 db.exec(`
@@ -192,8 +208,8 @@ const stmts = {
 
   // Publish History
   addPublish: db.prepare(
-    `INSERT INTO publish_history (id, session_id, platform, account, content, image_url, post_id, post_url, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO publish_history (id, session_id, platform, account, content, image_url, post_id, post_url, status, link_comment, source_url)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ),
   getPublishHistory: db.prepare(
     `SELECT * FROM publish_history ORDER BY created_at DESC LIMIT ?`
@@ -209,6 +225,28 @@ const stmts = {
   ),
   updatePublishStatus: db.prepare(
     `UPDATE publish_history SET status = ?, post_id = ?, post_url = ? WHERE id = ?`
+  ),
+  getPostsWithInsights: db.prepare(
+    `SELECT p.*, c.views, c.likes, c.replies, c.reposts, c.quotes, c.fetched_at as insights_fetched_at
+     FROM publish_history p
+     LEFT JOIN post_insights_cache c ON p.id = c.publish_id
+     WHERE p.account = ?
+     ORDER BY p.created_at DESC LIMIT ?`
+  ),
+  getAllPostsWithInsights: db.prepare(
+    `SELECT p.*, c.views, c.likes, c.replies, c.reposts, c.quotes, c.fetched_at as insights_fetched_at
+     FROM publish_history p
+     LEFT JOIN post_insights_cache c ON p.id = c.publish_id
+     ORDER BY p.created_at DESC LIMIT ?`
+  ),
+
+  // Insights Cache
+  upsertInsightsCache: db.prepare(
+    `INSERT OR REPLACE INTO post_insights_cache (publish_id, views, likes, replies, reposts, quotes, fetched_at)
+     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`
+  ),
+  getInsightsCache: db.prepare(
+    `SELECT * FROM post_insights_cache WHERE publish_id = ?`
   ),
 
   // Social Accounts
@@ -366,7 +404,8 @@ export const store = {
     const id = uuidv4();
     stmts.addPublish.run(
       id, record.session_id, record.platform, record.account,
-      record.content, record.image_url ?? null, record.post_id, record.post_url, record.status
+      record.content, record.image_url ?? null, record.post_id, record.post_url, record.status,
+      record.link_comment ?? null, record.source_url ?? null
     );
     return { id, created_at: new Date().toISOString(), ...record };
   },
@@ -562,6 +601,144 @@ export const store = {
 
   markStaleExecutionsFailed() {
     return stmts.markStaleExecutionsFailed.run();
+  },
+
+  // Insights Cache
+  upsertInsightsCache(publishId: string, insights: { views: number; likes: number; replies: number; reposts: number; quotes: number }) {
+    stmts.upsertInsightsCache.run(publishId, insights.views, insights.likes, insights.replies, insights.reposts, insights.quotes);
+  },
+
+  getInsightsCache(publishId: string): InsightsCache | undefined {
+    return stmts.getInsightsCache.get(publishId) as InsightsCache | undefined;
+  },
+
+  getPostsWithInsights(accountId: string, limit = 50): any[] {
+    return stmts.getPostsWithInsights.all(accountId, limit) as any[];
+  },
+
+  getAllPostsWithInsights(limit = 100): any[] {
+    return stmts.getAllPostsWithInsights.all(limit) as any[];
+  },
+
+  // Analytics
+  getAnalyticsOverview(days = 30, accountId?: string) {
+    const since = new Date(Date.now() - days * 86400000).toISOString();
+    const baseWhere = accountId
+      ? `WHERE p.created_at >= ? AND p.account = ?`
+      : `WHERE p.created_at >= ?`;
+    const params = accountId ? [since, accountId] : [since];
+
+    const stats = db.prepare(`
+      SELECT
+        COUNT(*) as total_posts,
+        SUM(CASE WHEN p.status = 'published' THEN 1 ELSE 0 END) as published_posts,
+        SUM(CASE WHEN p.link_comment IS NOT NULL AND p.link_comment != '' THEN 1 ELSE 0 END) as posts_with_link,
+        SUM(CASE WHEN p.link_comment IS NULL OR p.link_comment = '' THEN 1 ELSE 0 END) as posts_without_link,
+        COALESCE(SUM(c.views), 0) as total_views,
+        COALESCE(SUM(c.likes), 0) as total_likes,
+        COALESCE(SUM(c.replies), 0) as total_replies,
+        COALESCE(SUM(c.reposts), 0) as total_reposts,
+        COALESCE(SUM(c.quotes), 0) as total_quotes
+      FROM publish_history p
+      LEFT JOIN post_insights_cache c ON p.id = c.publish_id
+      ${baseWhere}
+    `).get(...params) as any;
+
+    const perAccount = db.prepare(`
+      SELECT
+        p.account as account_id,
+        a.name, a.handle,
+        COUNT(*) as post_count,
+        COALESCE(SUM(c.views), 0) as total_views,
+        COALESCE(SUM(c.likes + c.replies + c.reposts + c.quotes), 0) as total_engagement
+      FROM publish_history p
+      LEFT JOIN post_insights_cache c ON p.id = c.publish_id
+      LEFT JOIN social_accounts a ON p.account = a.id
+      ${baseWhere} AND p.status = 'published'
+      GROUP BY p.account
+      ORDER BY total_views DESC
+    `).all(...params) as any[];
+
+    const topPosts = db.prepare(`
+      SELECT p.id, p.content, p.account, p.created_at, a.handle,
+        c.views, c.likes, c.replies, c.reposts, c.quotes
+      FROM publish_history p
+      JOIN post_insights_cache c ON p.id = c.publish_id
+      LEFT JOIN social_accounts a ON p.account = a.id
+      ${baseWhere} AND p.status = 'published'
+      ORDER BY c.views DESC LIMIT 5
+    `).all(...params) as any[];
+
+    const dailyCounts = db.prepare(`
+      SELECT date(p.created_at) as date, COUNT(*) as post_count,
+        COALESCE(SUM(c.views), 0) as total_views
+      FROM publish_history p
+      LEFT JOIN post_insights_cache c ON p.id = c.publish_id
+      ${baseWhere}
+      GROUP BY date(p.created_at)
+      ORDER BY date ASC
+    `).all(...params) as any[];
+
+    const totalEngagement = (stats.total_likes || 0) + (stats.total_replies || 0) + (stats.total_reposts || 0) + (stats.total_quotes || 0);
+    const engagementRate = stats.total_views > 0 ? totalEngagement / stats.total_views : 0;
+
+    return { ...stats, engagement_rate: engagementRate, per_account: perAccount, top_posts: topPosts, daily_counts: dailyCounts };
+  },
+
+  getContentAnalysis(days = 30) {
+    const since = new Date(Date.now() - days * 86400000).toISOString();
+
+    const imageVsText = db.prepare(`
+      SELECT
+        CASE WHEN p.image_url IS NOT NULL AND p.image_url != '' THEN 'with_image' ELSE 'text_only' END as type,
+        COUNT(*) as count,
+        COALESCE(AVG(c.views), 0) as avg_views,
+        COALESCE(AVG(c.likes), 0) as avg_likes,
+        COALESCE(AVG(c.replies), 0) as avg_replies
+      FROM publish_history p
+      LEFT JOIN post_insights_cache c ON p.id = c.publish_id
+      WHERE p.created_at >= ? AND p.status = 'published'
+      GROUP BY type
+    `).all(since) as any[];
+
+    const linkVsNoLink = db.prepare(`
+      SELECT
+        CASE WHEN p.link_comment IS NOT NULL AND p.link_comment != '' THEN 'with_link' ELSE 'no_link' END as type,
+        COUNT(*) as count,
+        COALESCE(AVG(c.views), 0) as avg_views,
+        COALESCE(AVG(c.likes), 0) as avg_likes,
+        COALESCE(AVG(c.replies), 0) as avg_replies
+      FROM publish_history p
+      LEFT JOIN post_insights_cache c ON p.id = c.publish_id
+      WHERE p.created_at >= ? AND p.status = 'published'
+      GROUP BY type
+    `).all(since) as any[];
+
+    const hourPerformance = db.prepare(`
+      SELECT
+        CAST(strftime('%H', p.created_at) AS INTEGER) as hour,
+        COUNT(*) as count,
+        COALESCE(AVG(c.views), 0) as avg_views,
+        COALESCE(AVG(c.likes + c.replies + c.reposts + c.quotes), 0) as avg_engagement
+      FROM publish_history p
+      LEFT JOIN post_insights_cache c ON p.id = c.publish_id
+      WHERE p.created_at >= ? AND p.status = 'published'
+      GROUP BY hour ORDER BY hour
+    `).all(since) as any[];
+
+    const dayPerformance = db.prepare(`
+      SELECT
+        CAST(strftime('%w', p.created_at) AS INTEGER) as day,
+        COUNT(*) as count,
+        COALESCE(AVG(c.views), 0) as avg_views,
+        COALESCE(AVG(c.likes + c.replies + c.reposts + c.quotes), 0) as avg_engagement
+      FROM publish_history p
+      LEFT JOIN post_insights_cache c ON p.id = c.publish_id
+      WHERE p.created_at >= ? AND p.status = 'published'
+      GROUP BY day ORDER BY day
+    `).all(since) as any[];
+
+    return { image_vs_text: imageVsText, link_vs_no_link: linkVsNoLink, hour_performance: hourPerformance, day_performance: dayPerformance };
   },
 };
 

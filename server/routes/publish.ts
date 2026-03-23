@@ -45,6 +45,8 @@ router.post("/", async (req, res) => {
       post_id: null,
       post_url: null,
       status: "draft",
+      link_comment: linkComment || null,
+      source_url: linkComment || null,
     });
     return res.json({
       success: true,
@@ -63,6 +65,8 @@ router.post("/", async (req, res) => {
     post_id: null,
     post_url: null,
     status: "pending",
+    link_comment: linkComment || null,
+    source_url: linkComment || null,
   });
 
   try {
@@ -158,6 +162,7 @@ router.post("/batch", async (req, res) => {
           text: record.content,
           token: account.token,
           imageUrl: record.image_url || undefined,
+          linkComment: record.link_comment || undefined,
         });
       } else {
         throw new Error(`Platform ${account.platform} not supported`);
@@ -219,6 +224,86 @@ router.get("/history/:id/insights", async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
+});
+
+// Get posts with insights for a specific account
+router.get("/accounts/:id/posts-detail", (req, res) => {
+  const rawLimit = parseInt(req.query.limit as string) || 50;
+  const limit = Math.min(Math.max(rawLimit, 1), MAX_HISTORY_LIMIT);
+  const posts = store.getPostsWithInsights(req.params.id, limit);
+  const account = store.getAccount(req.params.id);
+  const enriched = posts.map((p: any) => ({
+    ...p,
+    account_name: account?.name || "Unknown",
+    account_handle: account?.handle || "",
+  }));
+  res.json(enriched);
+});
+
+// Get all posts with insights (no account filter)
+router.get("/posts-detail", (req, res) => {
+  const rawLimit = parseInt(req.query.limit as string) || 100;
+  const limit = Math.min(Math.max(rawLimit, 1), MAX_HISTORY_LIMIT);
+  const posts = store.getAllPostsWithInsights(limit);
+  const accounts = store.getAllAccounts();
+  const accountMap = new Map(accounts.map((a) => [a.id, a]));
+  const enriched = posts.map((p: any) => {
+    const acct = accountMap.get(p.account);
+    return { ...p, account_name: acct?.name || "Unknown", account_handle: acct?.handle || "" };
+  });
+  res.json(enriched);
+});
+
+// Batch refresh insights (max 20 per call)
+router.post("/refresh-insights", async (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: "ids array is required" });
+  }
+
+  const batch = ids.slice(0, 20);
+  const results: { id: string; success: boolean; insights?: any; error?: string }[] = [];
+
+  for (let i = 0; i < batch.length; i++) {
+    const id = batch[i];
+    const record = store.getPublishById(id);
+    if (!record || record.status !== "published" || !record.post_id) {
+      results.push({ id, success: false, error: "Not published or no post_id" });
+      continue;
+    }
+    const account = store.getAccount(record.account);
+    if (!account || !account.token) {
+      results.push({ id, success: false, error: "Account or token missing" });
+      continue;
+    }
+    try {
+      const insights = await fetchThreadsInsights(record.post_id, account.token);
+      store.upsertInsightsCache(id, insights);
+      results.push({ id, success: true, insights });
+      if (i < batch.length - 1) {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    } catch (error) {
+      results.push({ id, success: false, error: (error as Error).message });
+    }
+  }
+
+  res.json({ results });
+});
+
+// Analytics overview
+router.get("/analytics/overview", (req, res) => {
+  const days = Math.min(Math.max(parseInt(req.query.days as string) || 30, 1), 365);
+  const accountId = req.query.account_id as string | undefined;
+  const overview = store.getAnalyticsOverview(days, accountId);
+  res.json(overview);
+});
+
+// Content analysis
+router.get("/analytics/content-analysis", (req, res) => {
+  const days = Math.min(Math.max(parseInt(req.query.days as string) || 30, 1), 365);
+  const analysis = store.getContentAnalysis(days);
+  res.json(analysis);
 });
 
 export default router;

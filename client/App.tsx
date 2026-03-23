@@ -8,6 +8,8 @@ import { PublishDialog } from "./components/PublishDialog";
 import { SettingsPage } from "./components/SettingsPage";
 import { SocialAccountsPage } from "./components/SocialAccountsPage";
 import { ScheduledTasksPage } from "./components/ScheduledTasksPage";
+import { AccountPostsPage } from "./components/AccountPostsPage";
+import { TrafficDashboardPage } from "./components/TrafficDashboardPage";
 
 export type Language = "zh-TW" | "en" | "ja";
 export type Theme = "light" | "dark" | "system";
@@ -65,6 +67,8 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showSocial, setShowSocial] = useState(false);
   const [showScheduled, setShowScheduled] = useState(false);
+  const [showAccountPosts, setShowAccountPosts] = useState(false);
+  const [showTrafficDashboard, setShowTrafficDashboard] = useState(false);
   const [showPublish, setShowPublish] = useState(false);
   const [previewFile, setPreviewFile] = useState<{ relativePath: string; sessionId: string } | null>(null);
   const [defaultWorkspace, setDefaultWorkspace] = useState("");
@@ -352,6 +356,8 @@ export default function App() {
     setShowSettings(false);
     setShowSocial(false);
     setShowScheduled(false);
+    setShowAccountPosts(false);
+    setShowTrafficDashboard(false);
     if (isConnected) {
       sendJsonMessage({ type: "subscribe", sessionId });
     }
@@ -453,9 +459,11 @@ export default function App() {
           onSelectSession={selectSession}
           onNewSession={createSession}
           onDeleteSession={deleteSession}
-          onShowSettings={() => { setShowSettings(true); setShowSocial(false); setShowScheduled(false); }}
-          onShowSocial={() => { setShowSocial(true); setShowSettings(false); setShowScheduled(false); }}
-          onShowScheduled={() => { setShowScheduled(true); setShowSettings(false); setShowSocial(false); }}
+          onShowSettings={() => { setShowSettings(true); setShowSocial(false); setShowScheduled(false); setShowAccountPosts(false); setShowTrafficDashboard(false); }}
+          onShowSocial={() => { setShowSocial(true); setShowSettings(false); setShowScheduled(false); setShowAccountPosts(false); setShowTrafficDashboard(false); }}
+          onShowScheduled={() => { setShowScheduled(true); setShowSettings(false); setShowSocial(false); setShowAccountPosts(false); setShowTrafficDashboard(false); }}
+          onShowAccountPosts={() => { setShowAccountPosts(true); setShowSettings(false); setShowSocial(false); setShowScheduled(false); setShowTrafficDashboard(false); }}
+          onShowTrafficDashboard={() => { setShowTrafficDashboard(true); setShowSettings(false); setShowSocial(false); setShowScheduled(false); setShowAccountPosts(false); }}
           defaultWorkspace={defaultWorkspace}
           isConnected={isConnected}
           language={language}
@@ -477,6 +485,10 @@ export default function App() {
         <SocialAccountsPage onClose={() => setShowSocial(false)} language={language} />
       ) : showScheduled ? (
         <ScheduledTasksPage onClose={() => setShowScheduled(false)} language={language} />
+      ) : showAccountPosts ? (
+        <AccountPostsPage onClose={() => setShowAccountPosts(false)} language={language} />
+      ) : showTrafficDashboard ? (
+        <TrafficDashboardPage onClose={() => setShowTrafficDashboard(false)} language={language} />
       ) : (
         <>
           <ChatWindow
