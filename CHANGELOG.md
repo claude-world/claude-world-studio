@@ -1,5 +1,72 @@
 # Changelog
 
+## [2.0.0] - 2026-03-29
+
+### Breaking Changes
+
+- **React 18 → 19** — `useRef` requires initial value, deprecated lifecycle methods removed
+- **Express 4 → 5** — wildcard routes need named params (`*filepath`), `req.query` changes
+- **TypeScript 5 → 6** — stricter module resolution
+- **Tailwind 3 → 4** — CSS-based config replaces `tailwind.config.js`
+- **Vite 5 → 8** — CJS/ESM interop changes for some libraries
+
+### Added
+
+- **ESLint + Prettier + Husky** — automated code quality with pre-commit hooks
+- **Structured logger** (`server/logger.ts`) — replaces all `console.log` with leveled, timestamped, tagged output
+- **Rate limiting** — 120 req/min sliding window with `X-RateLimit-*` headers
+- **Zod validation** — 9 schemas covering all API routes (sessions, accounts, publish, tasks, batch)
+- **React Error Boundaries** — 7 boundaries wrapping all page components with retry UI
+- **Session search** — client-side filter in sidebar (i18n: zh-TW/en/ja)
+- **Skeleton loaders** — animated placeholders for sessions, file tree, posts
+- **Mobile responsive layout** — hamburger menu, collapsible sidebar, backdrop overlay
+- **Accessibility** — `role`, `aria-label`, keyboard navigation, dialog semantics on modals
+- **File explorer search** — recursive filename filter
+- **220 tests** (was 32) — logger, rate-limiter, validation, analytics-cache, truncation, DB CRUD, schema edges
+- **CI pipeline** — lint, format check, security audit, test steps added
+- **Publish abort signal** — prevents duplicate posts on timeout via AbortController
+- **Analytics query caching** — 60s TTL with invalidation on all write paths
+- **Carousel skill instructions** — explicit step-by-step guide for multi-image publishing
+
+### Fixed
+
+- **59 issues** found across 7 review passes (5 Claude + 2 Codex 6-thread)
+- Loading indicator stuck after pipeline completion (`hasResult` flag)
+- Analytics timestamp format mismatch (ISO vs SQLite `datetime()`)
+- Dark mode broken in Tailwind 4 (`@custom-variant` syntax)
+- Sidebar overflow blocking main content clicks
+- `react-use-websocket` CJS/ESM double-wrap with Vite 8
+- Express 5 unnamed wildcard route crash
+- Negative `limit` query param bypassing SQL cap
+- `source_url` silently set to `link_comment` value
+- Scheduler retry allowing concurrent task execution during backoff
+- TaskForm/AccountForm showing stale data when switching items
+- MCP tool results unbounded (now capped at 100KB)
+- Readline interfaces not explicitly closed on process kill
+- Multiple dead code removals and unused import cleanups
+- Electron `systemNode` variable shadowing
+
+### Upgraded
+
+| Package                        | From   | To     |
+| ------------------------------ | ------ | ------ |
+| react / react-dom              | 18.3   | 19.2   |
+| express                        | 4.21   | 5.2    |
+| typescript                     | 5.5    | 6.0    |
+| tailwindcss                    | 3.4    | 4.2    |
+| vite                           | 5.4    | 8.0    |
+| @anthropic-ai/claude-agent-sdk | 0.1.28 | 0.2.85 |
+| better-sqlite3                 | 11.7   | 12.8   |
+| uuid                           | 10.0   | 13.0   |
+| dotenv                         | 16.4   | 17.3   |
+| electron                       | 41.0.2 | 41.1.0 |
+
+### SDK 0.2 Lifecycle
+
+- Added `allowDangerouslySkipPermissions` flag for bypass mode
+- Stored query handles for proper `.close()` on interrupt/shutdown
+- Scheduler tracks running query handles for clean teardown
+
 ## [1.8.0] - 2026-03-24
 
 ### Added

@@ -1,6 +1,6 @@
 {
   "name": "@claude-world/studio",
-  "version": "1.8.0",
+  "version": "2.0.0",
   "type": "module",
   "description": "Claude World Studio - Trend Discovery to Content Publishing Pipeline",
   "main": "electron/main.cjs",
@@ -64,7 +64,7 @@
     "asarUnpack": [
       "**"
     ],
-    "electronVersion": "41.0.2",
+    "electronVersion": "41.1.0",
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": "dmg"
