@@ -276,7 +276,7 @@ export async function fetchUserThreads(
 
 export async function fetchThreadsInsights(postId: string, token: string): Promise<PostInsights> {
   const metrics = "views,likes,replies,reposts,quotes";
-  const url = `${API_BASE}/${encodeURIComponent(postId)}/threads_insights?metric=${metrics}`;
+  const url = `${API_BASE}/${encodeURIComponent(postId)}/insights?metric=${metrics}`;
 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
