@@ -63,6 +63,13 @@ interface ContentAnalysis {
   day_performance: Array<{ day: number; count: number; avg_views: number; avg_engagement: number }>;
 }
 
+interface Account {
+  id: string;
+  name: string;
+  handle: string;
+  platform: string;
+}
+
 const T = {
   "zh-TW": {
     title: "流量戰略",
@@ -100,6 +107,17 @@ const T = {
     thu: "四",
     fri: "五",
     sat: "六",
+    allAccounts: "所有帳號",
+    vsPrev: "較前期",
+    replies: "回覆",
+    reposts: "轉發",
+    quotes: "引用",
+    likes: "愛心",
+    engMixTitle: "互動品質分析",
+    engMixPassive: "被動互動（愛心）",
+    engMixActive: "主動互動（回覆/轉發）",
+    noDataCta: "開始發布內容以查看分析數據",
+    engagementRateLabel: "互動率",
   },
   en: {
     title: "Traffic Strategy",
@@ -137,6 +155,17 @@ const T = {
     thu: "Thu",
     fri: "Fri",
     sat: "Sat",
+    allAccounts: "All Accounts",
+    vsPrev: "vs prev",
+    replies: "Replies",
+    reposts: "Reposts",
+    quotes: "Quotes",
+    likes: "Likes",
+    engMixTitle: "Engagement Quality",
+    engMixPassive: "Passive (Likes)",
+    engMixActive: "Active (Replies/Reposts)",
+    noDataCta: "Start publishing to see analytics",
+    engagementRateLabel: "Eng. Rate",
   },
   ja: {
     title: "トラフィック戦略",
@@ -174,6 +203,17 @@ const T = {
     thu: "木",
     fri: "金",
     sat: "土",
+    allAccounts: "全アカウント",
+    vsPrev: "前期比",
+    replies: "返信",
+    reposts: "リポスト",
+    quotes: "引用",
+    likes: "いいね",
+    engMixTitle: "エンゲージメント品質",
+    engMixPassive: "受動的（いいね）",
+    engMixActive: "能動的（返信/リポスト）",
+    noDataCta: "コンテンツを公開して分析を表示",
+    engagementRateLabel: "率",
   },
 };
 
@@ -201,24 +241,41 @@ export function TrafficDashboardPage({
 
   const [days, setDays] = useState(30);
   const [overview, setOverview] = useState<OverviewData | null>(null);
+  const [prevOverview, setPrevOverview] = useState<OverviewData | null>(null);
   const [analysis, setAnalysis] = useState<ContentAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [accountFilter, setAccountFilter] = useState<string>("");
+
+  // Fetch accounts list
+  useEffect(() => {
+    fetch("/api/accounts")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setAccounts)
+      .catch(() => {});
+  }, []);
+
+  const acctParam = accountFilter ? `&account_id=${accountFilter}` : "";
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [ovRes, anRes] = await Promise.all([
-        fetch(`/api/publish/analytics/overview?days=${days}`),
-        fetch(`/api/publish/analytics/content-analysis?days=${days}`),
+      const [ovRes, anRes, prevRes] = await Promise.all([
+        fetch(`/api/publish/analytics/overview?days=${days}${acctParam}`),
+        fetch(`/api/publish/analytics/content-analysis?days=${days}${acctParam}`),
+        // Fetch previous period for growth comparison
+        fetch(`/api/publish/analytics/overview?days=${days}&offset=${days}${acctParam}`),
       ]);
       if (ovRes.ok) setOverview(await ovRes.json());
       if (anRes.ok) setAnalysis(await anRes.json());
+      if (prevRes.ok) setPrevOverview(await prevRes.json());
+      else setPrevOverview(null);
     } catch {
       /* ignore */
     }
     setLoading(false);
-  }, [days]);
+  }, [days, acctParam]);
 
   useEffect(() => {
     fetchData();
@@ -329,6 +386,19 @@ export function TrafficDashboardPage({
             <h1 className="text-lg font-bold text-gray-900 dark:text-white">{t.title}</h1>
           </div>
           <div className="flex items-center gap-2">
+            {/* Account selector */}
+            <select
+              value={accountFilter}
+              onChange={(e) => setAccountFilter(e.target.value)}
+              className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            >
+              <option value="">{t.allAccounts}</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.handle?.startsWith("@") ? a.handle : `@${a.handle}`}
+                </option>
+              ))}
+            </select>
             {/* Days selector */}
             <div className="flex rounded-lg border border-gray-300 dark:border-gray-700 overflow-hidden">
               {([7, 14, 30] as const).map((d) => (
@@ -359,22 +429,56 @@ export function TrafficDashboardPage({
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {!overview ? (
-          <div className="text-center py-20 text-gray-400 text-sm">{t.noData}</div>
+          <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+            <svg
+              className="w-12 h-12 mb-4 text-gray-300 dark:text-gray-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+              />
+            </svg>
+            <p className="text-sm font-medium mb-1">{t.noData}</p>
+            <p className="text-xs text-gray-400">{t.noDataCta}</p>
+          </div>
         ) : (
           <>
-            {/* Section 1: Overview Cards */}
+            {/* Section 1: Overview Cards with growth indicators */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <OverviewCard
                 label={t.totalPosts}
                 value={String(overview.published_posts)}
                 sub={`/ ${overview.total_posts} ${t.totalPosts.toLowerCase()}`}
                 borderColor="border-blue-500"
+                growth={
+                  prevOverview
+                    ? {
+                        current: overview.published_posts,
+                        previous: prevOverview.published_posts,
+                        label: `${t.vsPrev} ${days}${language === "ja" ? "日" : language === "zh-TW" ? "天" : "d"}`,
+                      }
+                    : undefined
+                }
               />
               <OverviewCard
                 label={t.totalViews}
                 value={compact(overview.total_views)}
-                sub={`${compact(overview.total_likes)} likes`}
+                sub={`${compact(overview.total_likes)} ${t.likes.toLowerCase()}`}
                 borderColor="border-green-500"
+                growth={
+                  prevOverview
+                    ? {
+                        current: overview.total_views,
+                        previous: prevOverview.total_views,
+                        label: `${t.vsPrev} ${days}${language === "ja" ? "日" : language === "zh-TW" ? "天" : "d"}`,
+                      }
+                    : undefined
+                }
               />
               <OverviewCard
                 label={t.engagementRate}
@@ -382,6 +486,15 @@ export function TrafficDashboardPage({
                 sub=""
                 borderColor="border-yellow-500"
                 valueClass={engRateColor(overview.engagement_rate)}
+                growth={
+                  prevOverview
+                    ? {
+                        current: overview.engagement_rate * 100,
+                        previous: prevOverview.engagement_rate * 100,
+                        label: `${t.vsPrev} ${days}${language === "ja" ? "日" : language === "zh-TW" ? "天" : "d"}`,
+                      }
+                    : undefined
+                }
               />
               <OverviewCard
                 label={t.linkCoverage}
@@ -547,35 +660,143 @@ export function TrafficDashboardPage({
               </div>
             )}
 
-            {/* Section 4: Top 5 Posts */}
+            {/* Section 3.5: Engagement Quality Breakdown */}
+            {overview &&
+              (overview.total_likes > 0 ||
+                overview.total_replies > 0 ||
+                overview.total_reposts > 0 ||
+                overview.total_quotes > 0) &&
+              (() => {
+                const totalEng =
+                  overview.total_likes +
+                  overview.total_replies +
+                  overview.total_reposts +
+                  overview.total_quotes;
+                if (totalEng === 0) return null;
+                const likesPct = (overview.total_likes / totalEng) * 100;
+                const repliesPct = (overview.total_replies / totalEng) * 100;
+                const repostsPct = (overview.total_reposts / totalEng) * 100;
+                const quotesPct = (overview.total_quotes / totalEng) * 100;
+                const segments = [
+                  {
+                    label: t.likes,
+                    pct: likesPct,
+                    color: "bg-pink-500",
+                    value: overview.total_likes,
+                  },
+                  {
+                    label: t.replies,
+                    pct: repliesPct,
+                    color: "bg-blue-500",
+                    value: overview.total_replies,
+                  },
+                  {
+                    label: t.reposts,
+                    pct: repostsPct,
+                    color: "bg-green-500",
+                    value: overview.total_reposts,
+                  },
+                  {
+                    label: t.quotes,
+                    pct: quotesPct,
+                    color: "bg-purple-500",
+                    value: overview.total_quotes,
+                  },
+                ];
+                const activeRate = repliesPct + repostsPct + quotesPct;
+                return (
+                  <div>
+                    <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                      {t.engMixTitle}
+                    </h2>
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-4">
+                      {/* Horizontal stacked bar */}
+                      <div className="flex rounded-full overflow-hidden h-4 mb-3">
+                        {segments
+                          .filter((s) => s.pct > 0)
+                          .map((s) => (
+                            <div
+                              key={s.label}
+                              className={`${s.color} transition-all`}
+                              style={{ width: `${s.pct}%` }}
+                              title={`${s.label}: ${s.pct.toFixed(1)}%`}
+                            />
+                          ))}
+                      </div>
+                      {/* Legend */}
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                        {segments.map((s) => (
+                          <div key={s.label} className="flex items-center gap-1.5">
+                            <span className={`inline-block w-2.5 h-2.5 rounded-full ${s.color}`} />
+                            <span>
+                              {s.label}: {compact(s.value)} ({s.pct.toFixed(1)}%)
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Active vs Passive summary */}
+                      <div className="mt-3 flex items-center gap-4 text-xs">
+                        <span className="text-gray-400">
+                          {t.engMixPassive}: {likesPct.toFixed(0)}%
+                        </span>
+                        <span
+                          className={`font-medium ${activeRate >= 30 ? "text-green-500" : activeRate >= 15 ? "text-yellow-500" : "text-red-400"}`}
+                        >
+                          {t.engMixActive}: {activeRate.toFixed(0)}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+            {/* Section 4: Top 5 Posts - richer metrics */}
             {overview.top_posts.length > 0 && (
               <div>
                 <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
                   {t.topPostsTitle}
                 </h2>
                 <div className="space-y-2">
-                  {overview.top_posts.map((post, i) => (
-                    <div
-                      key={post.id}
-                      className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 px-4 py-3"
-                    >
-                      <span className="text-lg font-bold text-gray-300 dark:text-gray-600 w-6 text-center shrink-0">
-                        {i + 1}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-800 dark:text-gray-200 truncate">
-                          {post.content}
-                        </p>
-                        <span className="text-[10px] text-gray-400">
-                          {post.handle?.startsWith("@") ? post.handle : `@${post.handle}`}
-                        </span>
+                  {overview.top_posts.map((post, i) => {
+                    const totalEng = post.likes + post.replies + post.reposts + post.quotes;
+                    const engRate = post.views > 0 ? (totalEng / post.views) * 100 : 0;
+                    const engColor =
+                      engRate >= 3
+                        ? "bg-green-500/20 text-green-400"
+                        : engRate >= 1
+                          ? "bg-yellow-500/20 text-yellow-400"
+                          : "bg-red-500/20 text-red-400";
+                    return (
+                      <div
+                        key={post.id}
+                        className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 px-4 py-3"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-lg font-bold text-gray-300 dark:text-gray-600 w-6 text-center shrink-0">
+                            {i + 1}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-gray-800 dark:text-gray-200 truncate">
+                              {post.content}
+                            </p>
+                            <span className="text-[10px] text-gray-400">
+                              {post.handle?.startsWith("@") ? post.handle : `@${post.handle}`}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-2 ml-9 flex-wrap">
+                          <span>&#x1f441; {compact(post.views)}</span>
+                          <span>&#x2764;&#xfe0f; {compact(post.likes)}</span>
+                          <span>&#x1f4ac; {compact(post.replies)}</span>
+                          <span>&#x1f501; {compact(post.reposts)}</span>
+                          <span>&#x1f4dd; {compact(post.quotes)}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${engColor}`}>
+                            {engRate.toFixed(1)}% {t.engagementRateLabel}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 shrink-0">
-                        <span>&#x1f441; {compact(post.views)}</span>
-                        <span>&#x2764;&#xfe0f; {compact(post.likes)}</span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -628,13 +849,30 @@ function OverviewCard({
   sub,
   borderColor,
   valueClass,
+  growth,
 }: {
   label: string;
   value: string;
   sub: string;
   borderColor: string;
   valueClass?: string;
+  growth?: { current: number; previous: number; label: string };
 }) {
+  let growthEl: React.ReactNode = null;
+  if (growth) {
+    const { current, previous, label: gLabel } = growth;
+    if (previous === 0 && current > 0) {
+      growthEl = <span className="text-green-500 text-[10px]">&#x2191; new {gLabel}</span>;
+    } else if (previous > 0) {
+      const diff = ((current - previous) / previous) * 100;
+      const isUp = diff >= 0;
+      growthEl = (
+        <span className={`text-[10px] ${isUp ? "text-green-500" : "text-red-400"}`}>
+          {isUp ? "\u2191" : "\u2193"} {Math.abs(Math.round(diff))}% {gLabel}
+        </span>
+      );
+    }
+  }
   return (
     <div
       className={`rounded-lg border-l-4 ${borderColor} bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4`}
@@ -643,7 +881,10 @@ function OverviewCard({
       <div className={`text-2xl font-bold ${valueClass || "text-gray-900 dark:text-white"}`}>
         {value}
       </div>
-      {sub && <div className="text-[10px] text-gray-400 mt-0.5">{sub}</div>}
+      <div className="flex items-center gap-2 mt-0.5">
+        {sub && <span className="text-[10px] text-gray-400">{sub}</span>}
+        {growthEl}
+      </div>
     </div>
   );
 }

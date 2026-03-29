@@ -31,6 +31,9 @@ interface Account {
   platform: string;
 }
 
+type StatusFilter = "all" | "published" | "draft" | "failed";
+type SortBy = "latest" | "views" | "likes" | "engagement";
+
 const T = {
   "zh-TW": {
     title: "文章管理",
@@ -52,6 +55,20 @@ const T = {
     pending: "待發布",
     failed: "失敗",
     discarded: "已丟棄",
+    statusAll: "全部狀態",
+    statusPublished: "已發布",
+    statusDraft: "草稿",
+    statusFailed: "失敗",
+    sortLatest: "最新",
+    sortViews: "最多觀看",
+    sortLikes: "最多愛心",
+    sortEngagement: "最高互動",
+    searchPlaceholder: "搜尋文章內容...",
+    engagementRate: "互動率",
+    topPerformer: "Top",
+    bottomPerformer: "低效",
+    insightsUpdated: "更新於",
+    insightsNever: "未取得數據",
   },
   en: {
     title: "Posts Management",
@@ -73,6 +90,20 @@ const T = {
     pending: "Pending",
     failed: "Failed",
     discarded: "Discarded",
+    statusAll: "All Status",
+    statusPublished: "Published",
+    statusDraft: "Draft",
+    statusFailed: "Failed",
+    sortLatest: "Latest",
+    sortViews: "Most Views",
+    sortLikes: "Most Likes",
+    sortEngagement: "Most Engagement",
+    searchPlaceholder: "Search post content...",
+    engagementRate: "Eng. Rate",
+    topPerformer: "Top",
+    bottomPerformer: "Low",
+    insightsUpdated: "Updated",
+    insightsNever: "Never fetched",
   },
   ja: {
     title: "投稿管理",
@@ -94,6 +125,20 @@ const T = {
     pending: "保留中",
     failed: "失敗",
     discarded: "破棄",
+    statusAll: "全ステータス",
+    statusPublished: "公開済",
+    statusDraft: "下書き",
+    statusFailed: "失敗",
+    sortLatest: "最新",
+    sortViews: "最多閲覧",
+    sortLikes: "最多いいね",
+    sortEngagement: "最高エンゲージメント",
+    searchPlaceholder: "投稿内容を検索...",
+    engagementRate: "率",
+    topPerformer: "Top",
+    bottomPerformer: "低調",
+    insightsUpdated: "更新",
+    insightsNever: "未取得",
   },
 };
 
@@ -131,6 +176,9 @@ export function AccountPostsPage({
   const [posts, setPosts] = useState<PostWithInsights[]>([]);
   const [selectedAccount, setSelectedAccount] = useState("all");
   const [linkFilter, setLinkFilter] = useState<LinkFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sortBy, setSortBy] = useState<SortBy>("latest");
+  const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -161,14 +209,80 @@ export function AccountPostsPage({
     fetchPosts();
   }, [fetchPosts]);
 
-  const filtered = posts.filter((p) => {
+  // Filter: link
+  let filtered = posts.filter((p) => {
     if (linkFilter === "with_link") return p.link_comment;
     if (linkFilter === "without_link") return !p.link_comment;
     return true;
   });
 
+  // Filter: status
+  filtered = filtered.filter((p) => statusFilter === "all" || p.status === statusFilter);
+
+  // Filter: search
+  if (searchQuery.trim()) {
+    const q = searchQuery.trim().toLowerCase();
+    filtered = filtered.filter((p) => p.content.toLowerCase().includes(q));
+  }
+
+  // Sort
+  const getEngagement = (p: PostWithInsights) =>
+    (p.likes ?? 0) + (p.replies ?? 0) + (p.reposts ?? 0) + (p.quotes ?? 0);
+
+  filtered = [...filtered].sort((a, b) => {
+    switch (sortBy) {
+      case "views":
+        return (b.views ?? 0) - (a.views ?? 0);
+      case "likes":
+        return (b.likes ?? 0) - (a.likes ?? 0);
+      case "engagement":
+        return getEngagement(b) - getEngagement(a);
+      default:
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    }
+  });
+
+  // Top/Bottom performer IDs (only when >=6 posts with views)
+  const postsWithViews = posts
+    .filter((p) => p.views !== null && p.views > 0)
+    .sort((a, b) => (b.views ?? 0) - (a.views ?? 0));
+  const topIds = new Set(
+    postsWithViews.length >= 6 ? postsWithViews.slice(0, 3).map((p) => p.id) : []
+  );
+  const bottomIds = new Set(
+    postsWithViews.length >= 6 ? postsWithViews.slice(-3).map((p) => p.id) : []
+  );
+
   const withLinkCount = posts.filter((p) => p.link_comment).length;
   const coveragePct = posts.length > 0 ? Math.round((withLinkCount / posts.length) * 100) : 0;
+
+  // Engagement rate badge helper
+  const engRateBadge = (p: PostWithInsights) => {
+    if (p.views === null || p.views === 0) return null;
+    const eng = getEngagement(p);
+    const rate = (eng / p.views) * 100;
+    const color =
+      rate >= 3
+        ? "bg-green-500/20 text-green-400"
+        : rate >= 1
+          ? "bg-yellow-500/20 text-yellow-400"
+          : "bg-red-500/20 text-red-400";
+    return (
+      <span className={`text-[10px] px-1.5 py-0.5 rounded ${color} whitespace-nowrap`}>
+        {rate.toFixed(1)}% {t.engagementRate}
+      </span>
+    );
+  };
+
+  // Insights freshness helper
+  const insightsFreshness = (fetchedAt: string | null) => {
+    if (!fetchedAt) return <span className="text-[10px] text-gray-500">{t.insightsNever}</span>;
+    return (
+      <span className="text-[10px] text-gray-500">
+        {t.insightsUpdated} {formatRelativeTime(fetchedAt)}
+      </span>
+    );
+  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -266,6 +380,65 @@ export function AccountPostsPage({
               </button>
             ))}
           </div>
+
+          {/* Status filter */}
+          <div className="flex rounded-lg border border-gray-300 dark:border-gray-700 overflow-hidden">
+            {(["all", "published", "draft", "failed"] as StatusFilter[]).map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`text-xs px-3 py-1.5 transition-colors ${
+                  statusFilter === s
+                    ? "bg-blue-600 text-white"
+                    : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
+                }`}
+              >
+                {s === "all"
+                  ? t.statusAll
+                  : s === "published"
+                    ? t.statusPublished
+                    : s === "draft"
+                      ? t.statusDraft
+                      : t.statusFailed}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Search + Sort row */}
+        <div className="flex items-center gap-3 mt-2">
+          <div className="flex-1 relative">
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t.searchPlaceholder}
+              className="w-full text-sm pl-9 pr-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400"
+            />
+          </div>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortBy)}
+            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+          >
+            <option value="latest">{t.sortLatest}</option>
+            <option value="views">{t.sortViews}</option>
+            <option value="likes">{t.sortLikes}</option>
+            <option value="engagement">{t.sortEngagement}</option>
+          </select>
         </div>
 
         {/* Coverage bar */}
@@ -306,7 +479,7 @@ export function AccountPostsPage({
               key={post.id}
               className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-4"
             >
-              {/* Top row: handle + date + status */}
+              {/* Top row: handle + date + status + performer badge */}
               <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-2">
                 <span className="font-medium text-gray-700 dark:text-gray-300">
                   {post.account_handle?.startsWith("@")
@@ -320,21 +493,44 @@ export function AccountPostsPage({
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 capitalize">
                   {post.platform}
                 </span>
+                {topIds.has(post.id) && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 font-medium">
+                    &#x1f525; {t.topPerformer}
+                  </span>
+                )}
+                {bottomIds.has(post.id) && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400 font-medium">
+                    &#x1f4c9; {t.bottomPerformer}
+                  </span>
+                )}
               </div>
 
-              {/* Content preview */}
-              <p className="text-sm text-gray-800 dark:text-gray-200 line-clamp-3 whitespace-pre-wrap mb-3">
-                {post.content}
-              </p>
+              {/* Content preview - clickable if post_url exists */}
+              {post.post_url ? (
+                <a
+                  href={post.post_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block text-sm text-gray-800 dark:text-gray-200 line-clamp-3 whitespace-pre-wrap mb-3 hover:text-blue-500 dark:hover:text-blue-400 transition-colors cursor-pointer"
+                >
+                  {post.content}
+                </a>
+              ) : (
+                <p className="text-sm text-gray-800 dark:text-gray-200 line-clamp-3 whitespace-pre-wrap mb-3">
+                  {post.content}
+                </p>
+              )}
 
-              {/* Metrics row */}
+              {/* Metrics row + engagement rate + insights freshness */}
               {post.views !== null && (
-                <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400 mb-3">
+                <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400 mb-3 flex-wrap">
                   <span title="Views">&#x1f441; {compactNumber(post.views ?? 0)}</span>
                   <span title="Likes">&#x2764;&#xfe0f; {compactNumber(post.likes ?? 0)}</span>
                   <span title="Replies">&#x1f4ac; {compactNumber(post.replies ?? 0)}</span>
                   <span title="Reposts">&#x1f501; {compactNumber(post.reposts ?? 0)}</span>
                   <span title="Quotes">&#x1f4dd; {compactNumber(post.quotes ?? 0)}</span>
+                  {engRateBadge(post)}
+                  <span className="ml-auto">{insightsFreshness(post.insights_fetched_at)}</span>
                 </div>
               )}
 
