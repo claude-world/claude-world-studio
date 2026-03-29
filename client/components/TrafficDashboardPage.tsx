@@ -424,7 +424,7 @@ export function TrafficDashboardPage({
                             className="border-t border-gray-100 dark:border-gray-800"
                           >
                             <td className="px-4 py-2.5 text-gray-800 dark:text-gray-200 font-medium">
-                              @{a.handle}
+                              {a.handle?.startsWith("@") ? a.handle : `@${a.handle}`}
                             </td>
                             <td className="px-4 py-2.5 text-right text-gray-600 dark:text-gray-400">
                               {a.post_count}
@@ -566,7 +566,9 @@ export function TrafficDashboardPage({
                         <p className="text-sm text-gray-800 dark:text-gray-200 truncate">
                           {post.content}
                         </p>
-                        <span className="text-[10px] text-gray-400">@{post.handle}</span>
+                        <span className="text-[10px] text-gray-400">
+                          {post.handle?.startsWith("@") ? post.handle : `@${post.handle}`}
+                        </span>
                       </div>
                       <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 shrink-0">
                         <span>&#x1f441; {compact(post.views)}</span>

@@ -242,7 +242,7 @@ export function AccountPostsPage({
             <option value="all">{t.allAccounts}</option>
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>
-                @{a.handle}
+                {a.handle?.startsWith("@") ? a.handle : `@${a.handle}`}
               </option>
             ))}
           </select>
@@ -309,7 +309,9 @@ export function AccountPostsPage({
               {/* Top row: handle + date + status */}
               <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-2">
                 <span className="font-medium text-gray-700 dark:text-gray-300">
-                  @{post.account_handle}
+                  {post.account_handle?.startsWith("@")
+                    ? post.account_handle
+                    : `@${post.account_handle}`}
                 </span>
                 <span>&middot;</span>
                 <span>{formatRelativeTime(post.created_at)}</span>
