@@ -77,8 +77,13 @@ Deep research + 9 downloadable artifact types (podcast, slides, report, quiz, fl
 
 ## Visual Content Generation
 
-Use **NotebookLM** to generate all visual content. It produces professional-quality slides and mind maps — far better than HTML/CSS artifacts.
+Use **NotebookLM** to generate all visual content. It produces professional-quality slides and mind maps — far better than any alternative.
+
+⛔ **嚴格禁止**：不得使用 Pillow/PIL、ImageMagick、Python 程式碼或 HTML+Playwright 生成圖卡。
+所有圖卡一律透過 NotebookLM `nlm_generate(type="slides")` 生成。
+
 ⚠️ Do NOT use `infographic` (download unreliable). Use `slides` for all visual content.
+⚠️ NLM slides 多頁時 → 必須全部上傳 → 用 `carousel_urls` 發文（不要只發一張）。
 
 ### Image Cards & Slides (圖卡 / 簡報)
 

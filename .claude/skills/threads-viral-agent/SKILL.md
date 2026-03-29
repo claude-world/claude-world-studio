@@ -252,8 +252,11 @@ Platform targets:
 
 | #   | 方式                                  | 工具                                                       | 適用場景                                                                            |
 | --- | ------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| 1   | **NotebookLM Slides（唯一正式方式）** | `nlm_generate(type="slides")` → `nlm_download` → PDF → PNG | **所有場景**                                                                        |
+| 1   | **NotebookLM Slides（唯一正式方式）** | `nlm_generate(type="slides")` → `nlm_download` → PDF → PNG | **所有場景，無例外**                                                                |
 | 2   | HTML + Playwright（緊急備用）         | 寫 HTML → Playwright screenshot → PNG                      | **僅當 NLM MCP 完全不可用**（連線失敗、未安裝）才可降級。NLM 超時應重試，不算失敗。 |
+
+⛔ **嚴格禁止**：不得使用 Pillow、Python PIL、ImageMagick 或任何程式碼直接生成圖卡。
+所有圖卡一律透過 NotebookLM slides 生成。NLM 產出的多頁 slides 品質遠高於程式碼生成。
 
 **NLM Slides 流程（必須執行）：**
 
@@ -485,14 +488,22 @@ Never put URLs in post body (kills reach).
 | 文字含劇透      | `--spoiler-text offset:length`   | `--text "兇手是王小明" --spoiler-text "3:3"` |
 | 輪播含劇透      | `--carousel ... --spoiler-media` | 所有圖片一起模糊                             |
 
-### 4. Media: 優先圖文並茂
+### 4. Media: 一律使用 NotebookLM 生成圖卡
 
-官方數據確認圖文並茂效果顯著優於純文字。決策順序：
+⚠️ **所有發文都必須附圖**，圖卡一律使用 NotebookLM slides 生成（不得用 Pillow/PIL/程式碼）。
 
-1. 有 2+ 張圖 → **Carousel** (`--carousel`)
-2. 有 1 張圖 → **Image** (`--image`) + `--alt-text`
-3. 有影片 → **Video** (`--video`) + `--alt-text`
-4. 搞笑/反應 → **GIF** (`--gif-id`)
+**圖卡生成規則：**
+
+- 內容有 2+ 個主題/項目 → NLM slides 指定多頁 → **Carousel**（`carousel_urls`）
+- 內容只有 1 個主題 → NLM slides 指定 1 頁 → **Image**（`image`）
+- 週報/回顧/清單型內容 → **一律 Carousel**（每個重點一頁 slide）
+
+**發文方式決策：**
+
+1. NLM slides ≥ 2 頁 → **Carousel** (`carousel_urls=[url1, url2, ...]`)
+2. NLM slides = 1 頁 → **Image** (`image=url`) + `--alt-text`
+3. 有影片 → **Video** (`video=url`) + `--alt-text`
+4. 搞笑/反應 → **GIF** (`gif_id`)
 5. 純文字 → 考慮是否用 `--text-attachment` 放長文
 
 ### 5. Topic Tag + Alt Text: 預設都加
