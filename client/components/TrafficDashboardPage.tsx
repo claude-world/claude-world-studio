@@ -284,6 +284,8 @@ export function TrafficDashboardPage({
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
+      // Backfill missing post_ids first
+      await fetch("/api/publish/backfill-post-ids", { method: "POST" });
       const postsRes = await fetch("/api/publish/posts-detail?limit=200");
       if (postsRes.ok) {
         const posts = await postsRes.json();

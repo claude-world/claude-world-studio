@@ -252,6 +252,26 @@ export async function publishToThreads(opts: PublishOptions): Promise<PublishRes
   return { id: postId, permalink: "" };
 }
 
+// ── Fetch User Threads (for backfill) ──
+
+export async function fetchUserThreads(
+  userId: string,
+  token: string,
+  limit = 50
+): Promise<Array<{ id: string; text: string; timestamp: string; permalink: string }>> {
+  const url = `${API_BASE}/${encodeURIComponent(userId)}/threads?fields=id,text,timestamp,permalink&limit=${limit}`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Threads API error ${res.status}: ${errText}`);
+  }
+  const data = await res.json();
+  return data.data || [];
+}
+
 // ── Insights ──
 
 export async function fetchThreadsInsights(postId: string, token: string): Promise<PostInsights> {

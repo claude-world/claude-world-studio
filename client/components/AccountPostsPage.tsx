@@ -47,6 +47,7 @@ const T = {
     noSourceLink: "無來源連結",
     sourceLink: "來源連結",
     refreshInsights: "刷新數據",
+    backfillIds: "回填 ID",
     refreshing: "刷新中...",
     noPosts: "尚無文章",
     viewPost: "查看貼文",
@@ -82,6 +83,7 @@ const T = {
     noSourceLink: "No source link",
     sourceLink: "Source link",
     refreshInsights: "Refresh Insights",
+    backfillIds: "Backfill IDs",
     refreshing: "Refreshing...",
     noPosts: "No posts yet",
     viewPost: "View Post",
@@ -117,6 +119,7 @@ const T = {
     noSourceLink: "ソースリンクなし",
     sourceLink: "ソースリンク",
     refreshInsights: "データ更新",
+    backfillIds: "ID 補完",
     refreshing: "更新中...",
     noPosts: "投稿がありません",
     viewPost: "投稿を見る",
@@ -282,6 +285,18 @@ export function AccountPostsPage({
         {t.insightsUpdated} {formatRelativeTime(fetchedAt)}
       </span>
     );
+  };
+
+  const handleBackfill = async () => {
+    setRefreshing(true);
+    try {
+      await fetch("/api/publish/backfill-post-ids", { method: "POST" });
+      // After backfill, also refresh insights for newly matched posts
+      await handleRefresh();
+    } catch {
+      /* ignore */
+    }
+    setRefreshing(false);
   };
 
   const handleRefresh = async () => {
@@ -457,6 +472,13 @@ export function AccountPostsPage({
               />
             </div>
           </div>
+          <button
+            onClick={handleBackfill}
+            disabled={refreshing}
+            className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white transition-colors whitespace-nowrap"
+          >
+            {refreshing ? t.refreshing : t.backfillIds}
+          </button>
           <button
             onClick={handleRefresh}
             disabled={refreshing}

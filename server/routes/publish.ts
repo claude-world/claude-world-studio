@@ -1,6 +1,10 @@
 import { Router } from "express";
 import store from "../db.js";
-import { publishToThreads, fetchThreadsInsights } from "../services/social-publisher.js";
+import {
+  publishToThreads,
+  fetchThreadsInsights,
+  fetchUserThreads,
+} from "../services/social-publisher.js";
 import {
   PublishSchema,
   BatchPublishSchema,
@@ -294,6 +298,61 @@ router.post("/refresh-insights", async (req, res) => {
       }
     } catch (error) {
       results.push({ id, success: false, error: (error as Error).message });
+    }
+  }
+
+  res.json({ results });
+});
+
+// Backfill missing post_ids by matching content with Threads API
+router.post("/backfill-post-ids", async (_req, res) => {
+  const accounts = store.getAllAccounts();
+  const results: {
+    account: string;
+    success: boolean;
+    error?: string;
+    total_missing?: number;
+    matched?: number;
+  }[] = [];
+
+  for (const account of accounts) {
+    if (!account.token || !account.user_id) {
+      results.push({ account: account.handle, success: false, error: "No token or user_id" });
+      continue;
+    }
+
+    try {
+      // Get recent posts from Threads API
+      const apiPosts = await fetchUserThreads(account.user_id, account.token, 50);
+
+      // Get DB records for this account that are published but have no post_id
+      const dbPosts = store.getPublishByAccount(account.id, 100);
+      const missingPostId = dbPosts.filter(
+        (p) => p.status === "published" && (!p.post_id || p.post_id === "")
+      );
+
+      let matched = 0;
+      for (const dbPost of missingPostId) {
+        // Match by content similarity (first 50 chars)
+        const dbContent = (dbPost.content || "").slice(0, 50).trim();
+        if (!dbContent) continue;
+
+        const match = apiPosts.find((ap) => ap.text && ap.text.slice(0, 50).trim() === dbContent);
+
+        if (match) {
+          store.updatePublishStatus(dbPost.id, "published", match.id, match.permalink);
+          matched++;
+        }
+      }
+
+      results.push({
+        account: account.handle,
+        success: true,
+        total_missing: missingPostId.length,
+        matched,
+      });
+    } catch (err) {
+      results.push({ account: account.handle, success: false, error: (err as Error).message });
     }
   }
 
