@@ -277,7 +277,11 @@ curl -F "reqtype=fileupload" -F "time=24h" -F "fileToUpload=@/tmp/slide-1.png" \
 
 **NLM 超時處理：** 超時不等於失敗，重試 1-2 次。只有 MCP server 完全離線才降級到 Playwright。
 
-**多頁圖卡 → Carousel：** NLM slides 各頁截圖 → 全部上傳 → `--carousel URL1 URL2 ...`
+**多頁圖卡 → Carousel（⚠️ 重要）：** NLM slides 產生多頁 PDF 時，必須：
+
+1. `pdftoppm -png -r 300 slides.pdf slide` 拆成各頁 PNG
+2. **逐張上傳**：對每張 PNG 呼叫 `upload_image(file_path="downloads/slide-N.png")` 取得公開 URL
+3. **用 carousel 發文**：`publish_to_threads(text="...", carousel_urls=[url1, url2, ...])` — 不要用 `image`，那只發單張
 
 **4g: Final check** — 發文前最後檢查：
 

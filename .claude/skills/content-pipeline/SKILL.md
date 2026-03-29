@@ -108,8 +108,21 @@ For multi-image carousel (Threads supports 2-20 images):
 1. Create notebook with content organized as numbered sections (one per slide)
 2. `generate_artifact(name_or_id, "slides")` → multi-page PDF
 3. Download and split: `pdftoppm -png -r 300 slides.pdf slide`
-4. Each page becomes one carousel image
-5. Publish with `carousel_urls`
+4. **Upload EVERY image** — call `upload_image` for EACH slide PNG:
+   ```
+   upload_image(file_path="downloads/slide-1.png") → url1
+   upload_image(file_path="downloads/slide-2.png") → url2
+   upload_image(file_path="downloads/slide-3.png") → url3
+   ...repeat for ALL slides
+   ```
+5. **Publish as carousel** — pass ALL URLs to `publish_to_threads`:
+   ```
+   publish_to_threads(text="...", carousel_urls=[url1, url2, url3, ...])
+   ```
+   Do NOT use `image` parameter — use `carousel_urls` when there are 2+ images.
+
+⚠️ **CRITICAL**: When slides have multiple pages, you MUST use `carousel_urls` (not `image`).
+Single `image` parameter only posts the first image. `carousel_urls` posts ALL images as a swipeable carousel.
 
 ### Video (影片)
 
