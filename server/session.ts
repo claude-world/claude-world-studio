@@ -47,6 +47,7 @@ export class Session {
   private subscribers: Set<WSClient> = new Set();
   private cliSession: ICliSession;
   private isListening = false;
+  private hasResult = false;
 
   constructor(
     sessionId: string,
@@ -118,6 +119,7 @@ export class Session {
 
   sendMessage(content: string) {
     store.addMessage(this.sessionId, { role: "user", content });
+    this.hasResult = false; // Reset on new user message
 
     this.broadcast({
       type: "user_message",
@@ -189,6 +191,7 @@ export class Session {
         }
       }
     } else if (message.type === "result") {
+      this.hasResult = true;
       const costUsd = message.total_cost_usd;
       const durationMs = message.duration_ms;
 
@@ -227,7 +230,7 @@ export class Session {
 
   /** Whether the agent is actively processing (listening for SDK output) */
   isRunning(): boolean {
-    return this.isListening;
+    return this.isListening && !this.hasResult;
   }
 
   private broadcast(message: any) {
