@@ -13,7 +13,7 @@ function run(cmd) {
 }
 
 try {
-  run("npm prune --omit=dev");
+  run("npm prune --omit=dev --legacy-peer-deps");
   const size = execSync("du -sm node_modules", { encoding: "utf-8", cwd }).trim();
   console.log(`[build] node_modules after prune: ${size}`);
 
@@ -21,5 +21,5 @@ try {
   run("npx electron-builder@26.8.1 --mac");
 } finally {
   console.log("[build] Restoring all dependencies...");
-  run("npm install");
+  run("npm install --legacy-peer-deps");
 }
