@@ -3,17 +3,20 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { buildMcpServers, getSettings } from "../mcp-config.js";
 import { createStudioMcpServer } from "./studio-mcp.js";
 import store from "../db.js";
-import type { ScheduledTask, TaskExecution, SocialAccount, Language, TaskTrigger } from "../types.js";
+import { logger } from "../logger.js";
+import type {
+  ScheduledTask,
+  TaskExecution,
+  SocialAccount,
+  Language,
+  TaskTrigger,
+} from "../types.js";
 
 // ---------------------------------------------------------------------------
 // Template variable resolution
 // ---------------------------------------------------------------------------
 
-function resolveTemplate(
-  template: string,
-  account: SocialAccount,
-  task: ScheduledTask
-): string {
+function resolveTemplate(template: string, account: SocialAccount, task: ScheduledTask): string {
   const now = new Date();
   const localDate = now.toLocaleDateString("en-CA", { timeZone: task.timezone }); // YYYY-MM-DD
   const dayOfWeek = now.toLocaleDateString("en-US", { timeZone: task.timezone, weekday: "long" });
@@ -37,9 +40,10 @@ function buildTaskSystemPrompt(account: SocialAccount, task: ScheduledTask): str
   const lang = (settings.language || "zh-TW") as Language;
 
   const LANG_RULES: Record<Language, string> = {
-    "zh-TW": "你必須使用繁體中文（台灣用語）產出所有內容。禁止簡體中文和 AI 套話（在當今/隨著/值得注意）。",
-    "en": "You must produce all content in English.",
-    "ja": "すべてのコンテンツを日本語で作成してください。",
+    "zh-TW":
+      "你必須使用繁體中文（台灣用語）產出所有內容。禁止簡體中文和 AI 套話（在當今/隨著/值得注意）。",
+    en: "You must produce all content in English.",
+    ja: "すべてのコンテンツを日本語で作成してください。",
   };
 
   return `${LANG_RULES[lang]}
@@ -140,13 +144,14 @@ export class TaskScheduler {
   private jobs = new Map<string, cron.ScheduledTask>();
   private runningTasks = new Set<string>(); // overlap guard by task_id
   private runningAbortControllers = new Map<string, AbortController>();
+  private runningQueryHandles = new Map<string, ReturnType<typeof query>>();
   private stopped = false;
 
   constructor() {
     // Mark stale executions from previous server run
     const result = store.markStaleExecutionsFailed();
     if (result.changes > 0) {
-      console.log(`[Scheduler] Marked ${result.changes} stale execution(s) as failed`);
+      logger.info("Scheduler", `Marked ${result.changes} stale execution(s) as failed`);
     }
   }
 
@@ -156,7 +161,7 @@ export class TaskScheduler {
     for (const task of tasks) {
       this.registerJob(task);
     }
-    console.log(`[Scheduler] Started with ${tasks.length} enabled task(s)`);
+    logger.info("Scheduler", `Started with ${tasks.length} enabled task(s)`);
   }
 
   /** Stop all cron jobs and abort running tasks */
@@ -166,12 +171,16 @@ export class TaskScheduler {
       job.stop();
     }
     this.jobs.clear();
-    // Abort all running agent sessions
+    // Abort all running agent sessions and close query handles
     for (const [id, controller] of this.runningAbortControllers) {
       controller.abort();
     }
     this.runningAbortControllers.clear();
-    console.log("[Scheduler] Stopped all jobs and aborted running tasks");
+    for (const [id, handle] of this.runningQueryHandles) {
+      handle.close();
+    }
+    this.runningQueryHandles.clear();
+    logger.info("Scheduler", "Stopped all jobs and aborted running tasks");
   }
 
   /** Register or re-register a cron job for a task */
@@ -182,20 +191,27 @@ export class TaskScheduler {
     if (!task.enabled) return;
 
     if (!cron.validate(task.schedule)) {
-      console.error(`[Scheduler] Invalid cron expression for task ${task.id}: ${task.schedule}`);
+      logger.error("Scheduler", `Invalid cron expression for task ${task.id}: ${task.schedule}`);
       return;
     }
 
-    const job = cron.schedule(task.schedule, () => {
-      this.executeTask(task.id, "schedule").catch((err) => {
-        console.error(`[Scheduler] Error executing task ${task.id}:`, err);
-      });
-    }, {
-      timezone: task.timezone,
-    });
+    const job = cron.schedule(
+      task.schedule,
+      () => {
+        this.executeTask(task.id, "schedule").catch((err) => {
+          logger.error("Scheduler", `Error executing task ${task.id}`, err);
+        });
+      },
+      {
+        timezone: task.timezone,
+      }
+    );
 
     this.jobs.set(task.id, job);
-    console.log(`[Scheduler] Registered job for "${task.name}" (${task.schedule} ${task.timezone})`);
+    logger.info(
+      "Scheduler",
+      `Registered job for "${task.name}" (${task.schedule} ${task.timezone})`
+    );
   }
 
   /** Unregister a cron job */
@@ -208,7 +224,11 @@ export class TaskScheduler {
   }
 
   /** Execute a task (called by cron tick or manual trigger) */
-  async executeTask(taskId: string, triggeredBy: TaskTrigger, retryCount = 0): Promise<TaskExecution> {
+  async executeTask(
+    taskId: string,
+    triggeredBy: TaskTrigger,
+    retryCount = 0
+  ): Promise<TaskExecution> {
     if (this.stopped) throw new Error("Scheduler is stopped");
 
     const task = store.getScheduledTask(taskId);
@@ -236,7 +256,10 @@ export class TaskScheduler {
       triggered_by: triggeredBy,
     });
 
-    console.log(`[Scheduler] Starting execution ${execution.id} for task "${task.name}" (${triggeredBy})`);
+    logger.info(
+      "Scheduler",
+      `Starting execution ${execution.id} for task "${task.name}" (${triggeredBy})`
+    );
 
     try {
       const result = await this.runAgentSession(prompt, account, task);
@@ -245,7 +268,9 @@ export class TaskScheduler {
       const taskResult = parseTaskResult(result.fullOutput);
       const score = taskResult?.score ?? null;
       const content = taskResult?.content ?? null;
-      const scoreBreakdown = taskResult?.score_breakdown ? JSON.stringify(taskResult.score_breakdown) : null;
+      const scoreBreakdown = taskResult?.score_breakdown
+        ? JSON.stringify(taskResult.score_breakdown)
+        : null;
 
       // Determine status based on score and publish state
       let status: "completed" | "published" | "rejected";
@@ -253,13 +278,16 @@ export class TaskScheduler {
 
       if (score !== null && score < task.min_score) {
         status = "rejected";
-        console.log(`[Scheduler] Task "${task.name}" rejected: score ${score} < min ${task.min_score}`);
+        logger.info(
+          "Scheduler",
+          `Task "${task.name}" rejected: score ${score} < min ${task.min_score}`
+        );
       } else if (taskResult?.published) {
         status = "published";
-        console.log(`[Scheduler] Task "${task.name}" published with score ${score}`);
+        logger.info("Scheduler", `Task "${task.name}" published with score ${score}`);
       } else {
         status = "completed";
-        console.log(`[Scheduler] Task "${task.name}" completed with score ${score}`);
+        logger.info("Scheduler", `Task "${task.name}" completed with score ${score}`);
       }
 
       store.updateExecutionResult(execution.id, {
@@ -276,18 +304,21 @@ export class TaskScheduler {
     } catch (err) {
       const durationMs = Date.now() - startTime;
       const errorMsg = err instanceof Error ? err.message : String(err);
-      console.error(`[Scheduler] Task "${task.name}" failed (attempt ${retryCount + 1}):`, errorMsg);
+      logger.error("Scheduler", `Task "${task.name}" failed (attempt ${retryCount + 1})`, err);
 
       // Retry logic (skip if scheduler is stopping)
       if (!this.stopped && retryCount < task.max_retries) {
-        console.log(`[Scheduler] Retrying task "${task.name}" in 30s (${retryCount + 1}/${task.max_retries})`);
+        logger.info(
+          "Scheduler",
+          `Retrying task "${task.name}" in 30s (${retryCount + 1}/${task.max_retries})`
+        );
         store.updateExecutionResult(execution.id, {
           status: "failed",
           error: `${errorMsg} (retrying...)`,
           duration_ms: durationMs,
           retry_count: retryCount + 1,
         });
-        this.runningTasks.delete(taskId);
+        // Keep taskId in runningTasks during backoff to prevent concurrent execution
         await new Promise((r) => setTimeout(r, 30000));
         // Re-check after sleep — stop() may have been called during the 30s wait
         if (this.stopped) {
@@ -299,6 +330,8 @@ export class TaskScheduler {
           });
           return store.getExecution(execution.id) as TaskExecution;
         }
+        // Release before recursive call (which re-acquires the guard)
+        this.runningTasks.delete(taskId);
         return this.executeTask(taskId, triggeredBy, retryCount + 1);
       }
 
@@ -352,15 +385,22 @@ export class TaskScheduler {
           maxTurns: 50,
           model: "sonnet",
           permissionMode: "bypassPermissions",
+          // SDK 0.2 requires this flag alongside permissionMode: "bypassPermissions"
+          allowDangerouslySkipPermissions: true,
           abortController,
           systemPrompt,
           cwd,
           allowedTools,
-          disallowedTools: ["mcp__trend-pulse__publish_to_threads", "mcp__trend-pulse__get_publish_history"],
+          disallowedTools: [
+            "mcp__trend-pulse__publish_to_threads",
+            "mcp__trend-pulse__get_publish_history",
+          ],
           mcpServers: allMcpServers,
           executable: (process.env.STUDIO_NODE_PATH || process.execPath) as any,
         },
       });
+      // Store query handle so stop() can call .close() to terminate the subprocess
+      this.runningQueryHandles.set(task.id, outputStream);
 
       for await (const message of outputStream) {
         if (message.type === "assistant") {
@@ -383,6 +423,7 @@ export class TaskScheduler {
     } finally {
       clearTimeout(timeoutId);
       this.runningAbortControllers.delete(task.id);
+      this.runningQueryHandles.delete(task.id);
     }
   }
 

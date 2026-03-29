@@ -17,6 +17,8 @@ import publishRouter from "./routes/publish.js";
 import accountsRouter from "./routes/accounts.js";
 import scheduledTasksRouter, { setScheduler } from "./routes/scheduled-tasks.js";
 import { TaskScheduler } from "./services/scheduler.js";
+import { rateLimiter } from "./middleware/rate-limiter.js";
+import { logger } from "./logger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,13 +32,15 @@ const app = express();
 const ALLOWED_ORIGINS = [
   `http://localhost:${PORT}`,
   `http://127.0.0.1:${PORT}`,
-  "http://localhost:5173",    // Vite dev server
+  "http://localhost:5173", // Vite dev server
   "http://127.0.0.1:5173",
 ];
 app.use(cors({ origin: ALLOWED_ORIGINS }));
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
 // Serve built assets in production, raw client in dev
+// Static assets must be served BEFORE the rate limiter so that CSS/JS/images
+// don't consume the API rate budget.
 const distDir = path.join(__dirname, "../dist");
 if (fs.existsSync(distDir)) {
   app.use(express.static(distDir));
@@ -50,6 +54,9 @@ if (fs.existsSync(distDir)) {
   });
 }
 
+// Rate limiter applied AFTER static assets so only API routes consume rate budget
+app.use(rateLimiter);
+
 // REST API routes
 app.use("/api/sessions", sessionsRouter);
 app.use("/api/sessions", filesRouter);
@@ -57,6 +64,14 @@ app.use("/api/settings", settingsRouter);
 app.use("/api/publish", publishRouter);
 app.use("/api/accounts", accountsRouter);
 app.use("/api/scheduled-tasks", scheduledTasksRouter);
+
+// Terminal error handler
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  logger.error("Server", "Unhandled route error", err);
+  if (!res.headersSent) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 // Session management (long-lived agent sessions)
 const sessions: Map<string, Session> = new Map();
@@ -77,7 +92,7 @@ const idleCleanup = setInterval(() => {
       session.close();
       sessions.delete(id);
       sessionLastActivity.delete(id);
-      console.log(`[Session] Evicted idle session ${id}`);
+      logger.info("Server", `Evicted idle session ${id}`);
     }
   }
 }, 60_000);
@@ -122,10 +137,14 @@ export { removeSession };
 
 // Prevent unhandled SDK errors from crashing the server
 process.on("uncaughtException", (err) => {
-  console.error("[Server] Uncaught exception (non-fatal):", err.message);
+  logger.error("Server", "Uncaught exception (non-fatal)", err);
 });
 process.on("unhandledRejection", (reason) => {
-  console.error("[Server] Unhandled rejection (non-fatal):", reason);
+  logger.error(
+    "Server",
+    "Unhandled rejection (non-fatal)",
+    reason instanceof Error ? reason : new Error(String(reason))
+  );
 });
 
 // Create HTTP server
@@ -135,6 +154,7 @@ const server = createServer(app);
 const wss = new WebSocketServer({
   server,
   path: "/ws",
+  maxPayload: 1 * 1024 * 1024, // 1 MiB
   verifyClient: ({ origin }: { origin?: string }) => {
     // Allow connections without origin (e.g. from CLI tools)
     if (!origin) return true;
@@ -145,9 +165,11 @@ const wss = new WebSocketServer({
 wss.on("connection", (ws: WSClient) => {
   ws.isAlive = true;
 
-  ws.send(
-    JSON.stringify({ type: "connected", message: "Connected to Claude World Studio" })
-  );
+  ws.send(JSON.stringify({ type: "connected", message: "Connected to Claude World Studio" }));
+
+  ws.on("error", (err) => {
+    logger.error("Server", "WebSocket client error", err);
+  });
 
   ws.on("pong", () => {
     ws.isAlive = true;
@@ -167,11 +189,13 @@ wss.on("connection", (ws: WSClient) => {
 
           const session = getSession(message.sessionId);
           if (!session) {
-            ws.send(JSON.stringify({
-              type: "error",
-              error: "Session not found",
-              sessionId: message.sessionId,
-            }));
+            ws.send(
+              JSON.stringify({
+                type: "error",
+                error: "Session not found",
+                sessionId: message.sessionId,
+              })
+            );
             break;
           }
           session.subscribe(ws);
@@ -202,11 +226,13 @@ wss.on("connection", (ws: WSClient) => {
           }
           const session = getSession(message.sessionId);
           if (!session) {
-            ws.send(JSON.stringify({
-              type: "error",
-              error: "Session not found",
-              sessionId: message.sessionId,
-            }));
+            ws.send(
+              JSON.stringify({
+                type: "error",
+                error: "Session not found",
+                sessionId: message.sessionId,
+              })
+            );
             break;
           }
           session.subscribe(ws);
@@ -225,7 +251,10 @@ wss.on("connection", (ws: WSClient) => {
             });
             wss.clients.forEach((client) => {
               const wsClient = client as WSClient;
-              if (wsClient.sessionId === message.sessionId && wsClient.readyState === wsClient.OPEN) {
+              if (
+                wsClient.sessionId === message.sessionId &&
+                wsClient.readyState === wsClient.OPEN
+              ) {
                 wsClient.send(interruptMsg);
               }
             });
@@ -237,7 +266,7 @@ wss.on("connection", (ws: WSClient) => {
           ws.send(JSON.stringify({ type: "error", error: "Unknown message type" }));
       }
     } catch (error) {
-      console.error("Error handling WebSocket message:", error);
+      logger.error("Server", "Error handling WebSocket message", error);
       ws.send(JSON.stringify({ type: "error", error: "Invalid message format" }));
     }
   });
@@ -267,18 +296,29 @@ wss.on("close", () => {
   clearInterval(idleCleanup);
 });
 
-// Initialize task scheduler
+// Initialize task scheduler (started inside listen callback below)
 const taskScheduler = new TaskScheduler();
 setScheduler(taskScheduler);
-taskScheduler.start();
 
 // Start server — bound to localhost for security
 server.listen(PORT, HOST, () => {
-  console.log(`Claude World Studio running at http://${HOST}:${PORT}`);
-  console.log(`WebSocket endpoint at ws://${HOST}:${PORT}/ws`);
+  logger.info("Server", `Claude World Studio running at http://${HOST}:${PORT}`);
+  logger.info("Server", `WebSocket endpoint at ws://${HOST}:${PORT}/ws`);
   if (!fs.existsSync(distDir)) {
-    console.log(`Frontend dev server at http://localhost:5173`);
+    logger.info("Server", "Frontend dev server at http://localhost:5173");
   }
+  // Start scheduler only after the HTTP server is confirmed listening
+  taskScheduler.start();
+});
+
+// Handle bind errors (e.g. EADDRINUSE) before the server starts
+server.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EADDRINUSE") {
+    logger.error("Server", `Port ${PORT} is already in use. Exiting.`, err);
+  } else {
+    logger.error("Server", "HTTP server error", err);
+  }
+  process.exit(1);
 });
 
 // Graceful shutdown
@@ -288,13 +328,13 @@ function shutdown() {
   if (isShuttingDown) return;
   isShuttingDown = true;
 
-  console.log("[Server] Shutting down...");
+  logger.info("Server", "Shutting down...");
 
   // 1. Stop scheduled tasks
   taskScheduler.stop();
 
   // 2. Close all active sessions (stops CLI subprocesses & Agent SDK)
-  for (const [id, session] of sessions) {
+  for (const [, session] of sessions) {
     session.close();
   }
   sessions.clear();
@@ -307,13 +347,13 @@ function shutdown() {
   // 4. Close WebSocket & HTTP servers
   wss.close();
   server.close(() => {
-    console.log("[Server] Clean exit");
+    logger.info("Server", "Clean exit");
     process.exit(0);
   });
 
   // 5. Force exit if server.close() hangs (open connections, etc.)
   setTimeout(() => {
-    console.error("[Server] Forced exit after timeout");
+    logger.error("Server", "Forced exit after timeout");
     process.exit(1);
   }, 5000).unref();
 }

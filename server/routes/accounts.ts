@@ -1,7 +1,11 @@
 import { Router } from "express";
 import store from "../db.js";
-
-const VALID_PLATFORMS = ["threads", "instagram"] as const;
+import {
+  CreateAccountSchema,
+  UpdateAccountSchema,
+  ToggleAutoPublishSchema,
+  parseBody,
+} from "../validation.js";
 
 function maskToken(token: string): string {
   if (!token || token.length < 12) return token ? "***" : "";
@@ -34,24 +38,27 @@ router.get("/:id/posts", (req, res) => {
   if (!account) {
     return res.status(404).json({ error: "Account not found" });
   }
-  const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+  const limit = Math.max(1, Math.min(parseInt(req.query.limit as string) || 100, 500));
   const posts = store.getPublishByAccount(req.params.id, limit);
   res.json(posts);
 });
 
 // Create account
 router.post("/", (req, res) => {
-  const { name, handle, platform, token, user_id, style, persona_prompt, auto_publish } = req.body || {};
+  const parsed = parseBody(CreateAccountSchema, req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
 
-  if (!name || !handle || !platform) {
-    return res.status(400).json({ error: "name, handle, and platform are required" });
-  }
-  if (!VALID_PLATFORMS.includes(platform)) {
-    return res.status(400).json({ error: `platform must be one of: ${VALID_PLATFORMS.join(", ")}` });
-  }
+  const { name, handle, platform, token, user_id, style, persona_prompt, auto_publish } =
+    parsed.data;
 
   const account = store.createAccount({
-    name, handle, platform, token, user_id, style, persona_prompt,
+    name,
+    handle,
+    platform,
+    token,
+    user_id,
+    style,
+    persona_prompt,
   });
   // auto_publish is handled via update since createAccount doesn't include it
   if (auto_publish !== undefined) {
@@ -76,11 +83,11 @@ router.put("/:id", (req, res) => {
     return res.status(404).json({ error: "Account not found" });
   }
 
-  const { name, handle, platform, token, user_id, style, persona_prompt, auto_publish } = req.body || {};
+  const parsed = parseBody(UpdateAccountSchema, req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
 
-  if (platform && !VALID_PLATFORMS.includes(platform)) {
-    return res.status(400).json({ error: `platform must be one of: ${VALID_PLATFORMS.join(", ")}` });
-  }
+  const { name, handle, platform, token, user_id, style, persona_prompt, auto_publish } =
+    parsed.data;
 
   store.updateAccount(req.params.id, {
     name: name ?? existing.name,
@@ -108,10 +115,9 @@ router.patch("/:id/auto-publish", (req, res) => {
     return res.status(404).json({ error: "Account not found" });
   }
 
-  const { auto_publish } = req.body || {};
-  if (auto_publish === undefined) {
-    return res.status(400).json({ error: "auto_publish is required" });
-  }
+  const parsed = parseBody(ToggleAutoPublishSchema, req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
+  const { auto_publish } = parsed.data;
 
   store.updateAccount(req.params.id, {
     name: existing.name,

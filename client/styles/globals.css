@@ -1,6 +1,7 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@source "../../client/**/*.{js,ts,jsx,tsx,html}";
+@plugin "@tailwindcss/typography";
+@custom-variant dark (.dark &);
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
@@ -19,8 +20,13 @@
 
 /* Pulse dot animation */
 @keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }
 .animate-pulse-dot {
   animation: pulse-dot 1.5s ease-in-out infinite;
@@ -28,13 +34,25 @@
 
 /* Typing indicator */
 @keyframes typing {
-  0% { opacity: 0.3; }
-  20% { opacity: 1; }
-  100% { opacity: 0.3; }
+  0% {
+    opacity: 0.3;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.3;
+  }
 }
-.typing-dot:nth-child(1) { animation: typing 1.4s infinite 0s; }
-.typing-dot:nth-child(2) { animation: typing 1.4s infinite 0.2s; }
-.typing-dot:nth-child(3) { animation: typing 1.4s infinite 0.4s; }
+.typing-dot:nth-child(1) {
+  animation: typing 1.4s infinite 0s;
+}
+.typing-dot:nth-child(2) {
+  animation: typing 1.4s infinite 0.2s;
+}
+.typing-dot:nth-child(3) {
+  animation: typing 1.4s infinite 0.4s;
+}
 
 /* Dark mode scrollbar */
 .dark ::-webkit-scrollbar-thumb {
@@ -77,7 +95,7 @@
 
 /* Workflow step connector */
 .workflow-step + .workflow-step::before {
-  content: '';
+  content: "";
   position: absolute;
   left: 50%;
   top: -12px;

@@ -59,12 +59,7 @@ function startServer() {
   let spawnCmd, spawnArgs;
   if (app.isPackaged) {
     const tsxCli = path.join(projectDir, "node_modules", "tsx", "dist", "cli.mjs");
-    let systemNode;
-    try {
-      systemNode = execSync("/bin/zsh -lc 'which node'", { encoding: "utf-8", timeout: 5000, env: { ...process.env, PATH: mergedPath } }).trim();
-    } catch {
-      systemNode = "/usr/local/bin/node";
-    }
+    // Reuse systemNode resolved above — already captured in STUDIO_NODE_PATH as well
     spawnCmd = systemNode;
     spawnArgs = [tsxCli, "server/server.ts"];
   } else {

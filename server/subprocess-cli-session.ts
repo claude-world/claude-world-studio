@@ -1,7 +1,8 @@
-import { spawn, type ChildProcess } from "child_process";
-import { createInterface } from "readline";
+import { spawn, execSync, type ChildProcess } from "child_process";
+import readline from "readline";
 import type { ICliSession } from "./cli-session.js";
 import type { CliCommand } from "./types.js";
+import { logger } from "./logger.js";
 
 /**
  * Async queue for normalized SDK-format events.
@@ -56,18 +57,29 @@ class EventQueue {
 }
 
 /** CLI-specific command builders */
-const CLI_CONFIGS: Record<string, {
-  buildArgs: (prompt: string, cwd: string, mcpConfigPath?: string) => { cmd: string; args: string[]; stdin?: string };
-}> = {
+const CLI_CONFIGS: Record<
+  string,
+  {
+    buildArgs: (
+      prompt: string,
+      cwd: string,
+      mcpConfigPath?: string
+    ) => { cmd: string; args: string[]; stdin?: string };
+  }
+> = {
   claude: {
     buildArgs: (prompt, cwd, mcpConfigPath) => ({
       cmd: "claude",
       args: [
-        "-p", prompt,
-        "--output-format", "stream-json",
+        "-p",
+        prompt,
+        "--output-format",
+        "stream-json",
         "--verbose",
-        "--permission-mode", "auto",
-        "-C", cwd,
+        "--permission-mode",
+        "auto",
+        "-C",
+        cwd,
         ...(mcpConfigPath ? ["--mcp-config", mcpConfigPath] : []),
       ],
     }),
@@ -75,24 +87,14 @@ const CLI_CONFIGS: Record<string, {
   codex: {
     buildArgs: (prompt, cwd) => ({
       cmd: "codex",
-      args: [
-        "exec",
-        "--json",
-        "--full-auto",
-        "-C", cwd,
-        "-",
-      ],
+      args: ["exec", "--json", "--full-auto", "-C", cwd, "-"],
       stdin: prompt,
     }),
   },
   gemini: {
     buildArgs: (prompt, cwd) => ({
       cmd: "gemini",
-      args: [
-        "-p", prompt,
-        "--output-format", "stream-json",
-        "--yolo",
-      ],
+      args: ["-p", prompt, "--output-format", "stream-json", "--yolo"],
     }),
   },
   opencode: {
@@ -139,23 +141,27 @@ function parseCodexLine(data: any): any[] {
       events.push({
         type: "assistant",
         message: {
-          content: [{
-            type: "tool_use",
-            id: toolId,
-            name: "Bash",
-            input: { command: cmd },
-          }],
+          content: [
+            {
+              type: "tool_use",
+              id: toolId,
+              name: "Bash",
+              input: { command: cmd },
+            },
+          ],
         },
       });
       // Emit tool_result
       events.push({
         type: "assistant",
         message: {
-          content: [{
-            type: "tool_result",
-            tool_use_id: toolId,
-            content: output,
-          }],
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: toolId,
+              content: output,
+            },
+          ],
         },
       });
     }
@@ -186,23 +192,27 @@ function parseGeminiLine(data: any): any[] {
     events.push({
       type: "assistant",
       message: {
-        content: [{
-          type: "tool_use",
-          id: data.tool_id || `gemini-${Date.now()}`,
-          name: data.tool_name || "unknown",
-          input: data.parameters || {},
-        }],
+        content: [
+          {
+            type: "tool_use",
+            id: data.tool_id || `gemini-${Date.now()}`,
+            name: data.tool_name || "unknown",
+            input: data.parameters || {},
+          },
+        ],
       },
     });
   } else if (data.type === "tool_result") {
     events.push({
       type: "assistant",
       message: {
-        content: [{
-          type: "tool_result",
-          tool_use_id: data.tool_id || "",
-          content: data.output || "",
-        }],
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: data.tool_id || "",
+            content: data.output || "",
+          },
+        ],
       },
     });
   } else if (data.type === "result") {
@@ -222,8 +232,10 @@ let _cachedShellPath: string | null = null;
 function getShellPath(): string {
   if (_cachedShellPath !== null) return _cachedShellPath;
   try {
-    const { execSync } = require("child_process");
-    _cachedShellPath = execSync("/bin/zsh -lc 'echo $PATH'", { encoding: "utf-8", timeout: 5000 }).trim();
+    _cachedShellPath = execSync("/bin/zsh -lc 'echo $PATH'", {
+      encoding: "utf-8",
+      timeout: 5000,
+    }).trim();
   } catch {
     _cachedShellPath = process.env.PATH || "/usr/local/bin:/usr/bin:/bin";
   }
@@ -246,6 +258,8 @@ export class SubprocessCliSession implements ICliSession {
   private eventQueue = new EventQueue();
   private process: ChildProcess | null = null;
   private forceKillTimer: ReturnType<typeof setTimeout> | null = null;
+  private rlStdout: readline.Interface | null = null;
+  private rlStderr: readline.Interface | null = null;
   private workspacePath: string;
   private systemPrompt: string;
   private mcpConfigPath?: string;
@@ -255,7 +269,7 @@ export class SubprocessCliSession implements ICliSession {
     cli: CliCommand,
     workspacePath: string,
     systemPrompt: string,
-    mcpConfigPath?: string,
+    mcpConfigPath?: string
   ) {
     this.cliName = cli;
     this.workspacePath = workspacePath;
@@ -287,10 +301,12 @@ export class SubprocessCliSession implements ICliSession {
     const { cmd, args, stdin } = config.buildArgs(
       fullPrompt,
       this.workspacePath,
-      this.mcpConfigPath,
+      this.mcpConfigPath
     );
 
-    console.log(`[${this.cliName}] Spawning: ${cmd} ${args.slice(0, 3).join(" ")}...`);
+    logger.info("SubprocessCLI", `Spawning: ${cmd} ${args.slice(0, 3).join(" ")}...`, {
+      cli: this.cliName,
+    });
 
     this.process = spawn(cmd, args, {
       cwd: this.workspacePath,
@@ -311,7 +327,8 @@ export class SubprocessCliSession implements ICliSession {
 
     // Parse stdout JSONL line by line
     if (this.process.stdout) {
-      const rl = createInterface({ input: this.process.stdout });
+      const rl = readline.createInterface({ input: this.process.stdout });
+      this.rlStdout = rl;
       rl.on("line", (line) => {
         const trimmed = line.trim();
         if (!trimmed || !trimmed.startsWith("{")) return;
@@ -329,16 +346,17 @@ export class SubprocessCliSession implements ICliSession {
 
     // Log stderr
     if (this.process.stderr) {
-      const rl = createInterface({ input: this.process.stderr });
-      rl.on("line", (line) => {
+      const rlErr = readline.createInterface({ input: this.process.stderr });
+      this.rlStderr = rlErr;
+      rlErr.on("line", (line) => {
         if (line.trim()) {
-          console.error(`[${this.cliName}] ${line}`);
+          logger.debug("SubprocessCLI", line, { cli: this.cliName });
         }
       });
     }
 
     this.process.on("exit", (code) => {
-      console.log(`[${this.cliName}] Process exited with code ${code}`);
+      logger.info("SubprocessCLI", `Process exited with code ${code}`, { cli: this.cliName });
       this.process = null;
       if (this.forceKillTimer) {
         clearTimeout(this.forceKillTimer);
@@ -356,14 +374,16 @@ export class SubprocessCliSession implements ICliSession {
     });
 
     this.process.on("error", (err) => {
-      console.error(`[${this.cliName}] Spawn error:`, err.message);
+      logger.error("SubprocessCLI", `Spawn error for ${this.cliName}`, err);
       queue.push({
         type: "assistant",
         message: {
-          content: [{
-            type: "text",
-            text: `Error: Could not start ${this.cliName} CLI. Is it installed?\n\nInstall with:\n- codex: \`npm i -g @openai/codex\`\n- gemini: \`npm i -g @anthropic-ai/gemini-cli\` or \`npm i -g @anthropic-ai/gemini\`\n- opencode: \`go install github.com/opencode-ai/opencode@latest\``,
-          }],
+          content: [
+            {
+              type: "text",
+              text: `Error: Could not start ${this.cliName} CLI. Is it installed?\n\nInstall with:\n- codex: \`npm i -g @openai/codex\`\n- gemini: \`npm i -g @anthropic-ai/gemini-cli\` or \`npm i -g @anthropic-ai/gemini\`\n- opencode: \`go install github.com/opencode-ai/opencode@latest\``,
+            },
+          ],
         },
       });
       queue.push({
@@ -387,6 +407,10 @@ export class SubprocessCliSession implements ICliSession {
 
   /** Kill the current subprocess with SIGTERM → 3s SIGKILL fallback */
   private killProcess() {
+    this.rlStdout?.close();
+    this.rlStdout = null;
+    this.rlStderr?.close();
+    this.rlStderr = null;
     if (this.forceKillTimer) {
       clearTimeout(this.forceKillTimer);
       this.forceKillTimer = null;
@@ -394,10 +418,14 @@ export class SubprocessCliSession implements ICliSession {
     if (this.process) {
       const proc = this.process;
       this.process = null;
-      try { proc.kill("SIGTERM"); } catch {}
+      try {
+        proc.kill("SIGTERM");
+      } catch {}
       this.forceKillTimer = setTimeout(() => {
         this.forceKillTimer = null;
-        try { proc.kill("SIGKILL"); } catch {}
+        try {
+          proc.kill("SIGKILL");
+        } catch {}
       }, 3000);
       this.forceKillTimer.unref(); // Don't block server shutdown
     }

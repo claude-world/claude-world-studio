@@ -7,24 +7,6 @@ import store from "../db.js";
 const MAX_DEPTH = 5;
 const MAX_TEXT_BYTES = 100 * 1024;
 
-/**
- * Check that `target` is strictly within `base` directory.
- * Both paths must exist on disk so realpathSync can resolve symlinks.
- * Returns false if either path doesn't exist (deny by default).
- */
-function isWithinWorkspace(base: string, target: string): boolean {
-  try {
-    const resolvedBase = fs.realpathSync(base);
-    const resolvedTarget = fs.realpathSync(target);
-    return (
-      resolvedTarget === resolvedBase ||
-      resolvedTarget.startsWith(resolvedBase + path.sep)
-    );
-  } catch {
-    return false;
-  }
-}
-
 const router = Router();
 
 interface FileEntry {
@@ -112,14 +94,15 @@ router.get("/:sessionId/files", async (req, res) => {
 });
 
 // Read file content
-router.get("/:sessionId/files/*", async (req, res) => {
+router.get("/:sessionId/files/*filepath", async (req, res) => {
   const session = store.getSession(req.params.sessionId);
   if (!session) {
     return res.status(404).json({ error: "Session not found" });
   }
 
-  // Extract the file path from the wildcard params
-  const filePath = (req.params as Record<string, string>)[0] as string | undefined;
+  // Express 5: named wildcard *filepath captures the rest of the path
+  const rawPath = req.params.filepath;
+  const filePath = Array.isArray(rawPath) ? rawPath.join("/") : rawPath;
   if (!filePath) {
     return res.status(400).json({ error: "File path required" });
   }
@@ -140,7 +123,9 @@ router.get("/:sessionId/files/*", async (req, res) => {
         try {
           const resolvedRoot = fs.realpathSync(root);
           return resolvedPath === resolvedRoot || resolvedPath.startsWith(resolvedRoot + path.sep);
-        } catch { return false; }
+        } catch {
+          return false;
+        }
       });
 
       if (!isAllowed) {
@@ -161,7 +146,21 @@ router.get("/:sessionId/files/*", async (req, res) => {
 
     // For binary files, send raw; for text, send JSON
     const ext = path.extname(resolvedPath).toLowerCase();
-    const binaryExts = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".pdf", ".mp3", ".mp4", ".wav", ".m4a", ".webm", ".ogg"];
+    const binaryExts = [
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".gif",
+      ".webp",
+      ".svg",
+      ".pdf",
+      ".mp3",
+      ".mp4",
+      ".wav",
+      ".m4a",
+      ".webm",
+      ".ogg",
+    ];
 
     if (binaryExts.includes(ext)) {
       res.sendFile(resolvedPath);

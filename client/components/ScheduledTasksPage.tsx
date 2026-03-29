@@ -30,7 +30,8 @@ const T = {
     fieldMinScore: "最低分數",
     fieldMaxRetries: "最大重試",
     fieldTimeout: "逾時（秒）",
-    promptHelp: "可用變數：{{account_name}}, {{account_handle}}, {{date}}, {{date_local}}, {{day_of_week}}, {{language}}, {{platform}}",
+    promptHelp:
+      "可用變數：{{account_name}}, {{account_handle}}, {{date}}, {{date_local}}, {{day_of_week}}, {{language}}, {{platform}}",
     saving: "儲存中...",
     create: "建立",
     update: "更新",
@@ -97,7 +98,8 @@ const T = {
     fieldMinScore: "Min Score",
     fieldMaxRetries: "Max Retries",
     fieldTimeout: "Timeout (seconds)",
-    promptHelp: "Variables: {{account_name}}, {{account_handle}}, {{date}}, {{date_local}}, {{day_of_week}}, {{language}}, {{platform}}",
+    promptHelp:
+      "Variables: {{account_name}}, {{account_handle}}, {{date}}, {{date_local}}, {{day_of_week}}, {{language}}, {{platform}}",
     saving: "Saving...",
     create: "Create",
     update: "Update",
@@ -143,7 +145,8 @@ const T = {
     tabExecutions: "実行履歴",
     backToChat: "チャットに戻る",
     addTask: "+ 新規タスク",
-    noTasks: "スケジュールタスクがまだありません。コンテンツパイプラインを自動化するために作成してください。",
+    noTasks:
+      "スケジュールタスクがまだありません。コンテンツパイプラインを自動化するために作成してください。",
     enabled: "有効",
     disabled: "無効",
     runNow: "今すぐ実行",
@@ -162,7 +165,8 @@ const T = {
     fieldMinScore: "最低スコア",
     fieldMaxRetries: "最大リトライ",
     fieldTimeout: "タイムアウト（秒）",
-    promptHelp: "変数：{{account_name}}, {{account_handle}}, {{date}}, {{date_local}}, {{day_of_week}}, {{language}}, {{platform}}",
+    promptHelp:
+      "変数：{{account_name}}, {{account_handle}}, {{date}}, {{date_local}}, {{day_of_week}}, {{language}}, {{platform}}",
     saving: "保存中...",
     create: "作成",
     update: "更新",
@@ -205,7 +209,7 @@ const T = {
 };
 
 type LangKey = keyof typeof T;
-type Translations = typeof T[LangKey];
+type Translations = (typeof T)[LangKey];
 
 interface Account {
   id: string;
@@ -262,7 +266,8 @@ const SCHEDULE_PRESETS = [
 const EMPTY_TASK: Omit<ScheduledTask, "id" | "created_at" | "updated_at"> = {
   name: "",
   account_id: "",
-  prompt_template: "Discover today's top trending topic in {{platform}}, write an engaging post for {{account_name}} ({{account_handle}}), and publish it.\n\nDate: {{date_local}} ({{day_of_week}})\nLanguage: {{language}}",
+  prompt_template:
+    "Discover today's top trending topic in {{platform}}, write an engaging post for {{account_name}} ({{account_handle}}), and publish it.\n\nDate: {{date_local}} ({{day_of_week}})\nLanguage: {{language}}",
   schedule: "0 9 * * *",
   timezone: "Asia/Taipei",
   enabled: 1,
@@ -290,7 +295,9 @@ function StatusBadge({ status, t }: { status: string; t: Translations }) {
     rejected: t.statusRejected,
   };
   return (
-    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${styles[status] || "bg-gray-100 text-gray-600"}`}>
+    <span
+      className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${styles[status] || "bg-gray-100 text-gray-600"}`}
+    >
       {labels[status] || status}
     </span>
   );
@@ -298,9 +305,12 @@ function StatusBadge({ status, t }: { status: string; t: Translations }) {
 
 function ScoreBadge({ score, minScore }: { score: number | null; minScore?: number }) {
   if (score === null) return null;
-  const color = score >= 80 ? "text-green-600 dark:text-green-400" :
-    score >= 70 ? "text-amber-600 dark:text-amber-400" :
-    "text-red-600 dark:text-red-400";
+  const color =
+    score >= 80
+      ? "text-green-600 dark:text-green-400"
+      : score >= 70
+        ? "text-amber-600 dark:text-amber-400"
+        : "text-red-600 dark:text-red-400";
   const passed = minScore ? score >= minScore : true;
   return (
     <span className={`text-xs font-semibold ${color}`}>
@@ -349,6 +359,13 @@ function TaskForm({
     return match ? match.label : "custom";
   });
 
+  // Resync local state when editing a different task
+  useEffect(() => {
+    setForm({ ...task, timeout_s: Math.round(task.timeout_ms / 1000) });
+    const match = SCHEDULE_PRESETS.find((p) => p.value === task.schedule);
+    setPresetKey(match ? match.label : "custom");
+  }, [task?.id]);
+
   const handlePreset = (key: string, value: string) => {
     setPresetKey(key);
     if (value) setForm({ ...form, schedule: value });
@@ -372,7 +389,9 @@ function TaskForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t.fieldName}</label>
+          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
+            {t.fieldName}
+          </label>
           <input
             type="text"
             value={form.name}
@@ -382,7 +401,9 @@ function TaskForm({
           />
         </div>
         <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t.fieldAccount}</label>
+          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
+            {t.fieldAccount}
+          </label>
           <select
             value={form.account_id}
             onChange={(e) => setForm({ ...form, account_id: e.target.value })}
@@ -390,7 +411,9 @@ function TaskForm({
           >
             <option value="">--</option>
             {accounts.map((a) => (
-              <option key={a.id} value={a.id}>{a.handle} ({a.platform})</option>
+              <option key={a.id} value={a.id}>
+                {a.handle} ({a.platform})
+              </option>
             ))}
           </select>
         </div>
@@ -398,7 +421,9 @@ function TaskForm({
 
       {/* Schedule */}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t.fieldSchedule}</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
+          {t.fieldSchedule}
+        </label>
         <div className="flex gap-1 mb-2">
           {SCHEDULE_PRESETS.map((p) => (
             <button
@@ -417,7 +442,10 @@ function TaskForm({
         <input
           type="text"
           value={form.schedule}
-          onChange={(e) => { setForm({ ...form, schedule: e.target.value }); setPresetKey("custom"); }}
+          onChange={(e) => {
+            setForm({ ...form, schedule: e.target.value });
+            setPresetKey("custom");
+          }}
           placeholder="0 9 * * *"
           className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded text-sm font-mono"
         />
@@ -425,7 +453,9 @@ function TaskForm({
 
       {/* Timezone */}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t.fieldTimezone}</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
+          {t.fieldTimezone}
+        </label>
         <input
           type="text"
           value={form.timezone}
@@ -437,7 +467,9 @@ function TaskForm({
 
       {/* Prompt template */}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t.fieldPromptTemplate}</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
+          {t.fieldPromptTemplate}
+        </label>
         <textarea
           value={form.prompt_template}
           onChange={(e) => setForm({ ...form, prompt_template: e.target.value })}
@@ -450,32 +482,41 @@ function TaskForm({
       {/* Settings row */}
       <div className="grid grid-cols-3 gap-3">
         <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t.fieldMinScore}</label>
+          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
+            {t.fieldMinScore}
+          </label>
           <input
             type="number"
             value={form.min_score}
             onChange={(e) => setForm({ ...form, min_score: parseInt(e.target.value) || 80 })}
-            min={0} max={100}
+            min={0}
+            max={100}
             className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded text-sm"
           />
         </div>
         <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t.fieldMaxRetries}</label>
+          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
+            {t.fieldMaxRetries}
+          </label>
           <input
             type="number"
             value={form.max_retries}
             onChange={(e) => setForm({ ...form, max_retries: parseInt(e.target.value) || 2 })}
-            min={0} max={5}
+            min={0}
+            max={5}
             className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded text-sm"
           />
         </div>
         <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t.fieldTimeout}</label>
+          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
+            {t.fieldTimeout}
+          </label>
           <input
             type="number"
             value={form.timeout_s}
             onChange={(e) => setForm({ ...form, timeout_s: parseInt(e.target.value) || 300 })}
-            min={60} max={1800}
+            min={60}
+            max={1800}
             className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded text-sm"
           />
         </div>
@@ -488,14 +529,18 @@ function TaskForm({
           onClick={() => setForm({ ...form, auto_publish: form.auto_publish ? 0 : 1 })}
           className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${form.auto_publish ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"}`}
         >
-          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${form.auto_publish ? "translate-x-4" : "translate-x-0.5"}`} />
+          <span
+            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${form.auto_publish ? "translate-x-4" : "translate-x-0.5"}`}
+          />
         </button>
       </div>
 
       <div className="flex gap-2">
         <button
           onClick={handleSave}
-          disabled={!form.name || !form.account_id || !form.prompt_template || !form.schedule || saving}
+          disabled={
+            !form.name || !form.account_id || !form.prompt_template || !form.schedule || saving
+          }
           className="text-xs px-4 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-40"
         >
           {saving ? t.saving : isNew ? t.create : t.update}
@@ -513,7 +558,12 @@ function TaskForm({
 
 // --- Execution Row ---
 
-function ExecutionRow({ execution, taskName, accountHandle, t }: {
+function ExecutionRow({
+  execution,
+  taskName,
+  accountHandle,
+  t,
+}: {
   execution: TaskExecution;
   taskName?: string;
   accountHandle?: string;
@@ -521,17 +571,29 @@ function ExecutionRow({ execution, taskName, accountHandle, t }: {
 }) {
   const [expanded, setExpanded] = useState(false);
 
-  const breakdown = execution.score_breakdown ? (() => {
-    try { return JSON.parse(execution.score_breakdown!); } catch { return null; }
-  })() : null;
+  const breakdown = execution.score_breakdown
+    ? (() => {
+        try {
+          return JSON.parse(execution.score_breakdown!);
+        } catch {
+          return null;
+        }
+      })()
+    : null;
 
   return (
     <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <StatusBadge status={execution.status} t={t} />
-          {taskName && <span className="text-xs text-gray-600 dark:text-gray-300 font-medium truncate">{taskName}</span>}
-          {accountHandle && <span className="text-[10px] text-gray-400 dark:text-gray-500">{accountHandle}</span>}
+          {taskName && (
+            <span className="text-xs text-gray-600 dark:text-gray-300 font-medium truncate">
+              {taskName}
+            </span>
+          )}
+          {accountHandle && (
+            <span className="text-[10px] text-gray-400 dark:text-gray-500">{accountHandle}</span>
+          )}
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <ScoreBadge score={execution.score} />
@@ -539,16 +601,22 @@ function ExecutionRow({ execution, taskName, accountHandle, t }: {
             <span className="text-[10px] text-gray-400">${execution.cost_usd.toFixed(4)}</span>
           )}
           {execution.duration_ms !== null && (
-            <span className="text-[10px] text-gray-400">{(execution.duration_ms / 1000).toFixed(0)}s</span>
+            <span className="text-[10px] text-gray-400">
+              {(execution.duration_ms / 1000).toFixed(0)}s
+            </span>
           )}
-          <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-            execution.triggered_by === "manual"
-              ? "bg-purple-100 text-purple-600 dark:bg-purple-900 dark:text-purple-300"
-              : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
-          }`}>
+          <span
+            className={`text-[10px] px-1.5 py-0.5 rounded ${
+              execution.triggered_by === "manual"
+                ? "bg-purple-100 text-purple-600 dark:bg-purple-900 dark:text-purple-300"
+                : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+            }`}
+          >
             {execution.triggered_by === "manual" ? t.triggerManual : t.triggerSchedule}
           </span>
-          <span className="text-[10px] text-gray-400">{new Date(execution.started_at).toLocaleString()}</span>
+          <span className="text-[10px] text-gray-400">
+            {new Date(execution.started_at).toLocaleString()}
+          </span>
         </div>
       </div>
 
@@ -571,11 +639,15 @@ function ExecutionRow({ execution, taskName, accountHandle, t }: {
           )}
           {breakdown && (
             <div className="p-2 bg-gray-50 dark:bg-gray-800 rounded">
-              <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-1 font-medium">{t.scoreBreakdown}</div>
+              <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-1 font-medium">
+                {t.scoreBreakdown}
+              </div>
               <div className="flex gap-4 text-xs">
                 {Object.entries(breakdown).map(([key, val]) => (
                   <div key={key} className="text-center">
-                    <div className="font-semibold text-gray-700 dark:text-gray-200">{val as number}</div>
+                    <div className="font-semibold text-gray-700 dark:text-gray-200">
+                      {val as number}
+                    </div>
                     <div className="text-[9px] text-gray-400">{key.replace(/_/g, " ")}</div>
                   </div>
                 ))}
@@ -584,7 +656,8 @@ function ExecutionRow({ execution, taskName, accountHandle, t }: {
           )}
           {execution.error && (
             <div className="p-2 bg-red-50 dark:bg-red-950 rounded text-xs text-red-600 dark:text-red-400">
-              <span className="font-medium">{t.error}: </span>{execution.error}
+              <span className="font-medium">{t.error}: </span>
+              {execution.error}
             </div>
           )}
         </div>
@@ -595,7 +668,13 @@ function ExecutionRow({ execution, taskName, accountHandle, t }: {
 
 // --- Main Page ---
 
-export function ScheduledTasksPage({ onClose, language }: { onClose: () => void; language?: "zh-TW" | "en" | "ja" }) {
+export function ScheduledTasksPage({
+  onClose,
+  language,
+}: {
+  onClose: () => void;
+  language?: "zh-TW" | "en" | "ja";
+}) {
   const t = T[(language ?? "en") as LangKey];
   const [tab, setTab] = useState<Tab>("tasks");
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
@@ -611,19 +690,33 @@ export function ScheduledTasksPage({ onClose, language }: { onClose: () => void;
   const [execStatusFilter, setExecStatusFilter] = useState("all");
 
   const fetchTasks = useCallback(() => {
-    fetch("/api/scheduled-tasks").then((r) => r.ok ? r.json() : []).then(setTasks).catch(() => {});
+    fetch("/api/scheduled-tasks")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setTasks)
+      .catch(() => {});
   }, []);
 
   const fetchAccounts = useCallback(() => {
-    fetch("/api/accounts").then((r) => r.ok ? r.json() : []).then(setAccounts).catch(() => {});
+    fetch("/api/accounts")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setAccounts)
+      .catch(() => {});
   }, []);
 
   const fetchExecutions = useCallback(() => {
-    fetch("/api/scheduled-tasks/executions/recent?limit=100").then((r) => r.ok ? r.json() : []).then(setExecutions).catch(() => {});
+    fetch("/api/scheduled-tasks/executions/recent?limit=100")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setExecutions)
+      .catch(() => {});
   }, []);
 
-  useEffect(() => { fetchTasks(); fetchAccounts(); }, [fetchTasks, fetchAccounts]);
-  useEffect(() => { if (tab === "executions") fetchExecutions(); }, [tab, fetchExecutions]);
+  useEffect(() => {
+    fetchTasks();
+    fetchAccounts();
+  }, [fetchTasks, fetchAccounts]);
+  useEffect(() => {
+    if (tab === "executions") fetchExecutions();
+  }, [tab, fetchExecutions]);
 
   // Poll running executions for updates
   useEffect(() => {
@@ -737,9 +830,13 @@ export function ScheduledTasksPage({ onClose, language }: { onClose: () => void;
               >
                 {tab_item.label}
                 {tab_item.count !== undefined && tab_item.count > 0 && (
-                  <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${
-                    tab === tab_item.key ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400"
-                  }`}>
+                  <span
+                    className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${
+                      tab === tab_item.key
+                        ? "bg-blue-500 text-white"
+                        : "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400"
+                    }`}
+                  >
                     {tab_item.count}
                   </span>
                 )}
@@ -747,7 +844,10 @@ export function ScheduledTasksPage({ onClose, language }: { onClose: () => void;
             ))}
           </div>
         </div>
-        <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+        <button
+          onClick={onClose}
+          className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+        >
           {t.backToChat}
         </button>
       </div>
@@ -755,13 +855,20 @@ export function ScheduledTasksPage({ onClose, language }: { onClose: () => void;
       <div className="p-6 max-w-3xl">
         {/* Notice banner */}
         {notice && (
-          <div className={`mb-4 px-3 py-2 rounded-lg text-xs flex items-center justify-between ${
-            notice.type === "success"
-              ? "bg-green-50 border border-green-200 text-green-700 dark:bg-green-950 dark:border-green-800 dark:text-green-400"
-              : "bg-red-50 border border-red-200 text-red-700 dark:bg-red-950 dark:border-red-800 dark:text-red-400"
-          }`}>
+          <div
+            className={`mb-4 px-3 py-2 rounded-lg text-xs flex items-center justify-between ${
+              notice.type === "success"
+                ? "bg-green-50 border border-green-200 text-green-700 dark:bg-green-950 dark:border-green-800 dark:text-green-400"
+                : "bg-red-50 border border-red-200 text-red-700 dark:bg-red-950 dark:border-red-800 dark:text-red-400"
+            }`}
+          >
             <span>{notice.text}</span>
-            <button onClick={() => setNotice(null)} className="text-gray-400 hover:text-gray-600 ml-2">x</button>
+            <button
+              onClick={() => setNotice(null)}
+              className="text-gray-400 hover:text-gray-600 ml-2"
+            >
+              x
+            </button>
           </div>
         )}
 
@@ -792,14 +899,21 @@ export function ScheduledTasksPage({ onClose, language }: { onClose: () => void;
               const isRunning = runningIds.has(task.id);
 
               return (
-                <div key={task.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                <div
+                  key={task.id}
+                  className="border border-gray-200 dark:border-gray-700 rounded-lg p-4"
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       {/* Status indicator */}
-                      <div className={`w-2 h-2 rounded-full shrink-0 ${task.enabled ? "bg-green-500" : "bg-gray-400"}`} />
+                      <div
+                        className={`w-2 h-2 rounded-full shrink-0 ${task.enabled ? "bg-green-500" : "bg-gray-400"}`}
+                      />
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">{task.name}</span>
+                          <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                            {task.name}
+                          </span>
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 font-mono">
                             {cronToHuman(task.schedule)}
                           </span>
@@ -814,7 +928,8 @@ export function ScheduledTasksPage({ onClose, language }: { onClose: () => void;
                         </div>
                         <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                           {account ? `${account.handle} (${account.platform})` : task.account_id}
-                          {" · "}{task.timezone}
+                          {" · "}
+                          {task.timezone}
                         </div>
                       </div>
                     </div>
@@ -832,10 +947,15 @@ export function ScheduledTasksPage({ onClose, language }: { onClose: () => void;
                         className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${task.enabled ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"}`}
                         title={task.enabled ? t.enabled : t.disabled}
                       >
-                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${task.enabled ? "translate-x-4" : "translate-x-0.5"}`} />
+                        <span
+                          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${task.enabled ? "translate-x-4" : "translate-x-0.5"}`}
+                        />
                       </button>
                       <button
-                        onClick={() => { setEditing({ ...task }); setIsNew(false); }}
+                        onClick={() => {
+                          setEditing({ ...task });
+                          setIsNew(false);
+                        }}
                         className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 text-gray-600 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-800"
                       >
                         {t.edit}
@@ -858,7 +978,10 @@ export function ScheduledTasksPage({ onClose, language }: { onClose: () => void;
                 isNew={isNew}
                 accounts={accounts}
                 onSave={handleSaveTask}
-                onCancel={() => { setEditing(null); setIsNew(false); }}
+                onCancel={() => {
+                  setEditing(null);
+                  setIsNew(false);
+                }}
                 t={t}
               />
             )}
@@ -879,7 +1002,9 @@ export function ScheduledTasksPage({ onClose, language }: { onClose: () => void;
                 >
                   <option value="all">{t.allTasks}</option>
                   {tasks.map((tk) => (
-                    <option key={tk.id} value={tk.id}>{tk.name}</option>
+                    <option key={tk.id} value={tk.id}>
+                      {tk.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -892,15 +1017,28 @@ export function ScheduledTasksPage({ onClose, language }: { onClose: () => void;
                 >
                   <option value="all">{t.allStatuses}</option>
                   {["running", "completed", "published", "failed", "rejected"].map((s) => (
-                    <option key={s} value={s}>{t[`status${s.charAt(0).toUpperCase() + s.slice(1)}` as keyof Translations] as string}</option>
+                    <option key={s} value={s}>
+                      {
+                        t[
+                          `status${s.charAt(0).toUpperCase() + s.slice(1)}` as keyof Translations
+                        ] as string
+                      }
+                    </option>
                   ))}
                 </select>
               </div>
-              <button onClick={fetchExecutions} className="text-xs text-blue-500 hover:text-blue-700">{t.refresh}</button>
+              <button
+                onClick={fetchExecutions}
+                className="text-xs text-blue-500 hover:text-blue-700"
+              >
+                {t.refresh}
+              </button>
             </div>
 
             {filteredExecs.length === 0 ? (
-              <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">{t.noExecutions}</p>
+              <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">
+                {t.noExecutions}
+              </p>
             ) : (
               <div className="space-y-2">
                 {filteredExecs.map((exec) => (

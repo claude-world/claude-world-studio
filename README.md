@@ -14,11 +14,11 @@ Three clear entry points — no complex menus, just pick and go:
 
 ![Pipeline Cards](demo/02-pipeline-cards.png)
 
-| Card | Action | What happens |
-|------|--------|-------------|
-| **Freestyle** | One click, zero input | Auto: trends → read source → verify timeline → patent score → visual → publish |
-| **Custom Topic** | Type your topic | Deep research → score → visual → publish |
-| **Custom + Media** | Type your topic | Research → NotebookLM slides/video/podcast → publish |
+| Card               | Action                | What happens                                                                   |
+| ------------------ | --------------------- | ------------------------------------------------------------------------------ |
+| **Freestyle**      | One click, zero input | Auto: trends → read source → verify timeline → patent score → visual → publish |
+| **Custom Topic**   | Type your topic       | Deep research → score → visual → publish                                       |
+| **Custom + Media** | Type your topic       | Research → NotebookLM slides/video/podcast → publish                           |
 
 ### Live Agent Execution
 
@@ -56,13 +56,13 @@ Full support for Traditional Chinese, English, and Japanese — all UI, system p
 
 Built-in Threads/Instagram publishing via native `fetch()` — no Python dependency. Every post is checked against Meta's patent-based 5-dimension scoring:
 
-| Dimension | Patent | What it checks |
-|-----------|--------|---------------|
-| Hook Power | EdgeRank | First line has number or contrast? (10-45 chars) |
-| Engagement Trigger | Dear Algo | CTA anyone can answer? |
-| Conversation Durability | 72hr window | Has both sides / contrast? |
-| Velocity Potential | Andromeda | Short enough? Timely? |
-| Format Score | Multi-modal | Mobile-scannable? |
+| Dimension               | Patent      | What it checks                                   |
+| ----------------------- | ----------- | ------------------------------------------------ |
+| Hook Power              | EdgeRank    | First line has number or contrast? (10-45 chars) |
+| Engagement Trigger      | Dear Algo   | CTA anyone can answer?                           |
+| Conversation Durability | 72hr window | Has both sides / contrast?                       |
+| Velocity Potential      | Andromeda   | Short enough? Timely?                            |
+| Format Score            | Multi-modal | Mobile-scannable?                                |
 
 Quality gates: Overall >= 70, Conversation Durability >= 55.
 
@@ -161,16 +161,16 @@ Full CJK input method support — Enter during Chinese/Japanese character compos
 
 ## Tech Stack
 
-| Layer | Tech |
-|-------|------|
-| Frontend | React 18 + Vite + Tailwind CSS |
-| Backend | Express + WebSocket + Claude Agent SDK |
-| AI Model | Claude Sonnet 4.6 / Opus 4.6 |
-| MCP Servers | trend-pulse, cf-browser, notebooklm |
-| Publishing | Native TypeScript fetch() → Threads Graph API |
-| Database | SQLite (better-sqlite3, WAL mode) |
-| Desktop | Electron 41 |
-| Markdown | react-markdown + rehype-sanitize |
+| Layer       | Tech                                          |
+| ----------- | --------------------------------------------- |
+| Frontend    | React 18 + Vite + Tailwind CSS                |
+| Backend     | Express + WebSocket + Claude Agent SDK        |
+| AI Model    | Claude Sonnet 4.6 / Opus 4.6                  |
+| MCP Servers | trend-pulse, cf-browser, notebooklm           |
+| Publishing  | Native TypeScript fetch() → Threads Graph API |
+| Database    | SQLite (better-sqlite3, WAL mode)             |
+| Desktop     | Electron 41                                   |
+| Markdown    | react-markdown + rehype-sanitize              |
 
 ## Prerequisites
 
@@ -184,13 +184,13 @@ Full CJK input method support — Enter during Chinese/Japanese character compos
 
 Five ways to install — pick the one that fits your workflow:
 
-| Method | Best for | MCP Servers | Web UI | Desktop App | CLI |
-|--------|----------|-------------|--------|-------------|-----|
-| [A. Mac Desktop](#option-a-mac-desktop-app-download) | Quickest start | via uvx | Built-in | Yes | Yes |
-| [B. npm](#option-b-npm-global) | Most users | via uvx | Yes | — | Yes |
-| [C. Source](#option-c-from-source) | Contributors | venv or uvx | Yes | — | Yes |
-| [D. Build Desktop](#option-d-build-desktop-from-source) | Custom builds | via uvx | Built-in | Yes | Yes |
-| [E. MCP-only](#option-e-mcp-only-for-claude-code-cli) | Claude Code users | via uvx | — | — | — |
+| Method                                                  | Best for          | MCP Servers | Web UI   | Desktop App | CLI |
+| ------------------------------------------------------- | ----------------- | ----------- | -------- | ----------- | --- |
+| [A. Mac Desktop](#option-a-mac-desktop-app-download)    | Quickest start    | via uvx     | Built-in | Yes         | Yes |
+| [B. npm](#option-b-npm-global)                          | Most users        | via uvx     | Yes      | —           | Yes |
+| [C. Source](#option-c-from-source)                      | Contributors      | venv or uvx | Yes      | —           | Yes |
+| [D. Build Desktop](#option-d-build-desktop-from-source) | Custom builds     | via uvx     | Built-in | Yes         | Yes |
+| [E. MCP-only](#option-e-mcp-only-for-claude-code-cli)   | Claude Code users | via uvx     | —        | —           | —   |
 
 ### Option A: Mac Desktop App (Download)
 
@@ -260,6 +260,7 @@ npm run electron:build
 ```
 
 The Electron app:
+
 - Spawns the Express server automatically on launch
 - Loads your login shell PATH (nvm/homebrew compatible)
 - Rebuilds native modules (better-sqlite3) for system Node ABI
@@ -349,6 +350,7 @@ studio serve
 Via UI: **Settings > Social Accounts**
 
 Via CLI:
+
 ```bash
 studio account create \
   --name "My Brand" --handle "@mybrand" \
@@ -360,6 +362,7 @@ studio account create \
 **Web UI**: Click a pipeline card (Freestyle / Custom Topic / Custom + Media)
 
 **CLI (headless)**:
+
 ```bash
 studio chat --message "Find trending topics, research the best, write and publish" --json
 ```

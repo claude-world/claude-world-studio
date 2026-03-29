@@ -1,4 +1,5 @@
 import type { PostInsights } from "../types.js";
+import { logger } from "../logger.js";
 
 const API_BASE = "https://graph.threads.net/v1.0";
 const MAX_TEXT_LENGTH = 500;
@@ -13,23 +14,25 @@ export interface PublishOptions {
   // Media
   imageUrl?: string;
   videoUrl?: string;
-  carouselUrls?: string[];       // 2-20 URLs
+  carouselUrls?: string[]; // 2-20 URLs
   // Attachments (TEXT only)
-  pollOptions?: string;          // pipe-separated: "A|B|C"
+  pollOptions?: string; // pipe-separated: "A|B|C"
   gifId?: string;
-  linkAttachment?: string;       // URL for link preview card
-  textAttachment?: string;       // file path or inline text (up to 10k chars)
+  linkAttachment?: string; // URL for link preview card
+  textAttachment?: string; // file path or inline text (up to 10k chars)
   // Spoiler
-  spoilerMedia?: boolean;        // blur image/video/carousel
-  spoilerText?: string[];        // ["offset:length", ...] up to 10
+  spoilerMedia?: boolean; // blur image/video/carousel
+  spoilerText?: string[]; // ["offset:length", ...] up to 10
   // Special
-  ghost?: boolean;               // 24hr ephemeral post
-  quotePostId?: string;          // quote another post
+  ghost?: boolean; // 24hr ephemeral post
+  quotePostId?: string; // quote another post
   // Content controls
-  replyControl?: string;         // everyone|accounts_you_follow|mentioned_only|parent_post_author_only|followers_only
-  topicTag?: string;             // 1-50 chars
-  altText?: string;              // accessibility description, max 1000 chars
-  linkComment?: string;          // auto-reply with link
+  replyControl?: string; // everyone|accounts_you_follow|mentioned_only|parent_post_author_only|followers_only
+  topicTag?: string; // 1-50 chars
+  altText?: string; // accessibility description, max 1000 chars
+  linkComment?: string; // auto-reply with link
+  // Cancellation
+  signal?: AbortSignal; // abort signal to cancel publish mid-flight
 }
 
 export interface PublishResult {
@@ -43,7 +46,7 @@ async function threadsRequest(
   method: "GET" | "POST",
   endpoint: string,
   token: string,
-  params?: Record<string, string>,
+  params?: Record<string, string>
 ): Promise<any> {
   const url = new URL(`${API_BASE}${endpoint}`);
   url.searchParams.set("access_token", token);
@@ -83,9 +86,14 @@ async function getUserId(token: string): Promise<string> {
   return data.id;
 }
 
-async function waitForContainer(containerId: string, token: string): Promise<void> {
+async function waitForContainer(
+  containerId: string,
+  token: string,
+  signal?: AbortSignal
+): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < CONTAINER_POLL_TIMEOUT) {
+    if (signal?.aborted) throw new Error("Publish aborted");
     const status = await threadsRequest("GET", `/${containerId}`, token, {
       fields: "status,error_message",
     });
@@ -96,7 +104,10 @@ async function waitForContainer(containerId: string, token: string): Promise<voi
     await new Promise((r) => setTimeout(r, CONTAINER_POLL_INTERVAL));
   }
   // Timeout — attempt publish anyway (Meta sometimes doesn't return FINISHED)
-  console.warn(`[Publish] Container poll timed out after ${CONTAINER_POLL_TIMEOUT / 1000}s, attempting publish`);
+  logger.warn(
+    "Publisher",
+    `Container poll timed out after ${CONTAINER_POLL_TIMEOUT / 1000}s, attempting publish`
+  );
 }
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -105,7 +116,9 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function publishToThreads(opts: PublishOptions): Promise<PublishResult> {
   if (opts.score !== undefined && opts.score < MIN_PUBLISH_SCORE) {
-    throw new Error(`Score ${opts.score} below minimum ${MIN_PUBLISH_SCORE}. Improve content before publishing.`);
+    throw new Error(
+      `Score ${opts.score} below minimum ${MIN_PUBLISH_SCORE}. Improve content before publishing.`
+    );
   }
   if (opts.text.length > MAX_TEXT_LENGTH) {
     throw new Error(`Text too long: ${opts.text.length} chars (max ${MAX_TEXT_LENGTH})`);
@@ -114,6 +127,7 @@ export async function publishToThreads(opts: PublishOptions): Promise<PublishRes
     throw new Error("No token provided. Configure token in Settings for this account.");
   }
 
+  if (opts.signal?.aborted) throw new Error("Publish aborted");
   const userId = await getUserId(opts.token);
   const params: Record<string, string> = {};
 
@@ -123,6 +137,7 @@ export async function publishToThreads(opts: PublishOptions): Promise<PublishRes
     // Carousel: create child containers first
     const childIds: string[] = [];
     for (const url of opts.carouselUrls.slice(0, 20)) {
+      if (opts.signal?.aborted) throw new Error("Publish aborted");
       const isVideo = /\.(mp4|mov)$/i.test(url);
       const childParams: Record<string, string> = {
         media_type: isVideo ? "VIDEO" : "IMAGE",
@@ -132,7 +147,7 @@ export async function publishToThreads(opts: PublishOptions): Promise<PublishRes
       const child = await threadsRequest("POST", `/${userId}/threads`, opts.token, childParams);
       childIds.push(child.id);
       if (isVideo) {
-        await waitForContainer(child.id, opts.token);
+        await waitForContainer(child.id, opts.token, opts.signal);
       } else {
         await delay(2000);
       }
@@ -156,10 +171,15 @@ export async function publishToThreads(opts: PublishOptions): Promise<PublishRes
   // ── Attachments (TEXT type only, no media) ──
   if (!opts.imageUrl && !opts.videoUrl && !(opts.carouselUrls && opts.carouselUrls.length >= 2)) {
     if (opts.pollOptions) {
-      const options = opts.pollOptions.split("|").map((s) => s.trim()).slice(0, 4);
+      const options = opts.pollOptions
+        .split("|")
+        .map((s) => s.trim())
+        .slice(0, 4);
       const poll: Record<string, string> = {};
       const keys = ["option_a", "option_b", "option_c", "option_d"];
-      options.forEach((opt, i) => { poll[keys[i]] = opt.slice(0, 25); });
+      options.forEach((opt, i) => {
+        poll[keys[i]] = opt.slice(0, 25);
+      });
       params.poll_attachment = JSON.stringify(poll);
     }
     if (opts.gifId) {
@@ -191,18 +211,20 @@ export async function publishToThreads(opts: PublishOptions): Promise<PublishRes
   }
 
   // ── Step 1: Create container ──
+  if (opts.signal?.aborted) throw new Error("Publish aborted");
   const container = await threadsRequest("POST", `/${userId}/threads`, opts.token, params);
   const containerId = container.id;
   if (!containerId) throw new Error("Failed to create media container");
 
   // ── Step 2: Wait for processing ──
   if (opts.videoUrl || (opts.carouselUrls && opts.carouselUrls.length >= 2)) {
-    await waitForContainer(containerId, opts.token);
+    await waitForContainer(containerId, opts.token, opts.signal);
   } else {
     await delay(3000);
   }
 
   // ── Step 3: Publish ──
+  if (opts.signal?.aborted) throw new Error("Publish aborted");
   const result = await threadsRequest("POST", `/${userId}/threads_publish`, opts.token, {
     creation_id: containerId,
   });
@@ -223,7 +245,7 @@ export async function publishToThreads(opts: PublishOptions): Promise<PublishRes
         creation_id: replyContainer.id,
       });
     } catch (e) {
-      console.warn(`[Publish] Link reply failed: ${(e as Error).message}`);
+      logger.warn("Publisher", `Link reply failed: ${(e as Error).message}`);
     }
   }
 

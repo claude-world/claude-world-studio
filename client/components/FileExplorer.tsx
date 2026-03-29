@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { FileTreeSkeleton } from "./Skeleton";
 
 interface FileEntry {
   name: string;
@@ -92,9 +93,7 @@ function FileTreeNode({
         }}
       >
         {entry.type === "directory" && (
-          <span className="text-gray-400 w-3 text-center text-[10px]">
-            {isOpen ? "▼" : "▶"}
-          </span>
+          <span className="text-gray-400 w-3 text-center text-[10px]">{isOpen ? "▼" : "▶"}</span>
         )}
         <FileIcon type={entry.type} name={entry.name} />
         <span className="truncate flex-1">{entry.name}</span>
@@ -139,10 +138,30 @@ function FileTreeNode({
   );
 }
 
+function filterTree(entries: FileEntry[], query: string): FileEntry[] {
+  if (!query) return entries;
+  const lowerQuery = query.toLowerCase();
+  return entries
+    .map((entry) => {
+      if (entry.type === "directory") {
+        const filteredChildren = entry.children ? filterTree(entry.children, query) : [];
+        if (filteredChildren.length > 0 || entry.name.toLowerCase().includes(lowerQuery)) {
+          return { ...entry, children: filteredChildren };
+        }
+        return null;
+      }
+      return entry.name.toLowerCase().includes(lowerQuery) ? entry : null;
+    })
+    .filter((e): e is FileEntry => e !== null);
+}
+
 export function FileExplorer({ sessionId, isVisible, onToggle, onPreviewFile }: FileExplorerProps) {
   const [tree, setTree] = useState<FileEntry[]>([]);
   const [workspace, setWorkspace] = useState("");
   const [loadingTree, setLoadingTree] = useState(false);
+  const [fileFilter, setFileFilter] = useState("");
+
+  const filteredTree = useMemo(() => filterTree(tree, fileFilter), [tree, fileFilter]);
 
   useEffect(() => {
     if (!sessionId || !isVisible) return;
@@ -191,18 +210,27 @@ export function FileExplorer({ sessionId, isVisible, onToggle, onPreviewFile }: 
         {workspace}
       </div>
 
+      {/* File search/filter */}
+      <div className="p-2 border-b border-gray-200 dark:border-gray-700">
+        <input
+          type="text"
+          value={fileFilter}
+          onChange={(e) => setFileFilter(e.target.value)}
+          placeholder="Filter files..."
+          className="w-full px-2 py-1 text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:border-blue-500"
+        />
+      </div>
+
       {/* Tree */}
       <div role="list" aria-label="File explorer" className="flex-1 overflow-y-auto p-1.5">
         {loadingTree ? (
-          <div className="text-xs text-gray-400 dark:text-gray-500 text-center mt-4">
-            Loading...
-          </div>
-        ) : tree.length === 0 ? (
+          <FileTreeSkeleton />
+        ) : filteredTree.length === 0 ? (
           <div className="text-xs text-gray-400 dark:text-gray-500 text-center mt-4">
             No files found
           </div>
         ) : (
-          tree.map((entry) => (
+          filteredTree.map((entry) => (
             <FileTreeNode
               key={entry.path}
               entry={entry}

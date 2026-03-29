@@ -1,7 +1,9 @@
 import { Router } from "express";
 import cron from "node-cron";
 import store from "../db.js";
+import { logger } from "../logger.js";
 import type { TaskScheduler } from "../services/scheduler.js";
+import { CreateTaskSchema, UpdateTaskSchema, parseBody } from "../validation.js";
 
 let scheduler: TaskScheduler | null = null;
 
@@ -14,7 +16,7 @@ const router = Router();
 
 // Get all recent executions (must be before /:id to avoid param capture)
 router.get("/executions/recent", (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+  const limit = Math.max(1, Math.min(parseInt(req.query.limit as string) || 50, 200));
   const executions = store.getRecentExecutions(limit);
   res.json(executions);
 });
@@ -27,11 +29,21 @@ router.get("/", (_req, res) => {
 
 // Create a new scheduled task
 router.post("/", (req, res) => {
-  const { name, account_id, prompt_template, schedule, timezone, enabled, min_score, max_retries, timeout_ms, auto_publish } = req.body || {};
+  const parsed = parseBody(CreateTaskSchema, req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
 
-  if (!name || !account_id || !prompt_template || !schedule) {
-    return res.status(400).json({ error: "name, account_id, prompt_template, and schedule are required" });
-  }
+  const {
+    name,
+    account_id,
+    prompt_template,
+    schedule,
+    timezone,
+    enabled,
+    min_score,
+    max_retries,
+    timeout_ms,
+    auto_publish,
+  } = parsed.data;
 
   if (!cron.validate(schedule)) {
     return res.status(400).json({ error: `Invalid cron expression: ${schedule}` });
@@ -42,9 +54,18 @@ router.post("/", (req, res) => {
     return res.status(400).json({ error: `Account ${account_id} not found` });
   }
 
+  const enabledNum = enabled !== undefined ? (enabled ? 1 : 0) : undefined;
   const task = store.createScheduledTask({
-    name, account_id, prompt_template, schedule,
-    timezone, enabled, min_score, max_retries, timeout_ms, auto_publish,
+    name,
+    account_id,
+    prompt_template,
+    schedule,
+    timezone,
+    enabled: enabledNum,
+    min_score,
+    max_retries,
+    timeout_ms,
+    auto_publish: auto_publish !== undefined ? (auto_publish ? 1 : 0) : undefined,
   });
 
   // Register cron job if enabled
@@ -71,7 +92,21 @@ router.put("/:id", (req, res) => {
     return res.status(404).json({ error: "Task not found" });
   }
 
-  const { name, account_id, prompt_template, schedule, timezone, enabled, min_score, max_retries, timeout_ms, auto_publish } = req.body || {};
+  const parsed = parseBody(UpdateTaskSchema, req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+  const {
+    name,
+    account_id,
+    prompt_template,
+    schedule,
+    timezone,
+    enabled,
+    min_score,
+    max_retries,
+    timeout_ms,
+    auto_publish,
+  } = parsed.data;
 
   const newSchedule = schedule ?? existing.schedule;
   if (!cron.validate(newSchedule)) {
@@ -166,7 +201,7 @@ router.post("/:id/run", async (req, res) => {
 
   // Execute in background
   scheduler.executeTask(task.id, "manual").catch((err) => {
-    console.error(`[Scheduler] Manual run failed for task ${task.id}:`, err);
+    logger.error("Routes:ScheduledTasks", `Manual run failed for task ${task.id}`, err);
   });
 });
 
@@ -176,7 +211,7 @@ router.get("/:id/executions", (req, res) => {
   if (!task) {
     return res.status(404).json({ error: "Task not found" });
   }
-  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+  const limit = Math.max(1, Math.min(parseInt(req.query.limit as string) || 50, 200));
   const executions = store.getExecutionsByTask(req.params.id, limit);
   res.json(executions);
 });

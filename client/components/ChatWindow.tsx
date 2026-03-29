@@ -57,28 +57,103 @@ interface QuickChip {
 
 const QUICK_CHIPS: Record<Language, QuickChip[]> = {
   "zh-TW": [
-    { label: "探索趨勢", prompt: "用 get_trending(sources=\"\", geo=\"TW\", count=20) 查詢全部 20 個來源的即時趨勢。注意確認資料的時間線，今天是幾號？只保留最近 48 小時內的資料，列出前 10 名最熱門的話題。", color: "text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100" },
-    { label: "截圖網頁", prompt: "截圖以下網站並描述內容：", color: "text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100" },
-    { label: "抓取網頁", prompt: "抓取以下網頁的內容並轉成 Markdown：", color: "text-cyan-600 bg-cyan-50 border-cyan-200 hover:bg-cyan-100" },
-    { label: "內容評分", prompt: "用 get_scoring_guide 評估以下內容的互動分數：", color: "text-orange-600 bg-orange-50 border-orange-200 hover:bg-orange-100" },
-    { label: "NotebookLM", prompt: "用 NotebookLM 研究以下主題，產生音頻摘要：", color: "text-violet-600 bg-violet-50 border-violet-200 hover:bg-violet-100" },
-    { label: "深度研究", prompt: "研究以下主題，搜尋網路並總結關鍵發現：", color: "text-red-600 bg-red-50 border-red-200 hover:bg-red-100" },
+    {
+      label: "探索趨勢",
+      prompt:
+        '用 get_trending(sources="", geo="TW", count=20) 查詢全部 20 個來源的即時趨勢。注意確認資料的時間線，今天是幾號？只保留最近 48 小時內的資料，列出前 10 名最熱門的話題。',
+      color: "text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100",
+    },
+    {
+      label: "截圖網頁",
+      prompt: "截圖以下網站並描述內容：",
+      color: "text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100",
+    },
+    {
+      label: "抓取網頁",
+      prompt: "抓取以下網頁的內容並轉成 Markdown：",
+      color: "text-cyan-600 bg-cyan-50 border-cyan-200 hover:bg-cyan-100",
+    },
+    {
+      label: "內容評分",
+      prompt: "用 get_scoring_guide 評估以下內容的互動分數：",
+      color: "text-orange-600 bg-orange-50 border-orange-200 hover:bg-orange-100",
+    },
+    {
+      label: "NotebookLM",
+      prompt: "用 NotebookLM 研究以下主題，產生音頻摘要：",
+      color: "text-violet-600 bg-violet-50 border-violet-200 hover:bg-violet-100",
+    },
+    {
+      label: "深度研究",
+      prompt: "研究以下主題，搜尋網路並總結關鍵發現：",
+      color: "text-red-600 bg-red-50 border-red-200 hover:bg-red-100",
+    },
   ],
-  "en": [
-    { label: "Trends", prompt: "Use get_trending(sources=\"\", geo=\"US\", count=20) to query ALL 20 sources for real-time trends. Check timestamps — what's today's date? Keep only items from the last 48 hours. Show the top 10 hottest topics.", color: "text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100" },
-    { label: "Screenshot", prompt: "Take a screenshot of this website and describe it: ", color: "text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100" },
-    { label: "Scrape Page", prompt: "Scrape this webpage and convert to markdown: ", color: "text-cyan-600 bg-cyan-50 border-cyan-200 hover:bg-cyan-100" },
-    { label: "Score Content", prompt: "Use get_scoring_guide to score this content: ", color: "text-orange-600 bg-orange-50 border-orange-200 hover:bg-orange-100" },
-    { label: "NotebookLM", prompt: "Use NotebookLM to research this topic and generate an audio summary: ", color: "text-violet-600 bg-violet-50 border-violet-200 hover:bg-violet-100" },
-    { label: "Research", prompt: "Research this topic, search the web and summarize key findings: ", color: "text-red-600 bg-red-50 border-red-200 hover:bg-red-100" },
+  en: [
+    {
+      label: "Trends",
+      prompt:
+        'Use get_trending(sources="", geo="US", count=20) to query ALL 20 sources for real-time trends. Check timestamps — what\'s today\'s date? Keep only items from the last 48 hours. Show the top 10 hottest topics.',
+      color: "text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100",
+    },
+    {
+      label: "Screenshot",
+      prompt: "Take a screenshot of this website and describe it: ",
+      color: "text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100",
+    },
+    {
+      label: "Scrape Page",
+      prompt: "Scrape this webpage and convert to markdown: ",
+      color: "text-cyan-600 bg-cyan-50 border-cyan-200 hover:bg-cyan-100",
+    },
+    {
+      label: "Score Content",
+      prompt: "Use get_scoring_guide to score this content: ",
+      color: "text-orange-600 bg-orange-50 border-orange-200 hover:bg-orange-100",
+    },
+    {
+      label: "NotebookLM",
+      prompt: "Use NotebookLM to research this topic and generate an audio summary: ",
+      color: "text-violet-600 bg-violet-50 border-violet-200 hover:bg-violet-100",
+    },
+    {
+      label: "Research",
+      prompt: "Research this topic, search the web and summarize key findings: ",
+      color: "text-red-600 bg-red-50 border-red-200 hover:bg-red-100",
+    },
   ],
-  "ja": [
-    { label: "トレンド", prompt: "get_trending(sources=\"\", geo=\"JP\", count=20) で全20ソースのリアルタイムトレンドを取得。タイムスタンプを確認して48時間以内のデータのみ表示。上位10件を表示。", color: "text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100" },
-    { label: "スクショ", prompt: "このWebサイトのスクリーンショットを撮って説明してください：", color: "text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100" },
-    { label: "ページ取得", prompt: "このWebページの内容を取得してMarkdownに変換してください：", color: "text-cyan-600 bg-cyan-50 border-cyan-200 hover:bg-cyan-100" },
-    { label: "スコア評価", prompt: "get_scoring_guideで以下のコンテンツを評価してください：", color: "text-orange-600 bg-orange-50 border-orange-200 hover:bg-orange-100" },
-    { label: "NotebookLM", prompt: "NotebookLMでこのトピックを調査し、音声サマリーを生成してください：", color: "text-violet-600 bg-violet-50 border-violet-200 hover:bg-violet-100" },
-    { label: "調査", prompt: "このトピックを調査し、Webを検索して要点をまとめてください：", color: "text-red-600 bg-red-50 border-red-200 hover:bg-red-100" },
+  ja: [
+    {
+      label: "トレンド",
+      prompt:
+        'get_trending(sources="", geo="JP", count=20) で全20ソースのリアルタイムトレンドを取得。タイムスタンプを確認して48時間以内のデータのみ表示。上位10件を表示。',
+      color: "text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100",
+    },
+    {
+      label: "スクショ",
+      prompt: "このWebサイトのスクリーンショットを撮って説明してください：",
+      color: "text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100",
+    },
+    {
+      label: "ページ取得",
+      prompt: "このWebページの内容を取得してMarkdownに変換してください：",
+      color: "text-cyan-600 bg-cyan-50 border-cyan-200 hover:bg-cyan-100",
+    },
+    {
+      label: "スコア評価",
+      prompt: "get_scoring_guideで以下のコンテンツを評価してください：",
+      color: "text-orange-600 bg-orange-50 border-orange-200 hover:bg-orange-100",
+    },
+    {
+      label: "NotebookLM",
+      prompt: "NotebookLMでこのトピックを調査し、音声サマリーを生成してください：",
+      color: "text-violet-600 bg-violet-50 border-violet-200 hover:bg-violet-100",
+    },
+    {
+      label: "調査",
+      prompt: "このトピックを調査し、Webを検索して要点をまとめてください：",
+      color: "text-red-600 bg-red-50 border-red-200 hover:bg-red-100",
+    },
   ],
 };
 
@@ -100,14 +175,16 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       label: "自動發文 (Freestyle)",
       description: "一鍵完成：趨勢 → 研究 → 圖卡 → 發文（全自動）",
       mode: "send",
-      prompt: "執行完整 7 步驟內容產線（按照 threads-viral-agent skill 的流程，包含圖卡生成、curl 上傳 catbox.moe、python3 scripts/threads_api.py 發布）。geo=\"TW\"，全部 20 來源。開始！",
+      prompt:
+        '執行完整 7 步驟內容產線（按照 threads-viral-agent skill 的流程，包含圖卡生成、curl 上傳 catbox.moe、python3 scripts/threads_api.py 發布）。geo="TW"，全部 20 來源。開始！',
     },
     {
       icon: "🎯",
       label: "指定主題發文",
       description: "主題 → 研究 → 圖卡 → 發文",
       mode: "fill",
-      prompt: "針對以下主題執行 threads-viral-agent skill 的完整 7 步驟產線（跳過 Step 1 趨勢探索，直接從 Step 2 讀原文開始）。包含圖卡生成、curl 上傳 catbox.moe、python3 scripts/threads_api.py 發布。\n\n主題：",
+      prompt:
+        "針對以下主題執行 threads-viral-agent skill 的完整 7 步驟產線（跳過 Step 1 趨勢探索，直接從 Step 2 讀原文開始）。包含圖卡生成、curl 上傳 catbox.moe、python3 scripts/threads_api.py 發布。\n\n主題：",
       hint: "輸入主題，例如：Claude Code 新功能、AI Agent 趨勢...",
     },
     {
@@ -115,24 +192,27 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       label: "指定主題 + 多媒體",
       description: "主題 → 研究 → 圖卡 + 簡報 + Podcast → 發文",
       mode: "fill",
-      prompt: "針對以下主題執行 threads-viral-agent skill 的完整 7 步驟產線 + 多媒體生成（跳過 Step 1）。Step 4e 生成 slides 圖卡 + podcast 音頻。全部用 curl 上傳 catbox.moe 取得公開 URL，用 python3 scripts/threads_api.py 發布（支援 --carousel --image --link-comment）。\n\n主題：",
+      prompt:
+        "針對以下主題執行 threads-viral-agent skill 的完整 7 步驟產線 + 多媒體生成（跳過 Step 1）。Step 4e 生成 slides 圖卡 + podcast 音頻。全部用 curl 上傳 catbox.moe 取得公開 URL，用 python3 scripts/threads_api.py 發布（支援 --carousel --image --link-comment）。\n\n主題：",
       hint: "輸入主題，例如：AI 程式碼助手比較...",
     },
   ],
-  "en": [
+  en: [
     {
       icon: "🔥",
       label: "Auto Post (Freestyle)",
       description: "One click: Trends → Research → Visual → Publish (fully automatic)",
       mode: "send",
-      prompt: "Run the full 7-step pipeline following the threads-viral-agent skill (including image generation, curl upload to catbox.moe, and python3 scripts/threads_api.py for publishing). geo=\"US\", all 20 sources. Go!",
+      prompt:
+        'Run the full 7-step pipeline following the threads-viral-agent skill (including image generation, curl upload to catbox.moe, and python3 scripts/threads_api.py for publishing). geo="US", all 20 sources. Go!',
     },
     {
       icon: "🎯",
       label: "Custom Topic Post",
       description: "Topic → Research → Visual → Publish",
       mode: "fill",
-      prompt: "Run the threads-viral-agent skill's full 7-step pipeline for this topic (skip Step 1, start from Step 2 read sources). Include image generation, curl upload to catbox.moe, and python3 scripts/threads_api.py for publishing.\n\nTopic: ",
+      prompt:
+        "Run the threads-viral-agent skill's full 7-step pipeline for this topic (skip Step 1, start from Step 2 read sources). Include image generation, curl upload to catbox.moe, and python3 scripts/threads_api.py for publishing.\n\nTopic: ",
       hint: "Enter a topic, e.g. Claude Code new features, AI Agent trends...",
     },
     {
@@ -140,24 +220,27 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       label: "Custom Topic + Media",
       description: "Topic → Research → Visual + Slides + Podcast → Publish",
       mode: "fill",
-      prompt: "Run the threads-viral-agent skill's full 7-step pipeline + multimedia for this topic (skip Step 1). Step 4e: generate slides + podcast. Upload all via curl to catbox.moe, publish via python3 scripts/threads_api.py (supports --carousel --image --link-comment).\n\nTopic: ",
+      prompt:
+        "Run the threads-viral-agent skill's full 7-step pipeline + multimedia for this topic (skip Step 1). Step 4e: generate slides + podcast. Upload all via curl to catbox.moe, publish via python3 scripts/threads_api.py (supports --carousel --image --link-comment).\n\nTopic: ",
       hint: "Enter a topic, e.g. AI coding assistants comparison...",
     },
   ],
-  "ja": [
+  ja: [
     {
       icon: "🔥",
       label: "自動投稿 (Freestyle)",
       description: "ワンクリック：トレンド → 調査 → 図解 → 投稿（全自動）",
       mode: "send",
-      prompt: "threads-viral-agent skillのフル7ステップパイプライン実行（図解生成、curl catbox.moeアップロード、python3 scripts/threads_api.py投稿含む）。geo=\"JP\"、全20ソース。開始！",
+      prompt:
+        'threads-viral-agent skillのフル7ステップパイプライン実行（図解生成、curl catbox.moeアップロード、python3 scripts/threads_api.py投稿含む）。geo="JP"、全20ソース。開始！',
     },
     {
       icon: "🎯",
       label: "トピック指定投稿",
       description: "トピック → 調査 → 図解 → 投稿",
       mode: "fill",
-      prompt: "このトピックでthreads-viral-agent skillのフル7ステップパイプライン実行（Step 1スキップ、Step 2原文読解から開始）。図解生成、curl catbox.moeアップロード、python3 scripts/threads_api.py投稿含む。\n\nトピック：",
+      prompt:
+        "このトピックでthreads-viral-agent skillのフル7ステップパイプライン実行（Step 1スキップ、Step 2原文読解から開始）。図解生成、curl catbox.moeアップロード、python3 scripts/threads_api.py投稿含む。\n\nトピック：",
       hint: "トピックを入力、例：Claude Codeの新機能、AIエージェントのトレンド...",
     },
     {
@@ -165,36 +248,40 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       label: "トピック + マルチメディア",
       description: "トピック → 調査 → 図解 + スライド + Podcast → 投稿",
       mode: "fill",
-      prompt: "このトピックでthreads-viral-agent skillのフル7ステップ + マルチメディアパイプライン実行（Step 1スキップ）。Step 4e: slides + podcast生成。全てcurl catbox.moeアップロード、python3 scripts/threads_api.py投稿（--carousel --image --link-comment対応）。\n\nトピック：",
+      prompt:
+        "このトピックでthreads-viral-agent skillのフル7ステップ + マルチメディアパイプライン実行（Step 1スキップ）。Step 4e: slides + podcast生成。全てcurl catbox.moeアップロード、python3 scripts/threads_api.py投稿（--carousel --image --link-comment対応）。\n\nトピック：",
       hint: "トピックを入力、例：AIコーディングアシスタント比較...",
     },
   ],
 };
 
-const UI_TEXT: Record<Language, {
-  welcomeTitle: string;
-  welcomeSubtitle: string;
-  welcomeCta: string;
-  welcomeHint: string;
-  emptyTitle: string;
-  emptySubtitle: string;
-  advancedTools: string;
-  placeholder: string;
-  placeholderOffline: string;
-  sendBtn: string;
-  stopBtn: string;
-  filesBtn: string;
-  publishBtn: string;
-  shiftEnter: string;
-  poweredBy: (cli: string) => string;
-  thinkingLabel: (cli: string) => string;
-  chatTitle: string;
-  liveStatus: string;
-  offlineStatus: string;
-  startConversation: string;
-  steps: string[];
-  stepsDesc: string[];
-}> = {
+const UI_TEXT: Record<
+  Language,
+  {
+    welcomeTitle: string;
+    welcomeSubtitle: string;
+    welcomeCta: string;
+    welcomeHint: string;
+    emptyTitle: string;
+    emptySubtitle: string;
+    advancedTools: string;
+    placeholder: string;
+    placeholderOffline: string;
+    sendBtn: string;
+    stopBtn: string;
+    filesBtn: string;
+    publishBtn: string;
+    shiftEnter: string;
+    poweredBy: (cli: string) => string;
+    thinkingLabel: (cli: string) => string;
+    chatTitle: string;
+    liveStatus: string;
+    offlineStatus: string;
+    startConversation: string;
+    steps: string[];
+    stepsDesc: string[];
+  }
+> = {
   "zh-TW": {
     welcomeTitle: "Claude World Studio",
     welcomeSubtitle: "AI 驅動的內容產線：從趨勢發現到社群發文",
@@ -223,7 +310,7 @@ const UI_TEXT: Record<Language, {
       "評分優化後一鍵發佈到 Threads 和 Instagram",
     ],
   },
-  "en": {
+  en: {
     welcomeTitle: "Claude World Studio",
     welcomeSubtitle: "AI-powered content pipeline: from trend discovery to social publishing",
     welcomeCta: "Start a New Session",
@@ -251,7 +338,7 @@ const UI_TEXT: Record<Language, {
       "Score-optimized content published to Threads and Instagram with one click",
     ],
   },
-  "ja": {
+  ja: {
     welcomeTitle: "Claude World Studio",
     welcomeSubtitle: "AI搭載コンテンツパイプライン：トレンド発見からSNS投稿まで",
     welcomeCta: "新しいセッションを開始",
@@ -303,37 +390,25 @@ const sanitizeSchema = {
 /** Extract unique image file paths from text, ignoring code blocks/backticks */
 function extractImagePaths(text: string): string[] {
   // Strip fenced code blocks and inline backticks to avoid false positives
-  const stripped = text
-    .replace(/```[\s\S]*?```/g, "")
-    .replace(/`[^`]+`/g, "");
+  const stripped = text.replace(/```[\s\S]*?```/g, "").replace(/`[^`]+`/g, "");
   const re = /\/[^\s"'<>()]+\.(?:png|jpg|jpeg|gif|webp|svg)/gi;
   const matches = stripped.match(re);
   return matches ? [...new Set(matches)] : [];
 }
 
 /** Convert absolute path to file API URL; supports any absolute path */
-function toFileApiUrl(
-  absPath: string,
-  sessionId: string,
-  _workspacePath?: string,
-): string | null {
+function toFileApiUrl(absPath: string, sessionId: string, _workspacePath?: string): string | null {
   if (!sessionId || !absPath.startsWith("/")) return null;
   const encoded = absPath.split("/").map(encodeURIComponent).join("/");
   return `/api/sessions/${encodeURIComponent(sessionId)}/files/${encoded}`;
 }
 
 /** Inline image thumbnail — clickable to open preview */
-function InlineImage({
-  src,
-  alt,
-  onClick,
-}: {
-  src: string;
-  alt: string;
-  onClick?: () => void;
-}) {
+function InlineImage({ src, alt, onClick }: { src: string; alt: string; onClick?: () => void }) {
   const [error, setError] = useState(false);
-  useEffect(() => { setError(false); }, [src]);
+  useEffect(() => {
+    setError(false);
+  }, [src]);
   if (error) return null;
   return (
     <button
@@ -353,7 +428,8 @@ function InlineImage({
 }
 
 // Detect if text inside backticks looks like a workspace file path with a previewable extension
-const PREVIEW_EXT_RE = /\.(png|jpg|jpeg|gif|webp|svg|pdf|mp3|wav|m4a|mp4|webm|md|txt|json|html|css|py|ts|tsx|js|jsx)$/i;
+const PREVIEW_EXT_RE =
+  /\.(png|jpg|jpeg|gif|webp|svg|pdf|mp3|wav|m4a|mp4|webm|md|txt|json|html|css|py|ts|tsx|js|jsx)$/i;
 function isPreviewablePath(text: string, _workspacePath?: string): boolean {
   if (!text.startsWith("/") || !PREVIEW_EXT_RE.test(text) || text.includes(" ")) return false;
   // Allow any absolute path with a previewable extension (e.g. downloads/)
@@ -428,11 +504,7 @@ function MessageBubble({
     // Inline code with file preview
     if (onPreviewFile) {
       components.code = (props: any) => (
-        <InlineCode
-          {...props}
-          onPreviewFile={onPreviewFile}
-          workspacePath={workspacePath}
-        />
+        <InlineCode {...props} onPreviewFile={onPreviewFile} workspacePath={workspacePath} />
       );
     }
 
@@ -472,7 +544,11 @@ function MessageBubble({
         ) : (
           <>
             <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-2 prose-code:text-violet-700 dark:prose-code:text-violet-300 prose-code:bg-violet-50 dark:prose-code:bg-violet-900/40 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-pre:bg-gray-800 prose-pre:text-gray-100 prose-pre:rounded-lg prose-a:text-blue-600 dark:prose-a:text-blue-400">
-              <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeSanitize, sanitizeSchema]]} components={markdownComponents}>
+              <Markdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[[rehypeSanitize, sanitizeSchema]]}
+                components={markdownComponents}
+              >
                 {content}
               </Markdown>
             </div>
@@ -546,7 +622,12 @@ function ToolResultBlock({
         role="button"
         tabIndex={0}
         onClick={() => setIsExpanded(!isExpanded)}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setIsExpanded(!isExpanded); } }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setIsExpanded(!isExpanded);
+          }
+        }}
         className="text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-500 cursor-pointer flex items-center gap-1 px-1"
       >
         <span>{isExpanded ? "▼" : "▶"}</span>
@@ -575,7 +656,13 @@ function ToolResultBlock({
   );
 }
 
-function TypingIndicator({ language, cliLabel = "Claude" }: { language: Language; cliLabel?: string }) {
+function TypingIndicator({
+  language,
+  cliLabel = "Claude",
+}: {
+  language: Language;
+  cliLabel?: string;
+}) {
   const t = UI_TEXT[language];
   return (
     <div className="flex items-center gap-1.5 py-2 px-1">
@@ -591,56 +678,68 @@ function TypingIndicator({ language, cliLabel = "Claude" }: { language: Language
 
 // --- Welcome screen (no session selected) ---
 
-function WelcomeScreen({ onNewSession, language }: { onNewSession: () => void; language: Language }) {
+function WelcomeScreen({
+  onNewSession,
+  language,
+}: {
+  onNewSession: () => void;
+  language: Language;
+}) {
   const t = UI_TEXT[language];
   return (
     <div className="flex-1 flex flex-col bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-gray-900 px-6">
       {/* Drag region for Electron window */}
-      {navigator.userAgent.includes('Electron') && (
-        <div className="h-10 shrink-0" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties} />
+      {navigator.userAgent.includes("Electron") && (
+        <div className="h-10 shrink-0" style={{ WebkitAppRegion: "drag" } as React.CSSProperties} />
       )}
       <div className="flex-1 flex items-center justify-center">
-      <div className="max-w-2xl w-full text-center">
-        <div className="mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 text-white text-2xl font-bold mb-4 shadow-lg">
-            CW
-          </div>
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">{t.welcomeTitle}</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-2">{t.welcomeSubtitle}</p>
-        </div>
-
-        <div className="grid grid-cols-3 gap-4 mb-8 max-w-lg mx-auto">
-          {t.steps.map((title, i) => (
-            <div key={i} className="relative text-center">
-              {i > 0 && (
-                <div className="absolute left-0 top-5 -translate-x-1/2 w-full h-[2px]">
-                  <div className="h-full bg-gray-200 dark:bg-gray-700 mx-2" />
-                </div>
-              )}
-              <div className={`relative inline-flex items-center justify-center w-10 h-10 rounded-full ${STEP_COLORS[i]} text-white text-sm font-bold mb-2 shadow`}>
-                {i + 1}
-              </div>
-              <div className="text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</div>
-              <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 leading-tight px-1">
-                {t.stepsDesc[i]}
-              </div>
-              <div className="mt-1.5">
-                <span className="inline-block text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                  {STEP_TOOLS[i]}
-                </span>
-              </div>
+        <div className="max-w-2xl w-full text-center">
+          <div className="mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 text-white text-2xl font-bold mb-4 shadow-lg">
+              CW
             </div>
-          ))}
-        </div>
+            <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
+              {t.welcomeTitle}
+            </h1>
+            <p className="text-gray-500 dark:text-gray-400 mt-2">{t.welcomeSubtitle}</p>
+          </div>
 
-        <button
-          onClick={onNewSession}
-          className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors shadow-md hover:shadow-lg"
-        >
-          {t.welcomeCta}
-        </button>
-        <p className="text-xs text-gray-400 dark:text-gray-500 mt-3">{t.welcomeHint}</p>
-      </div>
+          <div className="grid grid-cols-3 gap-4 mb-8 max-w-lg mx-auto">
+            {t.steps.map((title, i) => (
+              <div key={i} className="relative text-center">
+                {i > 0 && (
+                  <div className="absolute left-0 top-5 -translate-x-1/2 w-full h-[2px]">
+                    <div className="h-full bg-gray-200 dark:bg-gray-700 mx-2" />
+                  </div>
+                )}
+                <div
+                  className={`relative inline-flex items-center justify-center w-10 h-10 rounded-full ${STEP_COLORS[i]} text-white text-sm font-bold mb-2 shadow`}
+                >
+                  {i + 1}
+                </div>
+                <div className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                  {title}
+                </div>
+                <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 leading-tight px-1">
+                  {t.stepsDesc[i]}
+                </div>
+                <div className="mt-1.5">
+                  <span className="inline-block text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                    {STEP_TOOLS[i]}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button
+            onClick={onNewSession}
+            className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors shadow-md hover:shadow-lg"
+          >
+            {t.welcomeCta}
+          </button>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-3">{t.welcomeHint}</p>
+        </div>
       </div>
     </div>
   );
@@ -752,7 +851,16 @@ export function ChatWindow({
   cliName = "claude",
 }: ChatWindowProps) {
   const t = UI_TEXT[language];
-  const cliLabel = cliName === "claude" ? "Claude" : cliName === "codex" ? "Codex" : cliName === "gemini" ? "Gemini" : cliName === "opencode" ? "OpenCode" : cliName;
+  const cliLabel =
+    cliName === "claude"
+      ? "Claude"
+      : cliName === "codex"
+        ? "Codex"
+        : cliName === "gemini"
+          ? "Gemini"
+          : cliName === "opencode"
+            ? "OpenCode"
+            : cliName;
   const [input, setInput] = useState("");
   const [inputHint, setInputHint] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -778,8 +886,7 @@ export function ChatWindow({
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height =
-        Math.min(textareaRef.current.scrollHeight, 200) + "px";
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + "px";
     }
   }, [input]);
 
@@ -787,14 +894,20 @@ export function ChatWindow({
   const sendWithAccount = (content: string) => {
     const now = new Date();
     const dateStr = now.toISOString().split("T")[0];
-    const timeStr = now.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" });
+    const timeStr = now.toLocaleTimeString("en-US", {
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+    });
     const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const timestamp = `[Current Time: ${dateStr} ${timeStr} ${tzName}]`;
 
     let prefix = timestamp + "\n";
 
     if (targetAccountId === "__all__" && accounts && accounts.length > 0) {
-      const accountList = accounts.map((a) => `- ${a.handle} (${a.platform}, ID: ${a.id})`).join("\n");
+      const accountList = accounts
+        .map((a) => `- ${a.handle} (${a.platform}, ID: ${a.id})`)
+        .join("\n");
       prefix += `[Matrix Publishing: Generate UNIQUE content for EACH account based on their style/persona. Publish to ALL accounts below.]\n${accountList}\n\n`;
     } else {
       const account = accounts?.find((a) => a.id === targetAccountId);
@@ -835,7 +948,11 @@ export function ChatWindow({
       {/* Header toolbar — drag region for Electron window */}
       <div
         className="px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between shrink-0"
-        style={navigator.userAgent.includes('Electron') ? { WebkitAppRegion: 'drag' } as React.CSSProperties : undefined}
+        style={
+          navigator.userAgent.includes("Electron")
+            ? ({ WebkitAppRegion: "drag" } as React.CSSProperties)
+            : undefined
+        }
       >
         <div className="flex items-center gap-2">
           <h2 className="font-semibold text-gray-800 dark:text-gray-100 text-sm">{t.chatTitle}</h2>
@@ -852,7 +969,10 @@ export function ChatWindow({
           )}
         </div>
 
-        <div className="flex items-center gap-1.5" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        <div
+          className="flex items-center gap-1.5"
+          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+        >
           {/* Target account selector */}
           {accounts && accounts.length > 0 && onTargetAccountChange && (
             <select
@@ -862,18 +982,42 @@ export function ChatWindow({
                 targetAccountId === "__all__"
                   ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700"
                   : targetAccountId
-                  ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700"
-                  : "bg-gray-50 text-gray-500 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600"
+                    ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700"
+                    : "bg-gray-50 text-gray-500 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600"
               }`}
-              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E")`, backgroundSize: "16px", backgroundPosition: "right 4px center" }}
-              title={language === "zh-TW" ? "發佈目標帳號" : language === "ja" ? "投稿先アカウント" : "Target account for publishing"}
+              style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E")`,
+                backgroundSize: "16px",
+                backgroundPosition: "right 4px center",
+              }}
+              title={
+                language === "zh-TW"
+                  ? "發佈目標帳號"
+                  : language === "ja"
+                    ? "投稿先アカウント"
+                    : "Target account for publishing"
+              }
             >
-              <option value="">{language === "zh-TW" ? "-- 帳號 --" : language === "ja" ? "-- アカウント --" : "-- Account --"}</option>
+              <option value="">
+                {language === "zh-TW"
+                  ? "-- 帳號 --"
+                  : language === "ja"
+                    ? "-- アカウント --"
+                    : "-- Account --"}
+              </option>
               {accounts.length > 1 && (
-                <option value="__all__">{language === "zh-TW" ? "全部帳號 (矩陣發文)" : language === "ja" ? "全アカウント (マトリックス)" : "All Accounts (Matrix)"}</option>
+                <option value="__all__">
+                  {language === "zh-TW"
+                    ? "全部帳號 (矩陣發文)"
+                    : language === "ja"
+                      ? "全アカウント (マトリックス)"
+                      : "All Accounts (Matrix)"}
+                </option>
               )}
               {accounts.map((a) => (
-                <option key={a.id} value={a.id}>{a.handle} ({a.platform})</option>
+                <option key={a.id} value={a.id}>
+                  {a.handle} ({a.platform})
+                </option>
               ))}
             </select>
           )}
@@ -887,7 +1031,7 @@ export function ChatWindow({
           )}
           <button
             onClick={onShowFiles}
-            className={`text-xs px-2.5 py-1 rounded-lg transition-colors border ${
+            className={`hidden md:inline-flex text-xs px-2.5 py-1 rounded-lg transition-colors border ${
               showFilesActive
                 ? "bg-blue-50 text-blue-600 border-blue-200"
                 : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
@@ -896,7 +1040,12 @@ export function ChatWindow({
           >
             <span className="flex items-center gap-1">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                />
               </svg>
               {t.filesBtn}
             </span>
@@ -908,7 +1057,12 @@ export function ChatWindow({
           >
             <span className="flex items-center gap-1">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                />
               </svg>
               {t.publishBtn}
             </span>
@@ -918,9 +1072,13 @@ export function ChatWindow({
 
       {/* Messages or Empty state */}
       {messages.length === 0 ? (
-        <EmptyChat onFillInput={handleFillInput} onSendMessage={sendWithAccount} language={language} />
+        <EmptyChat
+          onFillInput={handleFillInput}
+          onSendMessage={sendWithAccount}
+          language={language}
+        />
       ) : (
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3" role="log" aria-live="polite">
           {messages.map((msg) => {
             if (msg.role === "tool_use") {
               const toolName = msg.toolName || msg.tool_name || "unknown";
@@ -944,13 +1102,29 @@ export function ChatWindow({
               );
             }
             if (msg.role === "tool_result") {
-              return <ToolResultBlock key={msg.id} message={msg} sessionId={sessionId || undefined} workspacePath={workspacePath} onPreviewFile={onPreviewFile} />;
+              return (
+                <ToolResultBlock
+                  key={msg.id}
+                  message={msg}
+                  sessionId={sessionId || undefined}
+                  workspacePath={workspacePath}
+                  onPreviewFile={onPreviewFile}
+                />
+              );
             }
             if (msg.role === "result") {
               return <ResultBlock key={msg.id} message={msg} />;
             }
             if (msg.role === "user" || msg.role === "assistant") {
-              return <MessageBubble key={msg.id} message={msg} onPreviewFile={onPreviewFile} workspacePath={workspacePath} sessionId={sessionId || undefined} />;
+              return (
+                <MessageBubble
+                  key={msg.id}
+                  message={msg}
+                  onPreviewFile={onPreviewFile}
+                  workspacePath={workspacePath}
+                  sessionId={sessionId || undefined}
+                />
+              );
             }
             return null;
           })}
@@ -962,25 +1136,27 @@ export function ChatWindow({
       {/* Input + Quick Chips */}
       <div className="border-t border-gray-200 dark:border-gray-700 shrink-0 bg-white dark:bg-gray-900">
         {/* Quick action chips — hide when empty chat shows its own chips */}
-        {messages.length > 0 && <div className="px-4 pt-3 pb-1.5 flex flex-wrap gap-1.5">
-          {QUICK_CHIPS[language].map((chip) => (
-            <button
-              key={chip.label}
-              disabled={!isConnected || isLoading}
-              onClick={() => {
-                if (chip.prompt.endsWith("：") || chip.prompt.endsWith(": ")) {
-                  setInput(chip.prompt);
-                  textareaRef.current?.focus();
-                } else {
-                  sendWithAccount(chip.prompt);
-                }
-              }}
-              className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed ${chip.color}`}
-            >
-              {chip.label}
-            </button>
-          ))}
-        </div>}
+        {messages.length > 0 && (
+          <div className="px-4 pt-3 pb-1.5 flex flex-wrap gap-1.5">
+            {QUICK_CHIPS[language].map((chip) => (
+              <button
+                key={chip.label}
+                disabled={!isConnected || isLoading}
+                onClick={() => {
+                  if (chip.prompt.endsWith("：") || chip.prompt.endsWith(": ")) {
+                    setInput(chip.prompt);
+                    textareaRef.current?.focus();
+                  } else {
+                    sendWithAccount(chip.prompt);
+                  }
+                }}
+                className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed ${chip.color}`}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Input */}
         <div className="px-4 pb-3">
@@ -989,13 +1165,14 @@ export function ChatWindow({
               ref={textareaRef}
               value={input}
               onChange={(e) => {
-              setInput(e.target.value);
-              if (inputHint && e.target.value.length > input.length) {
-                setInputHint("");
-              }
-            }}
+                setInput(e.target.value);
+                if (inputHint && e.target.value.length > input.length) {
+                  setInputHint("");
+                }
+              }}
               onKeyDown={handleKeyDown}
               placeholder={isConnected ? t.placeholder : t.placeholderOffline}
+              aria-label="Message input"
               disabled={!isConnected || isLoading}
               rows={1}
               className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 dark:bg-gray-800 dark:text-gray-100 dark:disabled:bg-gray-700 resize-none text-sm"
@@ -1015,9 +1192,7 @@ export function ChatWindow({
             </div>
           )}
           <div className="flex items-center justify-between mt-1.5 px-1">
-            <span className="text-[10px] text-gray-400 dark:text-gray-500">
-              {t.shiftEnter}
-            </span>
+            <span className="text-[10px] text-gray-400 dark:text-gray-500">{t.shiftEnter}</span>
             <span className="text-[10px] text-gray-400 dark:text-gray-500">
               {t.poweredBy(cliLabel)}
             </span>

@@ -40,9 +40,26 @@ interface OverviewData {
 }
 
 interface ContentAnalysis {
-  image_vs_text: Array<{ type: string; count: number; avg_views: number; avg_likes: number; avg_replies: number }>;
-  link_vs_no_link: Array<{ type: string; count: number; avg_views: number; avg_likes: number; avg_replies: number }>;
-  hour_performance: Array<{ hour: number; count: number; avg_views: number; avg_engagement: number }>;
+  image_vs_text: Array<{
+    type: string;
+    count: number;
+    avg_views: number;
+    avg_likes: number;
+    avg_replies: number;
+  }>;
+  link_vs_no_link: Array<{
+    type: string;
+    count: number;
+    avg_views: number;
+    avg_likes: number;
+    avg_replies: number;
+  }>;
+  hour_performance: Array<{
+    hour: number;
+    count: number;
+    avg_views: number;
+    avg_engagement: number;
+  }>;
   day_performance: Array<{ day: number; count: number; avg_views: number; avg_engagement: number }>;
 }
 
@@ -76,7 +93,13 @@ const T = {
     trendTitle: "趨勢",
     postCount: "發文數",
     noData: "尚無數據",
-    sun: "日", mon: "一", tue: "二", wed: "三", thu: "四", fri: "五", sat: "六",
+    sun: "日",
+    mon: "一",
+    tue: "二",
+    wed: "三",
+    thu: "四",
+    fri: "五",
+    sat: "六",
   },
   en: {
     title: "Traffic Strategy",
@@ -107,7 +130,13 @@ const T = {
     trendTitle: "Trend",
     postCount: "Posts",
     noData: "No data yet",
-    sun: "Sun", mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat",
+    sun: "Sun",
+    mon: "Mon",
+    tue: "Tue",
+    wed: "Wed",
+    thu: "Thu",
+    fri: "Fri",
+    sat: "Sat",
   },
   ja: {
     title: "トラフィック戦略",
@@ -138,7 +167,13 @@ const T = {
     trendTitle: "トレンド",
     postCount: "投稿数",
     noData: "データなし",
-    sun: "日", mon: "月", tue: "火", wed: "水", thu: "木", fri: "金", sat: "土",
+    sun: "日",
+    mon: "月",
+    tue: "火",
+    wed: "水",
+    thu: "木",
+    fri: "金",
+    sat: "土",
   },
 };
 
@@ -154,7 +189,13 @@ function pctDiff(a: number, b: number): string {
   return `${diff >= 0 ? "+" : ""}${Math.round(diff)}%`;
 }
 
-export function TrafficDashboardPage({ onClose, language = "zh-TW" }: { onClose: () => void; language?: Language }) {
+export function TrafficDashboardPage({
+  onClose,
+  language = "zh-TW",
+}: {
+  onClose: () => void;
+  language?: Language;
+}) {
   const t = T[language] || T["zh-TW"];
   const dayNames = [t.sun, t.mon, t.tue, t.wed, t.thu, t.fri, t.sat];
 
@@ -173,11 +214,15 @@ export function TrafficDashboardPage({ onClose, language = "zh-TW" }: { onClose:
       ]);
       if (ovRes.ok) setOverview(await ovRes.json());
       if (anRes.ok) setAnalysis(await anRes.json());
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     setLoading(false);
   }, [days]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -187,7 +232,12 @@ export function TrafficDashboardPage({ onClose, language = "zh-TW" }: { onClose:
         const posts = await postsRes.json();
         const staleThreshold = Date.now() - 6 * 3600000;
         const ids = posts
-          .filter((p: any) => p.status === "published" && p.post_id && (!p.insights_fetched_at || new Date(p.insights_fetched_at).getTime() < staleThreshold))
+          .filter(
+            (p: any) =>
+              p.status === "published" &&
+              p.post_id &&
+              (!p.insights_fetched_at || new Date(p.insights_fetched_at).getTime() < staleThreshold)
+          )
           .map((p: any) => p.id)
           .slice(0, 20);
         if (ids.length > 0) {
@@ -198,7 +248,9 @@ export function TrafficDashboardPage({ onClose, language = "zh-TW" }: { onClose:
           });
         }
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     await fetchData();
     setRefreshing(false);
   };
@@ -209,7 +261,11 @@ export function TrafficDashboardPage({ onClose, language = "zh-TW" }: { onClose:
     return "text-red-400";
   };
 
-  const linkCoveragePct = overview ? (overview.total_posts > 0 ? Math.round((overview.posts_with_link / overview.total_posts) * 100) : 0) : 0;
+  const linkCoveragePct = overview
+    ? overview.total_posts > 0
+      ? Math.round((overview.posts_with_link / overview.total_posts) * 100)
+      : 0
+    : 0;
 
   // Strategy insights helpers
   const imgData = analysis?.image_vs_text?.find((d) => d.type === "with_image");
@@ -224,14 +280,27 @@ export function TrafficDashboardPage({ onClose, language = "zh-TW" }: { onClose:
     : null;
 
   // Trend chart
-  const maxPostCount = overview?.daily_counts?.length ? Math.max(...overview.daily_counts.map((d) => d.post_count), 1) : 1;
+  const maxPostCount = overview?.daily_counts?.length
+    ? Math.max(...overview.daily_counts.map((d) => d.post_count), 1)
+    : 1;
 
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-white dark:bg-gray-950">
         <svg className="w-6 h-6 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          <circle
+            className="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+          <path
+            className="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+          />
         </svg>
       </div>
     );
@@ -243,9 +312,18 @@ export function TrafficDashboardPage({ onClose, language = "zh-TW" }: { onClose:
       <div className="sticky top-0 z-10 bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-gray-800 px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400">
+            <button
+              onClick={onClose}
+              aria-label={t.back}
+              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400"
+            >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 19l-7-7 7-7"
+                />
               </svg>
             </button>
             <h1 className="text-lg font-bold text-gray-900 dark:text-white">{t.title}</h1>
@@ -258,7 +336,9 @@ export function TrafficDashboardPage({ onClose, language = "zh-TW" }: { onClose:
                   key={d}
                   onClick={() => setDays(d)}
                   className={`text-xs px-3 py-1.5 transition-colors ${
-                    days === d ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
+                    days === d
+                      ? "bg-blue-600 text-white"
+                      : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
                   }`}
                 >
                   {d === 7 ? t.days7 : d === 14 ? t.days14 : t.days30}
@@ -308,14 +388,22 @@ export function TrafficDashboardPage({ onClose, language = "zh-TW" }: { onClose:
                 value={`${linkCoveragePct}%`}
                 sub={`${overview.posts_with_link}/${overview.total_posts}`}
                 borderColor="border-purple-500"
-                valueClass={linkCoveragePct >= 80 ? "text-green-500" : linkCoveragePct >= 50 ? "text-yellow-500" : "text-red-400"}
+                valueClass={
+                  linkCoveragePct >= 80
+                    ? "text-green-500"
+                    : linkCoveragePct >= 50
+                      ? "text-yellow-500"
+                      : "text-red-400"
+                }
               />
             </div>
 
             {/* Section 2: Per-Account Comparison */}
             {overview.per_account.length > 0 && (
               <div>
-                <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{t.perAccountTitle}</h2>
+                <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                  {t.perAccountTitle}
+                </h2>
                 <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
                   <table className="w-full text-sm">
                     <thead>
@@ -331,12 +419,27 @@ export function TrafficDashboardPage({ onClose, language = "zh-TW" }: { onClose:
                       {overview.per_account.map((a) => {
                         const rate = a.total_views > 0 ? a.total_engagement / a.total_views : 0;
                         return (
-                          <tr key={a.account_id} className="border-t border-gray-100 dark:border-gray-800">
-                            <td className="px-4 py-2.5 text-gray-800 dark:text-gray-200 font-medium">@{a.handle}</td>
-                            <td className="px-4 py-2.5 text-right text-gray-600 dark:text-gray-400">{a.post_count}</td>
-                            <td className="px-4 py-2.5 text-right text-gray-600 dark:text-gray-400">{compact(a.total_views)}</td>
-                            <td className="px-4 py-2.5 text-right text-gray-600 dark:text-gray-400">{compact(a.total_engagement)}</td>
-                            <td className={`px-4 py-2.5 text-right font-medium ${engRateColor(rate)}`}>{(rate * 100).toFixed(1)}%</td>
+                          <tr
+                            key={a.account_id}
+                            className="border-t border-gray-100 dark:border-gray-800"
+                          >
+                            <td className="px-4 py-2.5 text-gray-800 dark:text-gray-200 font-medium">
+                              @{a.handle}
+                            </td>
+                            <td className="px-4 py-2.5 text-right text-gray-600 dark:text-gray-400">
+                              {a.post_count}
+                            </td>
+                            <td className="px-4 py-2.5 text-right text-gray-600 dark:text-gray-400">
+                              {compact(a.total_views)}
+                            </td>
+                            <td className="px-4 py-2.5 text-right text-gray-600 dark:text-gray-400">
+                              {compact(a.total_engagement)}
+                            </td>
+                            <td
+                              className={`px-4 py-2.5 text-right font-medium ${engRateColor(rate)}`}
+                            >
+                              {(rate * 100).toFixed(1)}%
+                            </td>
                           </tr>
                         );
                       })}
@@ -349,60 +452,96 @@ export function TrafficDashboardPage({ onClose, language = "zh-TW" }: { onClose:
             {/* Section 3: Content Strategy Insights */}
             {analysis && (
               <div>
-                <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{t.strategyTitle}</h2>
+                <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                  {t.strategyTitle}
+                </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Image vs Text */}
                   <InsightCard
                     icon="&#x1f4ca;"
                     title={t.imageVsText}
-                    content={imgData && txtData ? (
-                      <div className="space-y-1 text-xs text-gray-500 dark:text-gray-400">
-                        <div>Image: {compact(imgData.avg_views)} {t.avgViews} ({imgData.count} posts)</div>
-                        <div>Text: {compact(txtData.avg_views)} {t.avgViews} ({txtData.count} posts)</div>
-                        <div className="font-medium text-gray-700 dark:text-gray-300">
-                          {pctDiff(imgData.avg_views, txtData.avg_views)} views
+                    content={
+                      imgData && txtData ? (
+                        <div className="space-y-1 text-xs text-gray-500 dark:text-gray-400">
+                          <div>
+                            Image: {compact(imgData.avg_views)} {t.avgViews} ({imgData.count} posts)
+                          </div>
+                          <div>
+                            Text: {compact(txtData.avg_views)} {t.avgViews} ({txtData.count} posts)
+                          </div>
+                          <div className="font-medium text-gray-700 dark:text-gray-300">
+                            {pctDiff(imgData.avg_views, txtData.avg_views)} views
+                          </div>
                         </div>
-                      </div>
-                    ) : <span className="text-xs text-gray-400">{t.noData}</span>}
+                      ) : (
+                        <span className="text-xs text-gray-400">{t.noData}</span>
+                      )
+                    }
                   />
 
                   {/* Link impact */}
                   <InsightCard
                     icon="&#x1f517;"
                     title={t.linkImpact}
-                    content={linkData && noLinkData ? (
-                      <div className="space-y-1 text-xs text-gray-500 dark:text-gray-400">
-                        <div>With link: {compact(linkData.avg_views)} {t.avgViews} ({linkData.count} posts)</div>
-                        <div>No link: {compact(noLinkData.avg_views)} {t.avgViews} ({noLinkData.count} posts)</div>
-                        <div className="font-medium text-gray-700 dark:text-gray-300">
-                          {pctDiff(linkData.avg_views, noLinkData.avg_views)} views
+                    content={
+                      linkData && noLinkData ? (
+                        <div className="space-y-1 text-xs text-gray-500 dark:text-gray-400">
+                          <div>
+                            With link: {compact(linkData.avg_views)} {t.avgViews} ({linkData.count}{" "}
+                            posts)
+                          </div>
+                          <div>
+                            No link: {compact(noLinkData.avg_views)} {t.avgViews} (
+                            {noLinkData.count} posts)
+                          </div>
+                          <div className="font-medium text-gray-700 dark:text-gray-300">
+                            {pctDiff(linkData.avg_views, noLinkData.avg_views)} views
+                          </div>
                         </div>
-                      </div>
-                    ) : <span className="text-xs text-gray-400">{t.noData}</span>}
+                      ) : (
+                        <span className="text-xs text-gray-400">{t.noData}</span>
+                      )
+                    }
                   />
 
                   {/* Best hour */}
                   <InsightCard
                     icon="&#x23f0;"
                     title={t.bestHour}
-                    content={bestHour ? (
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        <span className="text-lg font-bold text-gray-800 dark:text-gray-200">{String(bestHour.hour).padStart(2, "0")}:00</span>
-                        <span className="ml-2">{compact(bestHour.avg_views)} {t.avgViews}</span>
-                      </div>
-                    ) : <span className="text-xs text-gray-400">{t.noData}</span>}
+                    content={
+                      bestHour ? (
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          <span className="text-lg font-bold text-gray-800 dark:text-gray-200">
+                            {String(bestHour.hour).padStart(2, "0")}:00
+                          </span>
+                          <span className="ml-2">
+                            {compact(bestHour.avg_views)} {t.avgViews}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">{t.noData}</span>
+                      )
+                    }
                   />
 
                   {/* Best day */}
                   <InsightCard
                     icon="&#x1f4c5;"
                     title={t.bestDay}
-                    content={bestDayEntry ? (
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        <span className="text-lg font-bold text-gray-800 dark:text-gray-200">{dayNames[bestDayEntry.day]}</span>
-                        <span className="ml-2">{compact(bestDayEntry.avg_views)} {t.avgViews}</span>
-                      </div>
-                    ) : <span className="text-xs text-gray-400">{t.noData}</span>}
+                    content={
+                      bestDayEntry ? (
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          <span className="text-lg font-bold text-gray-800 dark:text-gray-200">
+                            {dayNames[bestDayEntry.day]}
+                          </span>
+                          <span className="ml-2">
+                            {compact(bestDayEntry.avg_views)} {t.avgViews}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">{t.noData}</span>
+                      )
+                    }
                   />
                 </div>
               </div>
@@ -411,13 +550,22 @@ export function TrafficDashboardPage({ onClose, language = "zh-TW" }: { onClose:
             {/* Section 4: Top 5 Posts */}
             {overview.top_posts.length > 0 && (
               <div>
-                <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{t.topPostsTitle}</h2>
+                <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                  {t.topPostsTitle}
+                </h2>
                 <div className="space-y-2">
                   {overview.top_posts.map((post, i) => (
-                    <div key={post.id} className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 px-4 py-3">
-                      <span className="text-lg font-bold text-gray-300 dark:text-gray-600 w-6 text-center shrink-0">{i + 1}</span>
+                    <div
+                      key={post.id}
+                      className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 px-4 py-3"
+                    >
+                      <span className="text-lg font-bold text-gray-300 dark:text-gray-600 w-6 text-center shrink-0">
+                        {i + 1}
+                      </span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-800 dark:text-gray-200 truncate">{post.content}</p>
+                        <p className="text-sm text-gray-800 dark:text-gray-200 truncate">
+                          {post.content}
+                        </p>
                         <span className="text-[10px] text-gray-400">@{post.handle}</span>
                       </div>
                       <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 shrink-0">
@@ -433,7 +581,9 @@ export function TrafficDashboardPage({ onClose, language = "zh-TW" }: { onClose:
             {/* Section 5: Trend Bar Chart */}
             {overview.daily_counts.length > 0 && (
               <div>
-                <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{t.trendTitle}</h2>
+                <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                  {t.trendTitle}
+                </h2>
                 <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-4">
                   <div className="flex items-end gap-1 h-32">
                     {overview.daily_counts.map((day, i) => {
@@ -449,7 +599,9 @@ export function TrafficDashboardPage({ onClose, language = "zh-TW" }: { onClose:
                             title={`${day.date}: ${day.post_count} ${t.postCount}, ${compact(day.total_views)} ${t.views.toLowerCase()}`}
                           />
                           {/* Show label for first, middle, last */}
-                          {(i === 0 || i === overview.daily_counts.length - 1 || i === Math.floor(overview.daily_counts.length / 2)) && (
+                          {(i === 0 ||
+                            i === overview.daily_counts.length - 1 ||
+                            i === Math.floor(overview.daily_counts.length / 2)) && (
                             <span className="text-[9px] text-gray-400 mt-1 whitespace-nowrap">
                               {day.date.slice(5)}
                             </span>
@@ -468,7 +620,13 @@ export function TrafficDashboardPage({ onClose, language = "zh-TW" }: { onClose:
   );
 }
 
-function OverviewCard({ label, value, sub, borderColor, valueClass }: {
+function OverviewCard({
+  label,
+  value,
+  sub,
+  borderColor,
+  valueClass,
+}: {
   label: string;
   value: string;
   sub: string;
@@ -476,15 +634,27 @@ function OverviewCard({ label, value, sub, borderColor, valueClass }: {
   valueClass?: string;
 }) {
   return (
-    <div className={`rounded-lg border-l-4 ${borderColor} bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4`}>
+    <div
+      className={`rounded-lg border-l-4 ${borderColor} bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4`}
+    >
       <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</div>
-      <div className={`text-2xl font-bold ${valueClass || "text-gray-900 dark:text-white"}`}>{value}</div>
+      <div className={`text-2xl font-bold ${valueClass || "text-gray-900 dark:text-white"}`}>
+        {value}
+      </div>
       {sub && <div className="text-[10px] text-gray-400 mt-0.5">{sub}</div>}
     </div>
   );
 }
 
-function InsightCard({ icon, title, content }: { icon: string; title: string; content: React.ReactNode }) {
+function InsightCard({
+  icon,
+  title,
+  content,
+}: {
+  icon: string;
+  title: string;
+  content: React.ReactNode;
+}) {
   return (
     <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-4">
       <div className="flex items-center gap-2 mb-2">

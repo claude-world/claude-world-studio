@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { PostsSkeleton } from "./Skeleton";
 import type { Language } from "../App";
 
 interface PostWithInsights {
@@ -118,7 +119,13 @@ function compactNumber(n: number): string {
 
 type LinkFilter = "all" | "with_link" | "without_link";
 
-export function AccountPostsPage({ onClose, language = "zh-TW" }: { onClose: () => void; language?: Language }) {
+export function AccountPostsPage({
+  onClose,
+  language = "zh-TW",
+}: {
+  onClose: () => void;
+  language?: Language;
+}) {
   const t = T[language] || T["zh-TW"];
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [posts, setPosts] = useState<PostWithInsights[]>([]);
@@ -130,21 +137,29 @@ export function AccountPostsPage({ onClose, language = "zh-TW" }: { onClose: () 
   const fetchPosts = useCallback(async () => {
     setLoading(true);
     try {
-      const url = selectedAccount === "all"
-        ? "/api/publish/posts-detail?limit=200"
-        : `/api/publish/accounts/${selectedAccount}/posts-detail?limit=200`;
+      const url =
+        selectedAccount === "all"
+          ? "/api/publish/posts-detail?limit=200"
+          : `/api/publish/accounts/${selectedAccount}/posts-detail?limit=200`;
       const res = await fetch(url);
       if (res.ok) setPosts(await res.json());
       else setPosts([]);
-    } catch { setPosts([]); }
+    } catch {
+      setPosts([]);
+    }
     setLoading(false);
   }, [selectedAccount]);
 
   useEffect(() => {
-    fetch("/api/accounts").then((r) => r.ok ? r.json() : []).then(setAccounts).catch(() => {});
+    fetch("/api/accounts")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setAccounts)
+      .catch(() => {});
   }, []);
 
-  useEffect(() => { fetchPosts(); }, [fetchPosts]);
+  useEffect(() => {
+    fetchPosts();
+  }, [fetchPosts]);
 
   const filtered = posts.filter((p) => {
     if (linkFilter === "with_link") return p.link_comment;
@@ -152,7 +167,6 @@ export function AccountPostsPage({ onClose, language = "zh-TW" }: { onClose: () 
     return true;
   });
 
-  const publishedCount = posts.filter((p) => p.status === "published").length;
   const withLinkCount = posts.filter((p) => p.link_comment).length;
   const coveragePct = posts.length > 0 ? Math.round((withLinkCount / posts.length) * 100) : 0;
 
@@ -160,7 +174,12 @@ export function AccountPostsPage({ onClose, language = "zh-TW" }: { onClose: () 
     setRefreshing(true);
     const staleThreshold = Date.now() - 6 * 3600000;
     const toRefresh = posts
-      .filter((p) => p.status === "published" && p.post_id && (!p.insights_fetched_at || new Date(p.insights_fetched_at).getTime() < staleThreshold))
+      .filter(
+        (p) =>
+          p.status === "published" &&
+          p.post_id &&
+          (!p.insights_fetched_at || new Date(p.insights_fetched_at).getTime() < staleThreshold)
+      )
       .map((p) => p.id)
       .slice(0, 20);
 
@@ -171,7 +190,9 @@ export function AccountPostsPage({ onClose, language = "zh-TW" }: { onClose: () 
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ids: toRefresh }),
         });
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
     await fetchPosts();
     setRefreshing(false);
@@ -194,9 +215,18 @@ export function AccountPostsPage({ onClose, language = "zh-TW" }: { onClose: () 
       {/* Header */}
       <div className="sticky top-0 z-10 bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-gray-800 px-6 py-4">
         <div className="flex items-center gap-3">
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400">
+          <button
+            onClick={onClose}
+            aria-label={t.back}
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400"
+          >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 19l-7-7 7-7"
+              />
             </svg>
           </button>
           <h1 className="text-lg font-bold text-gray-900 dark:text-white">{t.title}</h1>
@@ -211,7 +241,9 @@ export function AccountPostsPage({ onClose, language = "zh-TW" }: { onClose: () 
           >
             <option value="all">{t.allAccounts}</option>
             {accounts.map((a) => (
-              <option key={a.id} value={a.id}>@{a.handle}</option>
+              <option key={a.id} value={a.id}>
+                @{a.handle}
+              </option>
             ))}
           </select>
 
@@ -226,7 +258,11 @@ export function AccountPostsPage({ onClose, language = "zh-TW" }: { onClose: () 
                     : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
                 }`}
               >
-                {f === "all" ? t.filterAll : f === "with_link" ? t.filterWithLink : t.filterWithoutLink}
+                {f === "all"
+                  ? t.filterAll
+                  : f === "with_link"
+                    ? t.filterWithLink
+                    : t.filterWithoutLink}
               </button>
             ))}
           </div>
@@ -236,7 +272,9 @@ export function AccountPostsPage({ onClose, language = "zh-TW" }: { onClose: () 
         <div className="mt-3 flex items-center gap-3">
           <div className="flex-1">
             <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
-              <span>{t.coverage}: {withLinkCount}/{posts.length} {t.postsHaveSource}</span>
+              <span>
+                {t.coverage}: {withLinkCount}/{posts.length} {t.postsHaveSource}
+              </span>
               <span>{coveragePct}%</span>
             </div>
             <div className="h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
@@ -259,25 +297,27 @@ export function AccountPostsPage({ onClose, language = "zh-TW" }: { onClose: () 
       {/* Post list */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {loading ? (
-          <div className="flex items-center justify-center py-20 text-gray-400">
-            <svg className="w-5 h-5 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          </div>
+          <PostsSkeleton />
         ) : filtered.length === 0 ? (
           <div className="text-center py-20 text-gray-400 text-sm">{t.noPosts}</div>
         ) : (
           filtered.map((post) => (
-            <div key={post.id} className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-4">
+            <div
+              key={post.id}
+              className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-4"
+            >
               {/* Top row: handle + date + status */}
               <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-2">
-                <span className="font-medium text-gray-700 dark:text-gray-300">@{post.account_handle}</span>
+                <span className="font-medium text-gray-700 dark:text-gray-300">
+                  @{post.account_handle}
+                </span>
                 <span>&middot;</span>
                 <span>{formatRelativeTime(post.created_at)}</span>
                 <span>&middot;</span>
                 {statusBadge(post.status)}
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 capitalize">{post.platform}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 capitalize">
+                  {post.platform}
+                </span>
               </div>
 
               {/* Content preview */}
@@ -301,19 +341,37 @@ export function AccountPostsPage({ onClose, language = "zh-TW" }: { onClose: () 
                 {post.link_comment ? (
                   <div className="flex items-center gap-1.5 text-xs">
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-500/10 text-green-500">
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
                       </svg>
                       {t.sourceLink}
                     </span>
-                    <span className="text-gray-400 dark:text-gray-500 truncate max-w-[280px]" title={post.link_comment}>
+                    <span
+                      className="text-gray-400 dark:text-gray-500 truncate max-w-[280px]"
+                      title={post.link_comment}
+                    >
                       {post.link_comment}
                     </span>
                   </div>
                 ) : (
                   <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-red-500/10 text-red-400">
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
                     </svg>
                     {t.noSourceLink}
                   </span>

@@ -23,21 +23,28 @@ function getToolColor(name: string): string {
 
 function getToolBadge(name: string): { label: string; color: string } | null {
   if (name.startsWith("mcp__trend-pulse") || name.startsWith("mcp__trend_pulse")) {
-    return { label: "trend-pulse", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-400" };
+    return {
+      label: "trend-pulse",
+      color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-400",
+    };
   }
   if (name.startsWith("mcp__cf-browser") || name.startsWith("mcp__cf_browser")) {
-    return { label: "cf-browser", color: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-400" };
+    return {
+      label: "cf-browser",
+      color: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-400",
+    };
   }
   if (name.startsWith("mcp__notebooklm")) {
-    return { label: "notebooklm", color: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-400" };
+    return {
+      label: "notebooklm",
+      color: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-400",
+    };
   }
   return null;
 }
 
 function getToolDisplayName(name: string): string {
-  return name
-    .replace(/^mcp__(trend[-_]pulse|cf[-_]browser|notebooklm)__/, "")
-    .replace(/_/g, " ");
+  return name.replace(/^mcp__(trend[-_]pulse|cf[-_]browser|notebooklm)__/, "").replace(/_/g, " ");
 }
 
 function str(val: unknown): string {
@@ -74,9 +81,28 @@ function getToolSummary(name: string, input: Record<string, unknown>): string {
 }
 
 const PREVIEWABLE_EXTS = [
-  "png", "jpg", "jpeg", "gif", "webp", "svg",
-  "pdf", "md", "txt", "json", "ts", "tsx", "js", "jsx", "py", "html", "css",
-  "mp3", "wav", "m4a", "mp4", "webm",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "svg",
+  "pdf",
+  "md",
+  "txt",
+  "json",
+  "ts",
+  "tsx",
+  "js",
+  "jsx",
+  "py",
+  "html",
+  "css",
+  "mp3",
+  "wav",
+  "m4a",
+  "mp4",
+  "webm",
 ];
 
 function isPreviewable(filePath: string): boolean {
@@ -90,7 +116,10 @@ export function ToolUseBlock({ toolName, toolInput, toolId, onPreviewFile }: Too
   const badge = getToolBadge(toolName);
 
   const filePath = toolInput.file_path as string | undefined;
-  const canPreview = onPreviewFile && filePath && isPreviewable(filePath) &&
+  const canPreview =
+    onPreviewFile &&
+    filePath &&
+    isPreviewable(filePath) &&
     (toolName === "Write" || toolName === "Read" || toolName === "Edit");
 
   return (
@@ -101,10 +130,17 @@ export function ToolUseBlock({ toolName, toolInput, toolId, onPreviewFile }: Too
           role="button"
           tabIndex={0}
           onClick={() => setIsExpanded(!isExpanded)}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setIsExpanded(!isExpanded); } }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setIsExpanded(!isExpanded);
+            }
+          }}
           className="flex items-center gap-2 min-w-0 cursor-pointer hover:opacity-80 flex-1"
         >
-          <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">{isExpanded ? "▼" : "▶"}</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">
+            {isExpanded ? "▼" : "▶"}
+          </span>
           {badge && (
             <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${badge.color}`}>
               {badge.label}

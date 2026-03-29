@@ -2,8 +2,9 @@ import type { WSClient, Language, Message, CliCommand } from "./types.js";
 import type { ICliSession } from "./cli-session.js";
 import { AgentSession, buildSystemPrompt } from "./ai-client.js";
 import { SubprocessCliSession } from "./subprocess-cli-session.js";
-import { getSettings, buildMcpServers, writeMcpConfigFile } from "./mcp-config.js";
+import { getSettings, writeMcpConfigFile } from "./mcp-config.js";
 import store from "./db.js";
+import { logger } from "./logger.js";
 
 /**
  * Build a compact conversation recap from previous messages.
@@ -25,13 +26,19 @@ function buildResumeContext(messages: Message[], maxMessages = 30): string | und
   const lines = recent.map((m) => {
     const role = m.role === "user" ? "User" : "Assistant";
     // Truncate very long messages (e.g. full articles)
-    const content = m.content!.length > 800
-      ? m.content!.slice(0, 800) + "... [truncated]"
-      : m.content!;
+    const content =
+      m.content!.length > 800 ? m.content!.slice(0, 800) + "... [truncated]" : m.content!;
     return `**${role}**: ${content}`;
   });
 
   return lines.join("\n\n");
+}
+
+// Cap tool results at 100KB to prevent database bloat
+const MAX_TOOL_RESULT_SIZE = 100_000;
+export function truncateResult(content: string): string {
+  if (content.length <= MAX_TOOL_RESULT_SIZE) return content;
+  return content.slice(0, MAX_TOOL_RESULT_SIZE) + "\n...[truncated]";
 }
 
 export class Session {
@@ -41,10 +48,22 @@ export class Session {
   private cliSession: ICliSession;
   private isListening = false;
 
-  constructor(sessionId: string, workspacePath?: string, language?: Language, previousMessages?: Message[]) {
+  constructor(
+    sessionId: string,
+    workspacePath?: string,
+    language?: Language,
+    previousMessages?: Message[]
+  ) {
     this.sessionId = sessionId;
     const settings = getSettings();
-    const ALLOWED_CLIS: CliCommand[] = ["claude", "codex", "gemini", "opencode", "aider", "gh-copilot"];
+    const ALLOWED_CLIS: CliCommand[] = [
+      "claude",
+      "codex",
+      "gemini",
+      "opencode",
+      "aider",
+      "gh-copilot",
+    ];
     const rawCli = (settings as any).cliPrimary || "claude";
     const cliPrimary: CliCommand = ALLOWED_CLIS.includes(rawCli) ? rawCli : "claude";
 
@@ -57,7 +76,12 @@ export class Session {
       // Use external CLI subprocess
       const lang = language || settings.language || "zh-TW";
       const accounts = store.getAllAccounts();
-      const systemPrompt = buildSystemPrompt(lang, accounts, settings.minOverallScore, settings.minConversationScore);
+      const systemPrompt = buildSystemPrompt(
+        lang,
+        accounts,
+        settings.minOverallScore,
+        settings.minConversationScore
+      );
       const cwd = workspacePath || settings.defaultWorkspace || process.cwd();
 
       // Write MCP config file for external CLIs
@@ -65,7 +89,9 @@ export class Session {
       try {
         mcpConfigPath = writeMcpConfigFile(settings);
       } catch (err) {
-        console.warn(`[Session] MCP config write failed, MCP tools unavailable:`, (err as Error).message);
+        logger.warn("Session", "MCP config write failed, MCP tools unavailable", {
+          error: (err as Error).message,
+        });
       }
 
       this.cliSession = new SubprocessCliSession(cliPrimary, cwd, systemPrompt, mcpConfigPath);
@@ -83,7 +109,7 @@ export class Session {
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error(`Error in session ${this.sessionId}:`, errorMsg);
+      logger.error("Session", `Error in session ${this.sessionId}`, error);
       this.broadcastError(errorMsg);
     } finally {
       this.isListening = false;
@@ -145,10 +171,9 @@ export class Session {
               sessionId: this.sessionId,
             });
           } else if (block.type === "tool_result") {
-            const resultContent =
-              typeof block.content === "string"
-                ? block.content
-                : JSON.stringify(block.content);
+            const rawContent =
+              typeof block.content === "string" ? block.content : JSON.stringify(block.content);
+            const resultContent = truncateResult(rawContent);
             store.addMessage(this.sessionId, {
               role: "tool_result",
               tool_id: block.tool_use_id,

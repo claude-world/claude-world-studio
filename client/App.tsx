@@ -1,5 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import useWebSocket, { ReadyState } from "react-use-websocket";
+import { useState, useEffect, useCallback, useRef, Fragment } from "react";
+import useWebSocketImport, { ReadyState } from "react-use-websocket";
+
+// Handle CJS/ESM interop — Vite 8 may double-wrap the default export
+const useWebSocket =
+  typeof useWebSocketImport === "function"
+    ? useWebSocketImport
+    : ((useWebSocketImport as Record<string, unknown>).default as typeof useWebSocketImport);
 import { Sidebar } from "./components/Sidebar";
 import { ChatWindow } from "./components/ChatWindow";
 import { FileExplorer } from "./components/FileExplorer";
@@ -10,6 +16,7 @@ import { SocialAccountsPage } from "./components/SocialAccountsPage";
 import { ScheduledTasksPage } from "./components/ScheduledTasksPage";
 import { AccountPostsPage } from "./components/AccountPostsPage";
 import { TrafficDashboardPage } from "./components/TrafficDashboardPage";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 export type Language = "zh-TW" | "en" | "ja";
 export type Theme = "light" | "dark" | "system";
@@ -43,7 +50,13 @@ type ServerWSMessage =
   | { type: "history"; messages: Message[]; sessionId: string; running?: boolean; cliName?: string }
   | { type: "user_message"; content: string; sessionId: string }
   | { type: "assistant_message"; content: string; sessionId: string }
-  | { type: "tool_use"; toolName: string; toolId: string; toolInput: Record<string, unknown>; sessionId: string }
+  | {
+      type: "tool_use";
+      toolName: string;
+      toolId: string;
+      toolInput: Record<string, unknown>;
+      sessionId: string;
+    }
   | { type: "tool_result"; toolId: string; content: string; sessionId: string }
   | { type: "result"; success: boolean; cost?: number; duration?: number; sessionId: string }
   | { type: "interrupted"; sessionId: string }
@@ -58,6 +71,8 @@ function getWsUrl(): string {
 
 export default function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const selectedSessionRef = useRef<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -70,19 +85,23 @@ export default function App() {
   const [showAccountPosts, setShowAccountPosts] = useState(false);
   const [showTrafficDashboard, setShowTrafficDashboard] = useState(false);
   const [showPublish, setShowPublish] = useState(false);
-  const [previewFile, setPreviewFile] = useState<{ relativePath: string; sessionId: string } | null>(null);
+  const [previewFile, setPreviewFile] = useState<{
+    relativePath: string;
+    sessionId: string;
+  } | null>(null);
   const [defaultWorkspace, setDefaultWorkspace] = useState("");
   const [language, setLanguage] = useState<Language>("zh-TW");
   const [theme, setTheme] = useState<Theme>("light");
-  const [accounts, setAccounts] = useState<{ id: string; name: string; handle: string; platform: string }[]>([]);
+  const [accounts, setAccounts] = useState<
+    { id: string; name: string; handle: string; platform: string }[]
+  >([]);
   const [targetAccountId, setTargetAccountId] = useState("");
 
   // Apply dark class to <html>
   useEffect(() => {
     const isDark =
       theme === "dark" ||
-      (theme === "system" &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches);
+      (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
     document.documentElement.classList.toggle("dark", isDark);
   }, [theme]);
 
@@ -139,16 +158,25 @@ export default function App() {
         if (message.content) {
           setMessages((prev) => {
             // Skip if already present (optimistic local insert)
-            if (prev.some((m) => m.role === "user" && m.content === message.content &&
-              Date.now() - new Date(m.timestamp || 0).getTime() < 5000)) {
+            if (
+              prev.some(
+                (m) =>
+                  m.role === "user" &&
+                  m.content === message.content &&
+                  Date.now() - new Date(m.timestamp || 0).getTime() < 5000
+              )
+            ) {
               return prev;
             }
-            return [...prev, {
-              id: crypto.randomUUID(),
-              role: "user",
-              content: message.content,
-              timestamp: new Date().toISOString(),
-            }];
+            return [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                role: "user",
+                content: message.content,
+                timestamp: new Date().toISOString(),
+              },
+            ];
           });
         }
         break;
@@ -252,6 +280,8 @@ export default function App() {
       setSessions(data);
     } catch {
       // Network error — ignore silently
+    } finally {
+      setSessionsLoading(false);
     }
   };
 
@@ -301,9 +331,10 @@ export default function App() {
 
     if (selectedSessionId && messages.length > 0 && isConnected) {
       const SWITCH_MSG: Record<Language, string> = {
-        "zh-TW": "[系統] 使用者已將語言切換為繁體中文。從現在起，請用繁體中文（台灣用語）回覆所有訊息。",
-        "en": "[System] User switched language to English. From now on, please respond in English for all messages.",
-        "ja": "[システム] ユーザーが言語を日本語に切り替えました。これ以降、すべてのメッセージを日本語で回答してください。",
+        "zh-TW":
+          "[系統] 使用者已將語言切換為繁體中文。從現在起，請用繁體中文（台灣用語）回覆所有訊息。",
+        en: "[System] User switched language to English. From now on, please respond in English for all messages.",
+        ja: "[システム] ユーザーが言語を日本語に切り替えました。これ以降、すべてのメッセージを日本語で回答してください。",
       };
       sendJsonMessage({
         type: "chat",
@@ -358,6 +389,7 @@ export default function App() {
     setShowScheduled(false);
     setShowAccountPosts(false);
     setShowTrafficDashboard(false);
+    setSidebarOpen(false); // close mobile overlay when switching sessions
     if (isConnected) {
       sendJsonMessage({ type: "subscribe", sessionId });
     }
@@ -370,9 +402,7 @@ export default function App() {
       // Auto-update session title from first user message
       if (prev.length === 0) {
         const title = content.slice(0, 80).replace(/\n/g, " ");
-        setSessions((ss) =>
-          ss.map((s) => s.id === selectedSessionId ? { ...s, title } : s)
-        );
+        setSessions((ss) => ss.map((s) => (s.id === selectedSessionId ? { ...s, title } : s)));
         // Persist title to server (fire-and-forget)
         fetch(`${API_BASE}/sessions/${selectedSessionId}`, {
           method: "PATCH",
@@ -449,92 +479,191 @@ export default function App() {
     fetchAccounts();
   }, []);
 
+  const sidebarContent = (
+    <Sidebar
+      sessions={sessions}
+      selectedSessionId={selectedSessionId}
+      onSelectSession={(id) => {
+        selectSession(id);
+        setSidebarOpen(false);
+      }}
+      onNewSession={() => {
+        createSession();
+        setSidebarOpen(false);
+      }}
+      onDeleteSession={deleteSession}
+      onShowSettings={() => {
+        setShowSettings(true);
+        setShowSocial(false);
+        setShowScheduled(false);
+        setShowAccountPosts(false);
+        setShowTrafficDashboard(false);
+        setSidebarOpen(false);
+      }}
+      onShowSocial={() => {
+        setShowSocial(true);
+        setShowSettings(false);
+        setShowScheduled(false);
+        setShowAccountPosts(false);
+        setShowTrafficDashboard(false);
+        setSidebarOpen(false);
+      }}
+      onShowScheduled={() => {
+        setShowScheduled(true);
+        setShowSettings(false);
+        setShowSocial(false);
+        setShowAccountPosts(false);
+        setShowTrafficDashboard(false);
+        setSidebarOpen(false);
+      }}
+      onShowAccountPosts={() => {
+        setShowAccountPosts(true);
+        setShowSettings(false);
+        setShowSocial(false);
+        setShowScheduled(false);
+        setShowTrafficDashboard(false);
+        setSidebarOpen(false);
+      }}
+      onShowTrafficDashboard={() => {
+        setShowTrafficDashboard(true);
+        setShowSettings(false);
+        setShowSocial(false);
+        setShowScheduled(false);
+        setShowAccountPosts(false);
+        setSidebarOpen(false);
+      }}
+      defaultWorkspace={defaultWorkspace}
+      isConnected={isConnected}
+      language={language}
+      onLanguageChange={handleLanguageChange}
+      theme={theme}
+      onThemeChange={handleThemeChange}
+      sessionsLoading={sessionsLoading}
+    />
+  );
+
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950">
-      {/* Sidebar */}
-      <div className="w-64 shrink-0">
-        <Sidebar
-          sessions={sessions}
-          selectedSessionId={selectedSessionId}
-          onSelectSession={selectSession}
-          onNewSession={createSession}
-          onDeleteSession={deleteSession}
-          onShowSettings={() => { setShowSettings(true); setShowSocial(false); setShowScheduled(false); setShowAccountPosts(false); setShowTrafficDashboard(false); }}
-          onShowSocial={() => { setShowSocial(true); setShowSettings(false); setShowScheduled(false); setShowAccountPosts(false); setShowTrafficDashboard(false); }}
-          onShowScheduled={() => { setShowScheduled(true); setShowSettings(false); setShowSocial(false); setShowAccountPosts(false); setShowTrafficDashboard(false); }}
-          onShowAccountPosts={() => { setShowAccountPosts(true); setShowSettings(false); setShowSocial(false); setShowScheduled(false); setShowTrafficDashboard(false); }}
-          onShowTrafficDashboard={() => { setShowTrafficDashboard(true); setShowSettings(false); setShowSocial(false); setShowScheduled(false); setShowAccountPosts(false); }}
-          defaultWorkspace={defaultWorkspace}
-          isConnected={isConnected}
-          language={language}
-          onLanguageChange={handleLanguageChange}
-          theme={theme}
-          onThemeChange={handleThemeChange}
-        />
+      {/* Mobile hamburger button */}
+      <button
+        className="md:hidden fixed top-3 left-3 z-50 p-2 bg-gray-800 text-white rounded-lg"
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        aria-label="Toggle sidebar"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d={sidebarOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"}
+          />
+        </svg>
+      </button>
+
+      {/* Sidebar - desktop (always visible) */}
+      <div className="hidden md:flex w-64 shrink-0 overflow-hidden">
+        <ErrorBoundary name="Sidebar">{sidebarContent}</ErrorBoundary>
       </div>
 
-      {/* Main content */}
-      {showSettings ? (
-        <SettingsPage
-          isVisible={showSettings}
-          onClose={() => setShowSettings(false)}
-          language={language}
-          onLanguageChange={handleLanguageChange}
-        />
-      ) : showSocial ? (
-        <SocialAccountsPage onClose={() => setShowSocial(false)} language={language} />
-      ) : showScheduled ? (
-        <ScheduledTasksPage onClose={() => setShowScheduled(false)} language={language} />
-      ) : showAccountPosts ? (
-        <AccountPostsPage onClose={() => setShowAccountPosts(false)} language={language} />
-      ) : showTrafficDashboard ? (
-        <TrafficDashboardPage onClose={() => setShowTrafficDashboard(false)} language={language} />
-      ) : (
-        <>
-          <ChatWindow
-            sessionId={selectedSessionId}
-            messages={messages}
-            isConnected={isConnected}
-            isLoading={isLoading}
-            onSendMessage={handleSendMessage}
-            onInterrupt={handleInterrupt}
-            onShowFiles={() => setShowFiles(!showFiles)}
-            onShowPublish={() => setShowPublish(true)}
-            onNewSession={createSession}
-            onPreviewFile={handlePreviewFile}
-            workspacePath={sessions.find((s) => s.id === selectedSessionId)?.workspace_path}
-            showFilesActive={showFiles}
-            language={language}
-            accounts={accounts}
-            targetAccountId={targetAccountId}
-            onTargetAccountChange={setTargetAccountId}
-            cliName={cliName}
+      {/* Sidebar - mobile overlay */}
+      {sidebarOpen && (
+        <Fragment>
+          <div
+            className="md:hidden fixed inset-0 z-40 bg-black/50"
+            onClick={() => setSidebarOpen(false)}
           />
-
-          <FileExplorer
-            sessionId={selectedSessionId}
-            isVisible={showFiles}
-            onToggle={() => setShowFiles(!showFiles)}
-            onPreviewFile={handleExplorerPreview}
-          />
-        </>
+          <div className="md:hidden fixed inset-y-0 left-0 z-40 w-64 flex">
+            <ErrorBoundary name="Sidebar">{sidebarContent}</ErrorBoundary>
+          </div>
+        </Fragment>
       )}
+
+      {/* Main content */}
+      <div className="flex-1 flex min-w-0" role="main">
+        {showSettings ? (
+          <ErrorBoundary name="Settings">
+            <SettingsPage
+              isVisible={showSettings}
+              onClose={() => setShowSettings(false)}
+              language={language}
+              onLanguageChange={handleLanguageChange}
+            />
+          </ErrorBoundary>
+        ) : showSocial ? (
+          <ErrorBoundary name="SocialAccounts">
+            <SocialAccountsPage onClose={() => setShowSocial(false)} language={language} />
+          </ErrorBoundary>
+        ) : showScheduled ? (
+          <ErrorBoundary name="ScheduledTasks">
+            <ScheduledTasksPage onClose={() => setShowScheduled(false)} language={language} />
+          </ErrorBoundary>
+        ) : showAccountPosts ? (
+          <ErrorBoundary name="AccountPosts">
+            <AccountPostsPage onClose={() => setShowAccountPosts(false)} language={language} />
+          </ErrorBoundary>
+        ) : showTrafficDashboard ? (
+          <ErrorBoundary name="TrafficDashboard">
+            <TrafficDashboardPage
+              onClose={() => setShowTrafficDashboard(false)}
+              language={language}
+            />
+          </ErrorBoundary>
+        ) : (
+          <ErrorBoundary name="Chat">
+            <>
+              <ChatWindow
+                sessionId={selectedSessionId}
+                messages={messages}
+                isConnected={isConnected}
+                isLoading={isLoading}
+                onSendMessage={handleSendMessage}
+                onInterrupt={handleInterrupt}
+                onShowFiles={() => setShowFiles(!showFiles)}
+                onShowPublish={() => setShowPublish(true)}
+                onNewSession={createSession}
+                onPreviewFile={handlePreviewFile}
+                workspacePath={sessions.find((s) => s.id === selectedSessionId)?.workspace_path}
+                showFilesActive={showFiles}
+                language={language}
+                accounts={accounts}
+                targetAccountId={targetAccountId}
+                onTargetAccountChange={setTargetAccountId}
+                cliName={cliName}
+              />
+
+              {/* FileExplorer - hidden on mobile, visible on md+ when toggled */}
+              <div className="hidden md:contents">
+                <FileExplorer
+                  sessionId={selectedSessionId}
+                  isVisible={showFiles}
+                  onToggle={() => setShowFiles(!showFiles)}
+                  onPreviewFile={handleExplorerPreview}
+                />
+              </div>
+            </>
+          </ErrorBoundary>
+        )}
+      </div>
 
       {/* File preview modal */}
       {previewFile && (
-        <FilePreviewModal
-          sessionId={previewFile.sessionId}
-          filePath={previewFile.relativePath}
-          onClose={() => setPreviewFile(null)}
-        />
+        <ErrorBoundary name="FilePreview" fallback={null}>
+          <FilePreviewModal
+            sessionId={previewFile.sessionId}
+            filePath={previewFile.relativePath}
+            onClose={() => setPreviewFile(null)}
+          />
+        </ErrorBoundary>
       )}
 
       {/* Publish dialog */}
-      <PublishDialog
-        isOpen={showPublish}
-        onClose={() => setShowPublish(false)}
-        sessionId={selectedSessionId}
-      />
+      <ErrorBoundary name="PublishDialog" fallback={null}>
+        <PublishDialog
+          isOpen={showPublish}
+          onClose={() => setShowPublish(false)}
+          sessionId={selectedSessionId}
+        />
+      </ErrorBoundary>
     </div>
   );
 }

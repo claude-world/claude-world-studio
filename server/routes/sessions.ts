@@ -3,6 +3,7 @@ import { existsSync } from "fs";
 import { isAbsolute } from "path";
 import store from "../db.js";
 import { removeSession } from "../server.js";
+import { CreateSessionSchema, UpdateSessionSchema, parseBody } from "../validation.js";
 
 /** Paths that must never be used as a workspace */
 const BLOCKED_ROOTS = ["/etc", "/usr", "/bin", "/sbin", "/var", "/System", "/Library", "/private"];
@@ -17,17 +18,22 @@ router.get("/", (_req, res) => {
 
 // Create new session
 router.post("/", (req, res) => {
-  const { title, workspacePath } = req.body || {};
+  const parsed = parseBody(CreateSessionSchema, req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
 
-  // Validate workspacePath if provided
+  const { title, workspacePath } = parsed.data;
+
+  // Validate workspacePath if provided (filesystem checks that Zod can't do)
   if (workspacePath) {
-    if (typeof workspacePath !== "string" || !isAbsolute(workspacePath)) {
+    if (!isAbsolute(workspacePath)) {
       return res.status(400).json({ error: "workspacePath must be an absolute path" });
     }
     if (!existsSync(workspacePath)) {
       return res.status(400).json({ error: "workspacePath does not exist" });
     }
-    if (BLOCKED_ROOTS.some((root) => workspacePath === root || workspacePath.startsWith(root + "/"))) {
+    if (
+      BLOCKED_ROOTS.some((root) => workspacePath === root || workspacePath.startsWith(root + "/"))
+    ) {
       return res.status(400).json({ error: "workspacePath cannot be a system directory" });
     }
   }
@@ -47,15 +53,18 @@ router.get("/:id", (req, res) => {
 
 // Update session title
 router.patch("/:id", (req, res) => {
-  const { title } = req.body || {};
-  if (!title || typeof title !== "string") {
+  const parsed = parseBody(UpdateSessionSchema, req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+  const { title } = parsed.data;
+  if (!title) {
     return res.status(400).json({ error: "Title required" });
   }
   const session = store.getSession(req.params.id);
   if (!session) {
     return res.status(404).json({ error: "Session not found" });
   }
-  store.updateSessionTitle(req.params.id, title.slice(0, 200));
+  store.updateSessionTitle(req.params.id, title);
   res.json({ success: true });
 });
 

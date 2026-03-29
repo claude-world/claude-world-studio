@@ -11,6 +11,7 @@ AI-powered content pipeline: trend discovery -> deep research -> algorithm-optim
 ## MCP Servers Required
 
 Install via uvx (one-time, auto-cached):
+
 ```bash
 uvx --from 'trend-pulse[mcp]' trend-pulse-server
 uvx --from cf-browser-mcp cf-browser-mcp
@@ -22,6 +23,7 @@ uvx --from notebooklm-skill notebooklm-mcp
 ### trend-pulse (12 tools)
 
 **Trend Data:**
+
 - **get_trending(sources, geo, count)**: Query ALL 20 free sources. sources="" for all. geo: "TW"/"US"/"JP"/"". count: 20.
   - Sources: google_trends, hackernews, mastodon, bluesky, wikipedia, github, pypi, google_news, lobsters, devto, npm, reddit, coingecko, dockerhub, stackoverflow, producthunt, arxiv, lemmy, dcard, ptt
 - **search_trends(query, sources, geo)**: Cross-source keyword search.
@@ -30,6 +32,7 @@ uvx --from notebooklm-skill notebooklm-mcp
 - **get_trend_history(keyword, days, source)**: Historical data with direction.
 
 **Content Guide:**
+
 - **get_content_brief(topic)**: Writing brief with hook examples, patent strategies, CTA.
 - **get_scoring_guide()**: 5-dimension patent scoring. Score >= 70 required.
 - **get_platform_specs(platform)**: Platform specs (char limits, algorithm signals, posting times).
@@ -37,11 +40,13 @@ uvx --from notebooklm-skill notebooklm-mcp
 - **get_reel_guide()**: Reels script guide (3 styles).
 
 **Search:**
+
 - **search_threads_posts(query)**: Search Threads posts by heat score.
 
 ### cf-browser (10 tools)
 
 Headless Chrome via Cloudflare Browser Rendering. Use instead of WebFetch for JS-rendered pages.
+
 - **browser_markdown(url)**: Clean Markdown. **Most used** for deep research.
 - **browser_content(url)**: Full rendered HTML.
 - **browser_screenshot(url)**: Full page screenshot (PNG).
@@ -64,6 +69,7 @@ Deep research + 9 downloadable artifact types (podcast, slides, report, quiz, fl
 **Pipelines:** research_pipeline(sources, questions, output_format), trend_research(geo?, count?, platform?)
 
 **Video Synthesis (slides + podcast -> MP4):**
+
 1. Generate slides (PDF) + audio (podcast M4A) — sequentially
 2. Download both
 3. `pdftoppm -png -r 300 slides.pdf slides_page`
@@ -86,18 +92,19 @@ Use **NotebookLM** to generate all visual content. It produces professional-qual
 
 **Choose artifact type by use case:**
 
-| Need | Artifact Type | Output |
-|------|--------------|--------|
-| Single image card | `slides` (1 slide) | PDF → export as image |
-| Multi-slide carousel | `slides` (N slides) | PDF → split per page |
-| Data visualization | `slides` | ~~infographic~~ ⚠️ download unreliable — use slides |
-| Topic overview | `mindmap` | Mind map diagram |
-| Detailed report | `report` | Formatted document |
-| Study material | `flashcards` / `study_guide` | Learning cards |
+| Need                 | Artifact Type                | Output                                              |
+| -------------------- | ---------------------------- | --------------------------------------------------- |
+| Single image card    | `slides` (1 slide)           | PDF → export as image                               |
+| Multi-slide carousel | `slides` (N slides)          | PDF → split per page                                |
+| Data visualization   | `slides`                     | ~~infographic~~ ⚠️ download unreliable — use slides |
+| Topic overview       | `mindmap`                    | Mind map diagram                                    |
+| Detailed report      | `report`                     | Formatted document                                  |
+| Study material       | `flashcards` / `study_guide` | Learning cards                                      |
 
 ### Carousel Posts (輪播貼文)
 
 For multi-image carousel (Threads supports 2-20 images):
+
 1. Create notebook with content organized as numbered sections (one per slide)
 2. `generate_artifact(name_or_id, "slides")` → multi-page PDF
 3. Download and split: `pdftoppm -png -r 300 slides.pdf slide`
@@ -107,6 +114,7 @@ For multi-image carousel (Threads supports 2-20 images):
 ### Video (影片)
 
 Combine slides + podcast audio into MP4:
+
 1. `generate_artifact(name_or_id, "slides")` → PDF
 2. `generate_artifact(name_or_id, "podcast")` → M4A audio (run sequentially, NOT parallel)
 3. Download both artifacts
@@ -123,39 +131,45 @@ Combine slides + podcast audio into MP4:
 ## Mandatory Rules
 
 ### 0. Workspace Containment
+
 All files MUST be saved within the session workspace directory. Use relative paths like `downloads/card.pdf`. NEVER use ~/Downloads, ~/Desktop, or any absolute path outside the workspace.
 
 ### 1. Read Original Sources
+
 NEVER write content based on titles/metadata alone.
+
 - Single topic: read >= 1 primary source via browser_markdown(url)
 - Controversial: read >= 2 sources (both sides)
 - Data claims: find original data source
 
 ### 2. Timeline Verification
+
 Every fact must have a verified timestamp. Discard anything > 48 hours old.
 
-| Source age | Allowed | Forbidden |
-|---|---|---|
-| Today | "today" "just now" | - |
-| 1-3 days | "recently" "the other day" | "just" "latest" |
-| 4-7 days | "last week" "this week" | "just" "yesterday" |
-| 8-30 days | "this month" | "last week" "just" |
-| >30 days | "earlier" "this year" | any freshness words |
+| Source age | Allowed                    | Forbidden           |
+| ---------- | -------------------------- | ------------------- |
+| Today      | "today" "just now"         | -                   |
+| 1-3 days   | "recently" "the other day" | "just" "latest"     |
+| 4-7 days   | "last week" "this week"    | "just" "yesterday"  |
+| 8-30 days  | "this month"               | "last week" "just"  |
+| >30 days   | "earlier" "this year"      | any freshness words |
 
 ### 3. Use ALL Sources
+
 get_trending with sources="" to query ALL 20 sources. Do NOT filter unless user explicitly asks.
 
 ## Meta Patent-Based Scoring (5 Dimensions)
 
-| # | Dimension | Weight | Check |
-|---|-----------|--------|-------|
-| 1 | Hook Power | 25% | First line: number or contrast, 10-45 chars |
-| 2 | Engagement Trigger | 25% | CTA anyone can answer, direct "you" address |
-| 3 | Conversation Durability | 20% | Has contrast/both sides, creates discussion |
-| 4 | Velocity Potential | 15% | Timely, 50-300 chars, urgency language |
-| 5 | Format Score | 15% | Mobile-scannable, line breaks, no text walls |
+| #   | Dimension               | Weight | Check                                        |
+| --- | ----------------------- | ------ | -------------------------------------------- |
+| 1   | Hook Power              | 25%    | First line: number or contrast, 10-45 chars  |
+| 2   | Engagement Trigger      | 25%    | CTA anyone can answer, direct "you" address  |
+| 3   | Conversation Durability | 20%    | Has contrast/both sides, creates discussion  |
+| 4   | Velocity Potential      | 15%    | Timely, 50-300 chars, urgency language       |
+| 5   | Format Score            | 15%    | Mobile-scannable, line breaks, no text walls |
 
 **Quality Gates (ALL must pass before publishing):**
+
 - Overall Score >= 70
 - Conversation Durability >= 55
 - Hook: 10-45 chars with number or contrast

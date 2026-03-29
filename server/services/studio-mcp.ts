@@ -15,9 +15,15 @@ const publishTool = tool(
     // Media (mutually exclusive: pick one)
     image_url: z.string().optional().describe("Public image URL (single image post)"),
     video_url: z.string().optional().describe("Public video URL (single video post)"),
-    carousel_urls: z.array(z.string()).optional().describe("2-20 public URLs for carousel. .mp4/.mov auto-detected as video."),
+    carousel_urls: z
+      .array(z.string())
+      .optional()
+      .describe("2-20 public URLs for carousel. .mp4/.mov auto-detected as video."),
     // Attachments (TEXT-only posts, no media)
-    poll_options: z.string().optional().describe("Poll options separated by | (2-4 options, max 25 chars each)"),
+    poll_options: z
+      .string()
+      .optional()
+      .describe("Poll options separated by | (2-4 options, max 25 chars each)"),
     gif_id: z.string().optional().describe("GIPHY GIF ID for GIF attachment"),
     link_attachment: z.string().optional().describe("URL for link preview card attachment"),
     // Spoiler
@@ -26,52 +32,73 @@ const publishTool = tool(
     ghost: z.boolean().optional().describe("24-hour ephemeral post (disappears after 24h)"),
     quote_post_id: z.string().optional().describe("Quote another post by its ID"),
     // Content controls
-    reply_control: z.string().optional().describe("Who can reply: everyone|accounts_you_follow|mentioned_only"),
+    reply_control: z
+      .string()
+      .optional()
+      .describe("Who can reply: everyone|accounts_you_follow|mentioned_only"),
     tag: z.string().optional().describe("Topic tag (no # prefix, one per post)"),
     alt_text: z.string().optional().describe("Image alt text for accessibility (max 1000 chars)"),
-    link_comment: z.string().optional().describe("Auto-reply with this link (avoids reach penalty from URL in body)"),
+    link_comment: z
+      .string()
+      .optional()
+      .describe("Auto-reply with this link (avoids reach penalty from URL in body)"),
   },
   async (args) => {
     const account = store.getAccount(args.account_id);
     if (!account) {
-      return { content: [{ type: "text" as const, text: `Error: Account not found: ${args.account_id}` }], isError: true };
+      return {
+        content: [{ type: "text" as const, text: `Error: Account not found: ${args.account_id}` }],
+        isError: true,
+      };
     }
     if (!account.token) {
-      return { content: [{ type: "text" as const, text: `Error: No token configured for account "${account.name}". Add token in Settings.` }], isError: true };
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: No token configured for account "${account.name}". Add token in Settings.`,
+          },
+        ],
+        isError: true,
+      };
     }
     if (account.platform !== "threads") {
-      return { content: [{ type: "text" as const, text: `Error: Account "${account.name}" is ${account.platform}, not threads.` }], isError: true };
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: Account "${account.name}" is ${account.platform}, not threads.`,
+          },
+        ],
+        isError: true,
+      };
     }
 
     const PUBLISH_TIMEOUT_MS = 60000;
-    let timeoutId: ReturnType<typeof setTimeout>;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), PUBLISH_TIMEOUT_MS);
 
     try {
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error("Publishing timed out after 60 seconds. Check your network and try again.")), PUBLISH_TIMEOUT_MS);
+      const result = await publishToThreads({
+        text: args.text,
+        token: account.token,
+        score: args.score,
+        imageUrl: args.image_url,
+        videoUrl: args.video_url,
+        carouselUrls: args.carousel_urls,
+        pollOptions: args.poll_options,
+        gifId: args.gif_id,
+        linkAttachment: args.link_attachment,
+        spoilerMedia: args.spoiler_media,
+        ghost: args.ghost,
+        quotePostId: args.quote_post_id,
+        replyControl: args.reply_control,
+        topicTag: args.tag,
+        altText: args.alt_text,
+        linkComment: args.link_comment,
+        signal: controller.signal,
       });
-      const result = await Promise.race([
-        publishToThreads({
-          text: args.text,
-          token: account.token,
-          score: args.score,
-          imageUrl: args.image_url,
-          videoUrl: args.video_url,
-          carouselUrls: args.carousel_urls,
-          pollOptions: args.poll_options,
-          gifId: args.gif_id,
-          linkAttachment: args.link_attachment,
-          spoilerMedia: args.spoiler_media,
-          ghost: args.ghost,
-          quotePostId: args.quote_post_id,
-          replyControl: args.reply_control,
-          topicTag: args.tag,
-          altText: args.alt_text,
-          linkComment: args.link_comment,
-        }),
-        timeoutPromise,
-      ]);
-      clearTimeout(timeoutId!);
+      clearTimeout(timeoutId);
 
       // Log to publish history
       store.addPublish({
@@ -84,23 +111,28 @@ const publishTool = tool(
         post_url: result.permalink,
         status: "published",
         link_comment: args.link_comment || null,
-        source_url: args.link_comment || null,
+        source_url: null,
       });
 
       return {
-        content: [{
-          type: "text" as const,
-          text: JSON.stringify({
-            success: true,
-            post_id: result.id,
-            permalink: result.permalink,
-            account: account.name,
-            handle: account.handle,
-          }),
-        }],
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({
+              success: true,
+              post_id: result.id,
+              permalink: result.permalink,
+              account: account.name,
+              handle: account.handle,
+            }),
+          },
+        ],
       };
     } catch (err) {
-      clearTimeout(timeoutId!);
+      clearTimeout(timeoutId);
+      const message = controller.signal.aborted
+        ? "Publishing timed out after 60 seconds. Check your network and try again."
+        : (err as Error).message;
       // Log failed attempt
       store.addPublish({
         session_id: null,
@@ -112,11 +144,11 @@ const publishTool = tool(
         post_url: null,
         status: "failed",
         link_comment: args.link_comment || null,
-        source_url: args.link_comment || null,
+        source_url: null,
       });
 
       return {
-        content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }],
+        content: [{ type: "text" as const, text: `Error: ${message}` }],
         isError: true,
       };
     }
@@ -133,10 +165,12 @@ const historyTool = tool(
     const limit = Math.min(Math.max(args.limit || 20, 1), 500);
     const history = store.getPublishHistory(limit);
     return {
-      content: [{
-        type: "text" as const,
-        text: JSON.stringify(history, null, 2),
-      }],
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(history, null, 2),
+        },
+      ],
     };
   }
 );
@@ -145,7 +179,9 @@ const uploadImageTool = tool(
   "upload_image",
   "Upload a local image file to a public hosting service and return the public URL. Use this to get a public URL for images before publishing to Threads. The file must be inside the session workspace.",
   {
-    file_path: z.string().describe("Path to the image file (relative to workspace, e.g. 'downloads/card-1.png')"),
+    file_path: z
+      .string()
+      .describe("Path to the image file (relative to workspace, e.g. 'downloads/card-1.png')"),
   },
   async (args) => {
     const filePath = args.file_path;
@@ -153,17 +189,36 @@ const uploadImageTool = tool(
     // Resolve relative to CWD (workspace)
     const resolved = path.resolve(filePath);
     if (!fs.existsSync(resolved)) {
-      return { content: [{ type: "text" as const, text: `Error: File not found: ${resolved}` }], isError: true };
+      return {
+        content: [{ type: "text" as const, text: `Error: File not found: ${resolved}` }],
+        isError: true,
+      };
     }
 
     const stat = fs.statSync(resolved);
     if (stat.size > 10 * 1024 * 1024) {
-      return { content: [{ type: "text" as const, text: `Error: File too large (${(stat.size / 1024 / 1024).toFixed(1)}MB, max 10MB)` }], isError: true };
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: File too large (${(stat.size / 1024 / 1024).toFixed(1)}MB, max 10MB)`,
+          },
+        ],
+        isError: true,
+      };
     }
 
     const ext = path.extname(resolved).toLowerCase();
     if (![".png", ".jpg", ".jpeg", ".gif", ".webp"].includes(ext)) {
-      return { content: [{ type: "text" as const, text: `Error: Unsupported image type: ${ext}. Use .png, .jpg, .gif, or .webp` }], isError: true };
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: Unsupported image type: ${ext}. Use .png, .jpg, .gif, or .webp`,
+          },
+        ],
+        isError: true,
+      };
     }
 
     try {
@@ -193,10 +248,12 @@ const uploadImageTool = tool(
       }
 
       return {
-        content: [{
-          type: "text" as const,
-          text: JSON.stringify({ success: true, url: publicUrl, file: fileName }),
-        }],
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({ success: true, url: publicUrl, file: fileName }),
+          },
+        ],
       };
     } catch (err) {
       return {

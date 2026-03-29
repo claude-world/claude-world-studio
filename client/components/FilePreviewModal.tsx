@@ -18,29 +18,24 @@ function sanitizePath(p: string): string | null {
 export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewModalProps) {
   const [content, setContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [fileType, setFileType] = useState<"image" | "pdf" | "audio" | "video" | "text" | "binary">("text");
+  const [fileType, setFileType] = useState<"image" | "pdf" | "audio" | "video" | "text" | "binary">(
+    "text"
+  );
 
   // Absolute paths (e.g. /Users/.../Downloads/card.pdf) bypass sanitization
   const isAbsolutePath = filePath.startsWith("/");
   const safePath = isAbsolutePath ? filePath : sanitizePath(filePath);
 
-  // Reject traversal paths immediately (only for relative paths)
-  if (!safePath) {
-    return (
-      <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6" onClick={onClose}>
-        <div role="dialog" aria-modal="true" className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl p-8 text-center">
-          <p className="text-red-600 font-medium">Invalid file path (traversal rejected)</p>
-          <button onClick={onClose} className="mt-4 px-4 py-2 bg-gray-200 rounded-lg text-sm">Close</button>
-        </div>
-      </div>
-    );
-  }
-
-  const ext = safePath.split(".").pop()?.toLowerCase() || "";
-  const encodedPath = isAbsolutePath
-    ? filePath.split("/").map(encodeURIComponent).join("/")
-    : safePath.split("/").map(encodeURIComponent).join("/");
-  const fileUrl = `/api/sessions/${encodeURIComponent(sessionId)}/files/${encodedPath}`;
+  // Derived path metadata (computed before hooks so deps are stable references)
+  const ext = safePath ? (safePath.split(".").pop()?.toLowerCase() ?? "") : "";
+  const encodedPath = safePath
+    ? isAbsolutePath
+      ? filePath.split("/").map(encodeURIComponent).join("/")
+      : safePath.split("/").map(encodeURIComponent).join("/")
+    : "";
+  const fileUrl = safePath
+    ? `/api/sessions/${encodeURIComponent(sessionId)}/files/${encodedPath}`
+    : "";
 
   useEffect(() => {
     const controller = new AbortController();
@@ -103,7 +98,8 @@ export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewMo
 
     load();
     return () => controller.abort();
-  }, [sessionId, filePath]);
+    // ext and fileUrl are derived from filePath/sessionId — listed to satisfy exhaustive-deps
+  }, [sessionId, filePath, ext, fileUrl]);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -113,22 +109,54 @@ export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewMo
     return () => window.removeEventListener("keydown", handleEsc);
   }, [onClose]);
 
+  // Reject traversal paths — rendered after all hooks to satisfy Rules of Hooks
+  if (!safePath) {
+    return (
+      <div
+        className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6"
+        onClick={onClose}
+      >
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl p-8 text-center"
+        >
+          <p className="text-red-600 font-medium">Invalid file path (traversal rejected)</p>
+          <button onClick={onClose} className="mt-4 px-4 py-2 bg-gray-200 rounded-lg text-sm">
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const fileName = safePath.split("/").pop() || safePath;
 
   return (
     <div
       className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
-      <div role="dialog" aria-modal="true" aria-label={fileName} className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={fileName}
+        className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden"
+      >
         {/* Header */}
         <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-xs font-mono px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 uppercase shrink-0">
               {ext}
             </span>
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{fileName}</span>
-            <span className="text-xs text-gray-400 dark:text-gray-500 truncate hidden sm:inline">{safePath}</span>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">
+              {fileName}
+            </span>
+            <span className="text-xs text-gray-400 dark:text-gray-500 truncate hidden sm:inline">
+              {safePath}
+            </span>
           </div>
           <button
             onClick={onClose}
@@ -162,7 +190,9 @@ export function FilePreviewModal({ sessionId, filePath, onClose }: FilePreviewMo
             </div>
           ) : fileType === "binary" ? (
             <div className="text-center py-16">
-              <p className="text-gray-500 dark:text-gray-400 mb-3">Binary file — preview not available</p>
+              <p className="text-gray-500 dark:text-gray-400 mb-3">
+                Binary file — preview not available
+              </p>
               <a
                 href={content!}
                 download={fileName}

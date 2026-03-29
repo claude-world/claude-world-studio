@@ -1,6 +1,12 @@
 import { Router } from "express";
 import store from "../db.js";
 import { publishToThreads, fetchThreadsInsights } from "../services/social-publisher.js";
+import {
+  PublishSchema,
+  BatchPublishSchema,
+  BatchRefreshInsightsSchema,
+  parseBody,
+} from "../validation.js";
 
 const MAX_HISTORY_LIMIT = 500;
 
@@ -8,23 +14,31 @@ const router = Router();
 
 // Publish content to a specific account
 router.post("/", async (req, res) => {
-  const {
-    accountId, text, sessionId, score,
-    // Media
-    imageUrl, videoUrl, carouselUrls,
-    // Attachments
-    pollOptions, gifId, linkAttachment, textAttachment,
-    // Spoiler
-    spoilerMedia, spoilerText,
-    // Special
-    ghost, quotePostId,
-    // Controls
-    replyControl, topicTag, altText, linkComment,
-  } = req.body;
+  const parsed = parseBody(PublishSchema, req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
 
-  if (!accountId || !text) {
-    return res.status(400).json({ error: "accountId and text are required" });
-  }
+  const {
+    accountId,
+    text,
+    sessionId,
+    score,
+    imageUrl,
+    videoUrl,
+    carouselUrls,
+    pollOptions,
+    gifId,
+    linkAttachment,
+    textAttachment,
+    linkComment,
+    sourceUrl,
+    spoilerMedia,
+    spoilerText,
+    ghost,
+    quotePostId,
+    replyControl,
+    topicTag,
+    altText,
+  } = parsed.data;
 
   const account = store.getAccount(accountId);
   if (!account) {
@@ -46,7 +60,7 @@ router.post("/", async (req, res) => {
       post_url: null,
       status: "draft",
       link_comment: linkComment || null,
-      source_url: linkComment || null,
+      source_url: sourceUrl || null,
     });
     return res.json({
       success: true,
@@ -66,7 +80,7 @@ router.post("/", async (req, res) => {
     post_url: null,
     status: "pending",
     link_comment: linkComment || null,
-    source_url: linkComment || null,
+    source_url: sourceUrl || null,
   });
 
   try {
@@ -129,13 +143,9 @@ router.post("/:id/discard", (req, res) => {
 
 // Batch publish selected draft posts
 router.post("/batch", async (req, res) => {
-  const { ids } = req.body;
-  if (!Array.isArray(ids) || ids.length === 0) {
-    return res.status(400).json({ error: "ids array is required" });
-  }
-  if (ids.length > 50) {
-    return res.status(400).json({ error: "Maximum 50 posts per batch" });
-  }
+  const parsed = parseBody(BatchPublishSchema, req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
+  const { ids } = parsed.data;
 
   const results: { id: string; success: boolean; error?: string; postUrl?: string }[] = [];
 
@@ -256,12 +266,11 @@ router.get("/posts-detail", (req, res) => {
 
 // Batch refresh insights (max 20 per call)
 router.post("/refresh-insights", async (req, res) => {
-  const { ids } = req.body;
-  if (!Array.isArray(ids) || ids.length === 0) {
-    return res.status(400).json({ error: "ids array is required" });
-  }
+  const parsed = parseBody(BatchRefreshInsightsSchema, req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
+  const { ids } = parsed.data;
 
-  const batch = ids.slice(0, 20);
+  const batch = ids;
   const results: { id: string; success: boolean; insights?: any; error?: string }[] = [];
 
   for (let i = 0; i < batch.length; i++) {

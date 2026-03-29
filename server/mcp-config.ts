@@ -1,9 +1,10 @@
-import { existsSync, writeFileSync } from "fs";
+import { chmodSync, existsSync, mkdtempSync, writeFileSync } from "fs";
 import { isAbsolute, join } from "path";
 import { execFileSync } from "child_process";
 import { tmpdir } from "os";
 import type { Settings, Language, Theme, CfBrowserMode } from "./types.js";
 import store from "./db.js";
+import { logger } from "./logger.js";
 
 /** Validate a path setting: must be absolute and exist on disk */
 function isValidPath(p: string): boolean {
@@ -30,22 +31,14 @@ export function getSettings(): Settings {
     language: (all.language as Language) || "zh-TW",
     theme: (all.theme as Theme) || "light",
     cfBrowserMode: (all.cfBrowserMode as CfBrowserMode) || "cf-api",
-    trendPulseVenvPython:
-      all.trendPulseVenvPython || process.env.TREND_PULSE_PYTHON || "",
-    cfBrowserVenvPython:
-      all.cfBrowserVenvPython || process.env.CF_BROWSER_PYTHON || "",
-    notebooklmServerPath:
-      all.notebooklmServerPath || process.env.NOTEBOOKLM_SERVER_PATH || "",
-    cfBrowserUrl:
-      all.cfBrowserUrl || process.env.CF_BROWSER_URL || "",
-    cfBrowserApiKey:
-      all.cfBrowserApiKey || process.env.CF_BROWSER_API_KEY || "",
-    cfAccountId:
-      all.cfAccountId || process.env.CF_ACCOUNT_ID || "",
-    cfApiToken:
-      all.cfApiToken || process.env.CF_API_TOKEN || "",
-    defaultWorkspace:
-      all.defaultWorkspace || process.env.DEFAULT_WORKSPACE || process.cwd(),
+    trendPulseVenvPython: all.trendPulseVenvPython || process.env.TREND_PULSE_PYTHON || "",
+    cfBrowserVenvPython: all.cfBrowserVenvPython || process.env.CF_BROWSER_PYTHON || "",
+    notebooklmServerPath: all.notebooklmServerPath || process.env.NOTEBOOKLM_SERVER_PATH || "",
+    cfBrowserUrl: all.cfBrowserUrl || process.env.CF_BROWSER_URL || "",
+    cfBrowserApiKey: all.cfBrowserApiKey || process.env.CF_BROWSER_API_KEY || "",
+    cfAccountId: all.cfAccountId || process.env.CF_ACCOUNT_ID || "",
+    cfApiToken: all.cfApiToken || process.env.CF_API_TOKEN || "",
+    defaultWorkspace: all.defaultWorkspace || process.env.DEFAULT_WORKSPACE || process.cwd(),
     minOverallScore: parseInt(all.minOverallScore as string) || 70,
     minConversationScore: parseInt(all.minConversationScore as string) || 55,
   };
@@ -54,8 +47,8 @@ export function getSettings(): Settings {
 /** uvx definitions for each MCP server (used as fallback) */
 const UVX_SERVERS: Record<string, { from: string; cmd: string }> = {
   "trend-pulse": { from: "trend-pulse[mcp]", cmd: "trend-pulse-server" },
-  "cf-browser":  { from: "cf-browser-mcp",   cmd: "cf-browser-mcp" },
-  "notebooklm":  { from: "notebooklm-skill", cmd: "notebooklm-mcp" },
+  "cf-browser": { from: "cf-browser-mcp", cmd: "cf-browser-mcp" },
+  notebooklm: { from: "notebooklm-skill", cmd: "notebooklm-mcp" },
 };
 
 interface McpServerConfig {
@@ -118,7 +111,7 @@ export function buildMcpServers(settings: Settings) {
     // 1. Local venv path configured and valid → use it
     if (cfg.path && isValidPath(cfg.path)) {
       servers[cfg.name] = cfg.build();
-      console.log(`[MCP] ${cfg.name} enabled → ${cfg.path}`);
+      logger.info("MCPConfig", `${cfg.name} enabled → ${cfg.path}`);
       continue;
     }
 
@@ -140,13 +133,13 @@ export function buildMcpServers(settings: Settings) {
         args: ["--from", uvxDef.from, uvxDef.cmd],
         env,
       };
-      console.log(`[MCP] ${cfg.name} enabled → uvx ${uvxDef.cmd}`);
+      logger.info("MCPConfig", `${cfg.name} enabled → uvx ${uvxDef.cmd}`);
       continue;
     }
 
     // 3. Skip
     if (cfg.path) {
-      console.warn(`[MCP] ${cfg.name} skipped: path not found → ${cfg.path}`);
+      logger.warn("MCPConfig", `${cfg.name} skipped: path not found → ${cfg.path}`);
     }
   }
 
@@ -165,10 +158,10 @@ export function writeMcpConfigFile(settings: Settings): string {
     mcpConfig.mcpServers[name] = config;
   }
 
-  const { mkdtempSync } = require("fs");
-  const dir = mkdtempSync(join(tmpdir(), "studio-mcp-"), { mode: 0o700 });
+  const dir = mkdtempSync(join(tmpdir(), "studio-mcp-"));
+  chmodSync(dir, 0o700);
   const configPath = join(dir, "mcp-config.json");
-  writeFileSync(configPath, JSON.stringify(mcpConfig, null, 2), { mode: 0o600 });
-  console.log(`[MCP] Config written to ${configPath}`);
+  writeFileSync(configPath, JSON.stringify(mcpConfig, null, 2), { encoding: "utf-8", mode: 0o600 });
+  logger.info("MCPConfig", `Config written to ${configPath}`);
   return configPath;
 }

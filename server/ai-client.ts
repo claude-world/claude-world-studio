@@ -30,11 +30,11 @@ const LANGUAGE_INSTRUCTIONS: Record<Language, string> = {
 所有對話、解釋、摘要、工具使用說明都必須使用繁體中文。
 程式碼內的變數名和註解可以用英文，但所有面向使用者的文字必須是繁體中文。`,
 
-  "en": `**Language Rule (highest priority)**:
+  en: `**Language Rule (highest priority)**:
 You must always respond to the user in English.
 All conversations, explanations, summaries, and tool usage descriptions must be in English.`,
 
-  "ja": `**言語ルール（最優先）**：
+  ja: `**言語ルール（最優先）**：
 ユーザーには必ず日本語で回答してください。
 すべての会話、説明、要約、ツール使用の説明は日本語で行ってください。
 コード内の変数名やコメントは英語で構いませんが、ユーザー向けのテキストはすべて日本語にしてください。`,
@@ -50,13 +50,19 @@ function buildAccountsBlock(accounts: SocialAccount[]): string {
     return "No social accounts configured. User needs to add accounts in Settings first.";
   }
 
-  const rows = accounts.map((a) =>
-    `| ${escMd(a.id)} | ${escMd(a.name)} | ${escMd(a.handle)} | ${escMd(a.platform)} | ${escMd(a.style || "-")} |`
-  ).join("\n");
+  const rows = accounts
+    .map(
+      (a) =>
+        `| ${escMd(a.id)} | ${escMd(a.name)} | ${escMd(a.handle)} | ${escMd(a.platform)} | ${escMd(a.style || "-")} |`
+    )
+    .join("\n");
 
   const personas = accounts
     .filter((a) => a.persona_prompt)
-    .map((a) => `**${escMd(a.name)}** (${escMd(a.handle)}, ${escMd(a.platform)}): ${escMd(a.persona_prompt)}`)
+    .map(
+      (a) =>
+        `**${escMd(a.name)}** (${escMd(a.handle)}, ${escMd(a.platform)}): ${escMd(a.persona_prompt)}`
+    )
     .join("\n");
 
   return `| ID | Name | Handle | Platform | Style |
@@ -69,7 +75,12 @@ When publishing, adapt content tone and style based on each account's persona.
 For matrix publishing (same topic, multiple accounts), generate unique content for EACH account based on their style.`;
 }
 
-export function buildSystemPrompt(language: Language, accounts: SocialAccount[], minOverall = 70, minConversation = 55): string {
+export function buildSystemPrompt(
+  language: Language,
+  accounts: SocialAccount[],
+  minOverall = 70,
+  minConversation = 55
+): string {
   return `${LANGUAGE_INSTRUCTIONS[language]}
 
 You are Claude World Studio assistant — an AI-powered content pipeline for trend discovery, deep research, and social publishing.
@@ -314,6 +325,7 @@ class MessageQueue {
 export class AgentSession implements ICliSession {
   readonly cliName = "claude";
   private queue = new MessageQueue();
+  private queryHandle: ReturnType<typeof query> | null = null;
   private outputIterator: AsyncIterator<any> | null = null;
   private abortController = new AbortController();
 
@@ -327,16 +339,7 @@ export class AgentSession implements ICliSession {
     // In-process Studio MCP server (direct DB access, no env vars)
     const studioServer = createStudioMcpServer();
 
-    const allowedTools = [
-      "Bash",
-      "Read",
-      "Write",
-      "Edit",
-      "Glob",
-      "Grep",
-      "WebSearch",
-      "WebFetch",
-    ];
+    const allowedTools = ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebSearch", "WebFetch"];
 
     // Add MCP tool patterns so MCP tools are accessible
     const allMcpServers: Record<string, any> = { ...mcpServers, studio: studioServer };
@@ -345,7 +348,12 @@ export class AgentSession implements ICliSession {
       allowedTools.push(`mcp__${name}`);
     }
 
-    let systemPrompt = buildSystemPrompt(lang, accounts, settings.minOverallScore, settings.minConversationScore);
+    let systemPrompt = buildSystemPrompt(
+      lang,
+      accounts,
+      settings.minOverallScore,
+      settings.minConversationScore
+    );
 
     // Append conversation history for resumed sessions
     if (resumeContext) {
@@ -358,22 +366,29 @@ export class AgentSession implements ICliSession {
       // bypassPermissions: intentional — local single-user tool.
       // All tool calls execute without prompting. Do NOT expose to untrusted networks.
       permissionMode: "bypassPermissions",
+      // SDK 0.2 requires this flag alongside permissionMode: "bypassPermissions"
+      allowDangerouslySkipPermissions: true,
       abortController: this.abortController,
       systemPrompt,
       cwd,
       allowedTools,
       // Prevent confusion: trend-pulse publish tool is superseded by studio
-      disallowedTools: ["mcp__trend-pulse__publish_to_threads", "mcp__trend-pulse__get_publish_history"],
+      disallowedTools: [
+        "mcp__trend-pulse__publish_to_threads",
+        "mcp__trend-pulse__get_publish_history",
+      ],
       mcpServers: allMcpServers,
       // Use absolute node path — Electron's PATH doesn't include system node
       // STUDIO_NODE_PATH is set by electron/main.cjs; process.execPath may point to Electron binary
       executable: process.env.STUDIO_NODE_PATH || process.execPath,
     };
 
-    this.outputIterator = query({
+    // Store the Query handle so we can call .close() on interrupt
+    this.queryHandle = query({
       prompt: this.queue as any,
       options,
-    })[Symbol.asyncIterator]();
+    });
+    this.outputIterator = this.queryHandle[Symbol.asyncIterator]();
   }
 
   sendMessage(content: string) {
@@ -394,5 +409,7 @@ export class AgentSession implements ICliSession {
   close() {
     this.abortController.abort();
     this.queue.close();
+    // Cleanly terminate the SDK subprocess and release resources
+    this.queryHandle?.close();
   }
 }

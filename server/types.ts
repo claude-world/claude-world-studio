@@ -73,7 +73,7 @@ export interface PublishRecord {
   image_url: string | null;
   post_id: string | null;
   post_url: string | null;
-  status: string; // "draft" | "pending" | "published" | "failed"
+  status: string; // "draft" | "pending" | "published" | "failed" | "discarded"
   link_comment: string | null;
   source_url: string | null;
   created_at: string;
@@ -113,10 +113,7 @@ export interface WSInterruptMessage {
   sessionId: string;
 }
 
-export type IncomingWSMessage =
-  | WSChatMessage
-  | WSSubscribeMessage
-  | WSInterruptMessage;
+export type IncomingWSMessage = WSChatMessage | WSSubscribeMessage | WSInterruptMessage;
 
 export type TaskExecutionStatus = "running" | "completed" | "published" | "failed" | "rejected";
 export type TaskTrigger = "schedule" | "manual";

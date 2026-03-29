@@ -27,7 +27,7 @@ import { EventEmitter } from "node:events";
 class KillProcessHarness {
   process: ChildProcess | null = null;
   forceKillTimer: ReturnType<typeof setTimeout> | null = null;
-  killCount = 0;         // how many times killProcess was called
+  killCount = 0; // how many times killProcess was called
   killedPids: number[] = [];
 
   /** Public: matches SubprocessCliSession.close() */
@@ -37,7 +37,7 @@ class KillProcessHarness {
 
   /** Public: matches the "kill previous process" step in sendMessage() */
   sendMessage(spawnNew: () => ChildProcess) {
-    this.killProcess();   // kill any previous process
+    this.killProcess(); // kill any previous process
     this.process = spawnNew();
 
     this.process.on("exit", () => {
@@ -60,10 +60,14 @@ class KillProcessHarness {
       const proc = this.process;
       this.process = null;
       if (proc.pid) this.killedPids.push(proc.pid);
-      try { proc.kill("SIGTERM"); } catch {}
+      try {
+        proc.kill("SIGTERM");
+      } catch {}
       this.forceKillTimer = setTimeout(() => {
         this.forceKillTimer = null;
-        try { proc.kill("SIGKILL"); } catch {}
+        try {
+          proc.kill("SIGKILL");
+        } catch {}
       }, 3000);
       (this.forceKillTimer as any).unref?.();
     }
@@ -108,15 +112,31 @@ function makeShutdownHarness() {
   let shutdownCallCount = 0;
   const schedulerStopCalls: number[] = [];
   const sessionCloseCalls: string[] = [];
-  const intervalsClearedIds: (ReturnType<typeof setInterval>)[] = [];
+  const intervalsClearedIds: ReturnType<typeof setInterval>[] = [];
 
   const fakeScheduler = {
-    stop() { schedulerStopCalls.push(Date.now()); }
+    stop() {
+      schedulerStopCalls.push(Date.now());
+    },
   };
 
   const fakeSessions = new Map<string, { close(): void }>([
-    ["s1", { close() { sessionCloseCalls.push("s1"); } }],
-    ["s2", { close() { sessionCloseCalls.push("s2"); } }],
+    [
+      "s1",
+      {
+        close() {
+          sessionCloseCalls.push("s1");
+        },
+      },
+    ],
+    [
+      "s2",
+      {
+        close() {
+          sessionCloseCalls.push("s2");
+        },
+      },
+    ],
   ]);
 
   // Simulate a heartbeat interval that keeps the event loop alive
@@ -150,10 +170,18 @@ function makeShutdownHarness() {
 
   return {
     shutdown,
-    get isShuttingDown() { return isShuttingDown; },
-    get shutdownCallCount() { return shutdownCallCount; },
-    get heartbeatInterval() { return heartbeatInterval; },
-    get idleCleanupInterval() { return idleCleanupInterval; },
+    get isShuttingDown() {
+      return isShuttingDown;
+    },
+    get shutdownCallCount() {
+      return shutdownCallCount;
+    },
+    get heartbeatInterval() {
+      return heartbeatInterval;
+    },
+    get idleCleanupInterval() {
+      return idleCleanupInterval;
+    },
     schedulerStopCalls,
     sessionCloseCalls,
     intervalsClearedIds,
@@ -175,7 +203,7 @@ function makeShutdownHarness() {
  */
 function makeKillServerHarness(
   fakeProc: NodeJS.EventEmitter & { kill(signal: string): void; pid?: number },
-  opts: { forceKillMs?: number; safetyMs?: number } = {},
+  opts: { forceKillMs?: number; safetyMs?: number } = {}
 ) {
   const forceKillMs = opts.forceKillMs ?? 3000;
   const safetyMs = opts.safetyMs ?? 6000;
@@ -206,7 +234,9 @@ function makeKillServerHarness(
 
     forceKillTimer = setTimeout(() => {
       forceKillFired = true;
-      try { fakeProc.kill("SIGKILL"); } catch {}
+      try {
+        fakeProc.kill("SIGKILL");
+      } catch {}
     }, forceKillMs);
 
     // Absolute backstop: resolves even if the exit event was missed
@@ -218,9 +248,15 @@ function makeKillServerHarness(
 
   return {
     promise,
-    get resolveCount() { return resolveCount; },
-    get forceKillFired() { return forceKillFired; },
-    get safetyTimerFired() { return safetyTimerFired; },
+    get resolveCount() {
+      return resolveCount;
+    },
+    get forceKillFired() {
+      return forceKillFired;
+    },
+    get safetyTimerFired() {
+      return safetyTimerFired;
+    },
   };
 }
 
@@ -239,7 +275,7 @@ function makeKillServerHarness(
  */
 async function simulateRetryWait(
   stoppedDuringSleep: boolean,
-  sleepMs = 0,            // use 0 ms in tests for speed
+  sleepMs = 0 // use 0 ms in tests for speed
 ): Promise<"aborted" | "retried"> {
   let stopped = false;
   let maxRetries = 3;
@@ -267,7 +303,6 @@ async function simulateRetryWait(
 // ===========================================================================
 
 describe("SubprocessCliSession.killProcess()", () => {
-
   test("close() kills the subprocess (process.null after kill)", (t, done) => {
     const harness = new KillProcessHarness();
 
@@ -364,17 +399,19 @@ describe("SubprocessCliSession.killProcess()", () => {
       }
 
       // After natural exit, forceKillTimer should be null
-      assert.strictEqual(harness.forceKillTimer, null, "forceKillTimer should be cleared on natural exit");
+      assert.strictEqual(
+        harness.forceKillTimer,
+        null,
+        "forceKillTimer should be cleared on natural exit"
+      );
       done();
     });
   });
-
 });
 
 // ---------------------------------------------------------------------------
 
 describe("TaskScheduler.stop()", () => {
-
   test("stop() sets the stopped flag", () => {
     const scheduler = new TaskSchedulerHarness();
     assert.strictEqual(scheduler.stopped, false, "should not be stopped initially");
@@ -406,8 +443,16 @@ describe("TaskScheduler.stop()", () => {
     const scheduler = new TaskSchedulerHarness();
 
     const stoppedJobs: string[] = [];
-    scheduler.jobs.set("job-1", { stop() { stoppedJobs.push("job-1"); } });
-    scheduler.jobs.set("job-2", { stop() { stoppedJobs.push("job-2"); } });
+    scheduler.jobs.set("job-1", {
+      stop() {
+        stoppedJobs.push("job-1");
+      },
+    });
+    scheduler.jobs.set("job-2", {
+      stop() {
+        stoppedJobs.push("job-2");
+      },
+    });
 
     scheduler.stop();
 
@@ -443,13 +488,11 @@ describe("TaskScheduler.stop()", () => {
     assert.strictEqual(scheduler.stopped, true);
     assert.strictEqual(scheduler.runningAbortControllers.size, 0);
   });
-
 });
 
 // ---------------------------------------------------------------------------
 
 describe("Server shutdown function", () => {
-
   test("shutdown() is idempotent — isShuttingDown guard prevents double execution", () => {
     const h = makeShutdownHarness();
 
@@ -497,7 +540,9 @@ describe("Server shutdown function", () => {
     // We verify that the 'SIGHUP' event name is a recognized signal and
     // that registering a listener for it does not throw.
     let called = false;
-    const handler = () => { called = true; };
+    const handler = () => {
+      called = true;
+    };
 
     assert.doesNotThrow(() => {
       process.on("SIGHUP", handler);
@@ -505,10 +550,7 @@ describe("Server shutdown function", () => {
 
     // Verify the handler is actually registered
     const listeners = process.listeners("SIGHUP");
-    assert.ok(
-      listeners.includes(handler),
-      "our SIGHUP handler should be registered on process"
-    );
+    assert.ok(listeners.includes(handler), "our SIGHUP handler should be registered on process");
 
     // Clean up
     process.removeListener("SIGHUP", handler);
@@ -519,15 +561,35 @@ describe("Server shutdown function", () => {
     const h = makeShutdownHarness();
 
     // Before shutdown: both intervals exist
-    assert.notStrictEqual(h.heartbeatInterval, null, "heartbeat interval should exist before shutdown");
-    assert.notStrictEqual(h.idleCleanupInterval, null, "idleCleanup interval should exist before shutdown");
+    assert.notStrictEqual(
+      h.heartbeatInterval,
+      null,
+      "heartbeat interval should exist before shutdown"
+    );
+    assert.notStrictEqual(
+      h.idleCleanupInterval,
+      null,
+      "idleCleanup interval should exist before shutdown"
+    );
 
     h.shutdown();
 
     // After shutdown: both are nulled out (clearInterval was called)
-    assert.strictEqual(h.heartbeatInterval, null, "heartbeat interval should be null after shutdown");
-    assert.strictEqual(h.idleCleanupInterval, null, "idleCleanup interval should be null after shutdown");
-    assert.strictEqual(h.intervalsClearedIds.length, 2, "exactly 2 intervals should have been cleared");
+    assert.strictEqual(
+      h.heartbeatInterval,
+      null,
+      "heartbeat interval should be null after shutdown"
+    );
+    assert.strictEqual(
+      h.idleCleanupInterval,
+      null,
+      "idleCleanup interval should be null after shutdown"
+    );
+    assert.strictEqual(
+      h.intervalsClearedIds.length,
+      2,
+      "exactly 2 intervals should have been cleared"
+    );
   });
 
   test("shutdown() does NOT clear intervals a second time (idempotent interval clearing)", () => {
@@ -542,13 +604,11 @@ describe("Server shutdown function", () => {
     assert.strictEqual(clearedAfterFirst, 2, "two intervals cleared on first shutdown");
     assert.strictEqual(clearedAfterSecond, 2, "no additional intervals cleared on second shutdown");
   });
-
 });
 
 // ---------------------------------------------------------------------------
 
 describe("Electron killServer()", () => {
-
   test("killServer resolves after process exits naturally", (t, done) => {
     const proc = spawn("echo", ["hello"]);
 
@@ -557,9 +617,11 @@ describe("Electron killServer()", () => {
       return { promise: h.promise, get: () => h.resolveCount };
     })();
 
-    promise.then(() => {
-      done();
-    }).catch(done);
+    promise
+      .then(() => {
+        done();
+      })
+      .catch(done);
   });
 
   test("forceKillTimer is declared before exit handler — no TDZ risk", () => {
@@ -579,9 +641,11 @@ describe("Electron killServer()", () => {
   test("killServer resolves exactly once — no double-resolve", (t, done) => {
     // Verify that resolve() is called at most once even if somehow the exit
     // event were emitted twice (defensive test for the removed setTimeout(resolve,500)).
-    const fakeProc = new EventEmitter() as NodeJS.EventEmitter & { kill(s: string): void; };
+    const fakeProc = new EventEmitter() as NodeJS.EventEmitter & { kill(s: string): void };
     let killCalls = 0;
-    fakeProc.kill = () => { killCalls++; };
+    fakeProc.kill = () => {
+      killCalls++;
+    };
 
     const h = makeKillServerHarness(fakeProc);
 
@@ -621,26 +685,34 @@ describe("Electron killServer()", () => {
   test("6s safety timer resolves killServer when exit event is never received", (t, done) => {
     // This tests the backstop path: a process that was already dead before .once("exit")
     // was registered will never emit "exit", so the safetyTimer must resolve the promise.
-    const fakeProc = new EventEmitter() as NodeJS.EventEmitter & { kill(s: string): void; };
-    fakeProc.kill = () => {};  // no-op — process is "already dead"
+    const fakeProc = new EventEmitter() as NodeJS.EventEmitter & { kill(s: string): void };
+    fakeProc.kill = () => {}; // no-op — process is "already dead"
 
     // Use a very short safetyMs so the test completes quickly
     const h = makeKillServerHarness(fakeProc, { forceKillMs: 50, safetyMs: 80 });
 
     // Never emit "exit" — the safety timer must fire instead
-    h.promise.then(() => {
-      assert.strictEqual(h.safetyTimerFired, true, "safety timer should have fired to resolve the promise");
-      assert.strictEqual(h.resolveCount, 1, "promise should resolve exactly once via safety timer");
-      done();
-    }).catch(done);
+    h.promise
+      .then(() => {
+        assert.strictEqual(
+          h.safetyTimerFired,
+          true,
+          "safety timer should have fired to resolve the promise"
+        );
+        assert.strictEqual(
+          h.resolveCount,
+          1,
+          "promise should resolve exactly once via safety timer"
+        );
+        done();
+      })
+      .catch(done);
   });
-
 });
 
 // ---------------------------------------------------------------------------
 
 describe("Scheduler retry: post-sleep stopped re-check", () => {
-
   test("retry proceeds when scheduler is NOT stopped during sleep", async () => {
     const result = await simulateRetryWait(false, 0);
     assert.strictEqual(result, "retried", "should continue to retry when stop() was not called");
@@ -676,19 +748,25 @@ describe("Scheduler retry: post-sleep stopped re-check", () => {
     const scheduler = new TaskSchedulerHarness();
 
     // At exactly max retries, should NOT retry
-    assert.strictEqual(scheduler.shouldRetry(3, 3), false, "retryCount === maxRetries should NOT retry");
-    assert.strictEqual(scheduler.shouldRetry(4, 3), false, "retryCount > maxRetries should NOT retry");
+    assert.strictEqual(
+      scheduler.shouldRetry(3, 3),
+      false,
+      "retryCount === maxRetries should NOT retry"
+    );
+    assert.strictEqual(
+      scheduler.shouldRetry(4, 3),
+      false,
+      "retryCount > maxRetries should NOT retry"
+    );
 
     // One under max should retry
     assert.strictEqual(scheduler.shouldRetry(2, 3), true, "retryCount < maxRetries should retry");
   });
-
 });
 
 // ---------------------------------------------------------------------------
 
 describe("SubprocessCliSession: captured queue ref isolation", () => {
-
   /**
    * Replica of the EventQueue + sendMessage queue-capture fix.
    *
@@ -737,7 +815,7 @@ describe("SubprocessCliSession: captured queue ref isolation", () => {
 
       return {
         capturedQueue: queue,
-        currentQueue: this.eventQueue,  // same ref at this point
+        currentQueue: this.eventQueue, // same ref at this point
         // Simulates the old process's exit handler firing AFTER the next
         // sendMessage() has already replaced this.eventQueue again.
         simulateOldExit: (event: string) => {
@@ -772,16 +850,28 @@ describe("SubprocessCliSession: captured queue ref isolation", () => {
     );
 
     // A's exit event must have gone to A's queue, not B's
-    assert.deepStrictEqual(firstCall.capturedQueue.events, ["A:exit"],
-      "old exit handler must write to the captured (old) queue");
-    assert.deepStrictEqual(secondCall.capturedQueue.events, ["B:exit"],
-      "new exit handler must write to the new queue only");
+    assert.deepStrictEqual(
+      firstCall.capturedQueue.events,
+      ["A:exit"],
+      "old exit handler must write to the captured (old) queue"
+    );
+    assert.deepStrictEqual(
+      secondCall.capturedQueue.events,
+      ["B:exit"],
+      "new exit handler must write to the new queue only"
+    );
 
     // The current eventQueue must be B's queue, uncontaminated by A's exit
-    assert.strictEqual(harness.eventQueue, secondCall.capturedQueue,
-      "this.eventQueue must point to the most recent queue");
-    assert.strictEqual(harness.eventQueue.events.length, 1,
-      "current queue should only contain B's exit event");
+    assert.strictEqual(
+      harness.eventQueue,
+      secondCall.capturedQueue,
+      "this.eventQueue must point to the most recent queue"
+    );
+    assert.strictEqual(
+      harness.eventQueue.events.length,
+      1,
+      "current queue should only contain B's exit event"
+    );
   });
 
   test("without the fix — using this.eventQueue in old handler — would corrupt the new queue", () => {
@@ -792,7 +882,7 @@ describe("SubprocessCliSession: captured queue ref isolation", () => {
 
     // Simulate the BUG: old handler captures `this` (the harness) instead of
     // the queue reference, so it writes to whatever this.eventQueue is now.
-    const firstCallCurrentQueue = harness.eventQueue;  // queue A (will be stale)
+    const firstCallCurrentQueue = harness.eventQueue; // queue A (will be stale)
     const buggyOldExitHandler = (event: string) => {
       // BUG: uses harness.eventQueue (current), not captured queue A
       harness.eventQueue.events.push(event);
@@ -804,22 +894,26 @@ describe("SubprocessCliSession: captured queue ref isolation", () => {
     // Now A's stale exit handler fires — with the bug it writes to queue B
     buggyOldExitHandler("A:exit-late");
 
-    assert.notStrictEqual(firstCallCurrentQueue, harness.eventQueue,
-      "queue should have been replaced by second sendMessage()");
+    assert.notStrictEqual(
+      firstCallCurrentQueue,
+      harness.eventQueue,
+      "queue should have been replaced by second sendMessage()"
+    );
 
     // The bug: A's event ended up in B's queue (the current one)
-    assert.deepStrictEqual(harness.eventQueue.events, ["A:exit-late"],
-      "BUG confirmed: old exit event polluted the new queue when using this.eventQueue");
+    assert.deepStrictEqual(
+      harness.eventQueue.events,
+      ["A:exit-late"],
+      "BUG confirmed: old exit event polluted the new queue when using this.eventQueue"
+    );
 
     // The fix prevents this by capturing `queue` before the next sendMessage()
   });
-
 });
 
 // ---------------------------------------------------------------------------
 
 describe("TaskScheduler.executeTask(): stopped guard precedes overlap guard", () => {
-
   /**
    * Replica of the guards at the top of executeTask():
    *
@@ -855,8 +949,11 @@ describe("TaskScheduler.executeTask(): stopped guard precedes overlap guard", ()
 
     const result = h.checkGuards("task-1");
 
-    assert.strictEqual(result, "stopped",
-      "stopped guard must fire first, even when task is also already running");
+    assert.strictEqual(
+      result,
+      "stopped",
+      "stopped guard must fire first, even when task is also already running"
+    );
   });
 
   test("overlap guard fires when scheduler is running (not stopped)", () => {
@@ -867,8 +964,11 @@ describe("TaskScheduler.executeTask(): stopped guard precedes overlap guard", ()
 
     const result = h.checkGuards("task-1");
 
-    assert.strictEqual(result, "already-running",
-      "overlap guard should fire when stopped=false and task is running");
+    assert.strictEqual(
+      result,
+      "already-running",
+      "overlap guard should fire when stopped=false and task is running"
+    );
   });
 
   test("executeTask proceeds when neither guard applies", () => {
@@ -879,8 +979,11 @@ describe("TaskScheduler.executeTask(): stopped guard precedes overlap guard", ()
 
     const result = h.checkGuards("task-1");
 
-    assert.strictEqual(result, "ok",
-      "executeTask should proceed when scheduler is running and task is not already executing");
+    assert.strictEqual(
+      result,
+      "ok",
+      "executeTask should proceed when scheduler is running and task is not already executing"
+    );
   });
 
   test("stopped guard blocks task even when no overlap", () => {
@@ -891,8 +994,10 @@ describe("TaskScheduler.executeTask(): stopped guard precedes overlap guard", ()
 
     const result = h.checkGuards("task-1");
 
-    assert.strictEqual(result, "stopped",
-      "stopped guard must block execution even with no overlap");
+    assert.strictEqual(
+      result,
+      "stopped",
+      "stopped guard must block execution even with no overlap"
+    );
   });
-
 });

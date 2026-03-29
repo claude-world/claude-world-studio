@@ -8,6 +8,7 @@ const execFileAsync = promisify(execFile);
 import { fileURLToPath } from "url";
 import store from "../db.js";
 import { getSettings } from "../mcp-config.js";
+import { logger } from "../logger.js";
 
 const { join, isAbsolute } = path;
 
@@ -69,9 +70,7 @@ router.get("/pick-folder", async (_req, res) => {
 router.get("/detect", (_req, res) => {
   const home = process.env.HOME || "";
   const workspace =
-    getSettings().defaultWorkspace ||
-    process.env.DEFAULT_WORKSPACE ||
-    process.cwd();
+    getSettings().defaultWorkspace || process.env.DEFAULT_WORKSPACE || process.cwd();
 
   const projectMcp = join(__dirname, "../../mcp-servers");
   const searchRoots = [
@@ -107,10 +106,10 @@ router.get("/detect", (_req, res) => {
       try {
         return readdirSync(root, { withFileTypes: true })
           .filter((e) => e.isDirectory() && !e.name.startsWith("."))
-          .flatMap((e) => [
-            join(root, e.name, "notebooklm-skill/mcp-server/server.py"),
-          ]);
-      } catch { return []; }
+          .flatMap((e) => [join(root, e.name, "notebooklm-skill/mcp-server/server.py")]);
+      } catch {
+        return [];
+      }
     }),
   ];
   const notebooklmPath = nlmCandidates.find(existsSync) || "";
@@ -165,15 +164,14 @@ router.get("/detect", (_req, res) => {
 router.post("/detect/apply", (_req, res) => {
   const home = process.env.HOME || "";
   const workspace =
-    getSettings().defaultWorkspace ||
-    process.env.DEFAULT_WORKSPACE ||
-    process.cwd();
+    getSettings().defaultWorkspace || process.env.DEFAULT_WORKSPACE || process.cwd();
 
   let applied = 0;
 
   // cf-browser .env
-  const searchRoots = [workspace, join(home, "github")]
-    .filter((p) => isAbsolute(p) && existsSync(p));
+  const searchRoots = [workspace, join(home, "github")].filter(
+    (p) => isAbsolute(p) && existsSync(p)
+  );
 
   const cfEnvCandidates = [
     ...searchRoots.flatMap((root) => [
@@ -189,29 +187,48 @@ router.post("/detect/apply", (_req, res) => {
         const urlMatch = content.match(/^CF_BROWSER_URL=(.+)/m);
         const keyMatch = content.match(/^CF_BROWSER_API_KEY=(.+)/m);
         // Only apply if user hasn't already set a value
-        if (urlMatch && !store.getSetting("cfBrowserUrl")) { store.setSetting("cfBrowserUrl", urlMatch[1].trim()); applied++; }
-        if (keyMatch && !store.getSetting("cfBrowserApiKey")) { store.setSetting("cfBrowserApiKey", keyMatch[1].trim()); applied++; }
+        if (urlMatch && !store.getSetting("cfBrowserUrl")) {
+          store.setSetting("cfBrowserUrl", urlMatch[1].trim());
+          applied++;
+        }
+        if (keyMatch && !store.getSetting("cfBrowserApiKey")) {
+          store.setSetting("cfBrowserApiKey", keyMatch[1].trim());
+          applied++;
+        }
       } catch (err) {
-        console.warn("[Settings] Error reading cf-browser .env:", err);
+        logger.warn("Routes:Settings", "Error reading cf-browser .env", {
+          error: (err as Error).message,
+        });
       }
     }
   }
 
   // MCP paths — only apply if user hasn't already set a value
-  const mcpRoots = [workspace, join(home, "github"), join(home, "projects")]
-    .filter((p) => isAbsolute(p) && existsSync(p));
+  const mcpRoots = [workspace, join(home, "github"), join(home, "projects")].filter(
+    (p) => isAbsolute(p) && existsSync(p)
+  );
 
-  const tpPath = mcpRoots.flatMap((r) => [
-    join(r, "trend-pulse/.venv/bin/python"),
-    join(r, "trend-pulse/.venv/bin/python3"),
-  ]).find(existsSync);
-  if (tpPath && !store.getSetting("trendPulseVenvPython")) { store.setSetting("trendPulseVenvPython", tpPath); applied++; }
+  const tpPath = mcpRoots
+    .flatMap((r) => [
+      join(r, "trend-pulse/.venv/bin/python"),
+      join(r, "trend-pulse/.venv/bin/python3"),
+    ])
+    .find(existsSync);
+  if (tpPath && !store.getSetting("trendPulseVenvPython")) {
+    store.setSetting("trendPulseVenvPython", tpPath);
+    applied++;
+  }
 
-  const cbPath = mcpRoots.flatMap((r) => [
-    join(r, "cf-browser/mcp-server/.venv/bin/python"),
-    join(r, "cf-browser/mcp-server/.venv/bin/python3"),
-  ]).find(existsSync);
-  if (cbPath && !store.getSetting("cfBrowserVenvPython")) { store.setSetting("cfBrowserVenvPython", cbPath); applied++; }
+  const cbPath = mcpRoots
+    .flatMap((r) => [
+      join(r, "cf-browser/mcp-server/.venv/bin/python"),
+      join(r, "cf-browser/mcp-server/.venv/bin/python3"),
+    ])
+    .find(existsSync);
+  if (cbPath && !store.getSetting("cfBrowserVenvPython")) {
+    store.setSetting("cfBrowserVenvPython", cbPath);
+    applied++;
+  }
 
   const nlmPath = [
     ...mcpRoots.flatMap((r) => [join(r, "notebooklm-skill/mcp-server/server.py")]),
@@ -220,22 +237,64 @@ router.post("/detect/apply", (_req, res) => {
         return readdirSync(r, { withFileTypes: true })
           .filter((e) => e.isDirectory() && !e.name.startsWith("."))
           .map((e) => join(r, e.name, "notebooklm-skill/mcp-server/server.py"));
-      } catch { return []; }
+      } catch {
+        return [];
+      }
     }),
   ].find(existsSync);
-  if (nlmPath && !store.getSetting("notebooklmServerPath")) { store.setSetting("notebooklmServerPath", nlmPath); applied++; }
+  if (nlmPath && !store.getSetting("notebooklmServerPath")) {
+    store.setSetting("notebooklmServerPath", nlmPath);
+    applied++;
+  }
 
   res.json({ success: true, applied });
 });
 
 // CLI definitions
 const CLI_DEFS = [
-  { name: "Claude Code", command: "claude", versionArgs: ["--version"], description: "Anthropic's AI coding assistant CLI", website: "https://docs.anthropic.com/en/docs/claude-code" },
-  { name: "OpenAI Codex", command: "codex", versionArgs: ["--version"], description: "OpenAI's coding agent CLI", website: "https://github.com/openai/codex" },
-  { name: "Gemini CLI", command: "gemini", versionArgs: ["--version"], description: "Google's Gemini AI CLI", website: "https://github.com/google-gemini/gemini-cli" },
-  { name: "OpenCode", command: "opencode", versionArgs: ["version"], description: "Open-source AI coding CLI (multi-provider)", website: "https://github.com/opencode-ai/opencode" },
-  { name: "Aider", command: "aider", versionArgs: ["--version"], description: "AI pair programming in terminal", website: "https://aider.chat" },
-  { name: "GitHub Copilot", command: "gh-copilot", versionArgs: ["copilot", "--version"], execCommand: "gh", description: "GitHub Copilot in the CLI", website: "https://docs.github.com/en/copilot/github-copilot-in-the-cli" },
+  {
+    name: "Claude Code",
+    command: "claude",
+    versionArgs: ["--version"],
+    description: "Anthropic's AI coding assistant CLI",
+    website: "https://docs.anthropic.com/en/docs/claude-code",
+  },
+  {
+    name: "OpenAI Codex",
+    command: "codex",
+    versionArgs: ["--version"],
+    description: "OpenAI's coding agent CLI",
+    website: "https://github.com/openai/codex",
+  },
+  {
+    name: "Gemini CLI",
+    command: "gemini",
+    versionArgs: ["--version"],
+    description: "Google's Gemini AI CLI",
+    website: "https://github.com/google-gemini/gemini-cli",
+  },
+  {
+    name: "OpenCode",
+    command: "opencode",
+    versionArgs: ["version"],
+    description: "Open-source AI coding CLI (multi-provider)",
+    website: "https://github.com/opencode-ai/opencode",
+  },
+  {
+    name: "Aider",
+    command: "aider",
+    versionArgs: ["--version"],
+    description: "AI pair programming in terminal",
+    website: "https://aider.chat",
+  },
+  {
+    name: "GitHub Copilot",
+    command: "gh-copilot",
+    versionArgs: ["copilot", "--version"],
+    execCommand: "gh",
+    description: "GitHub Copilot in the CLI",
+    website: "https://docs.github.com/en/copilot/github-copilot-in-the-cli",
+  },
 ] as const;
 
 /** Valid CLI command identifiers for input validation */
@@ -243,32 +302,36 @@ const VALID_CLI_COMMANDS: Set<string> = new Set(CLI_DEFS.map((d) => d.command));
 
 // Detect available coding CLIs (async — doesn't block event loop)
 router.get("/detect-clis", async (_req, res) => {
-  const results = await Promise.all(CLI_DEFS.map(async (def) => {
-    const bin = "execCommand" in def ? def.execCommand : def.command;
-    let installed = false;
-    let version = "";
-    try {
-      const { stdout } = await execFileAsync(bin, [...def.versionArgs], {
-        timeout: 2000,
-        encoding: "utf-8",
-      });
-      installed = true;
-      const firstLine = (stdout as string).split("\n")[0].trim();
-      // Extract semver-like token, or fall back to stripping common prefixes
-      const semverMatch = firstLine.match(/(\d+\.\d+[\d.]*)/);
-      version = semverMatch ? semverMatch[1] : firstLine.replace(/^(v|version\s*:?\s*)/i, "").trim();
-    } catch {
-      // not installed, timed out, or errored
-    }
-    return {
-      name: def.name,
-      command: def.command,
-      description: def.description,
-      installed,
-      version,
-      website: def.website,
-    };
-  }));
+  const results = await Promise.all(
+    CLI_DEFS.map(async (def) => {
+      const bin = "execCommand" in def ? def.execCommand : def.command;
+      let installed = false;
+      let version = "";
+      try {
+        const { stdout } = await execFileAsync(bin, [...def.versionArgs], {
+          timeout: 2000,
+          encoding: "utf-8",
+        });
+        installed = true;
+        const firstLine = (stdout as string).split("\n")[0].trim();
+        // Extract semver-like token, or fall back to stripping common prefixes
+        const semverMatch = firstLine.match(/(\d+\.\d+[\d.]*)/);
+        version = semverMatch
+          ? semverMatch[1]
+          : firstLine.replace(/^(v|version\s*:?\s*)/i, "").trim();
+      } catch {
+        // not installed, timed out, or errored
+      }
+      return {
+        name: def.name,
+        command: def.command,
+        description: def.description,
+        installed,
+        version,
+        website: def.website,
+      };
+    })
+  );
 
   res.json(results);
 });
@@ -276,8 +339,8 @@ router.get("/detect-clis", async (_req, res) => {
 // Update settings
 router.put("/", (req, res) => {
   const updates = req.body;
-  if (!updates || typeof updates !== "object") {
-    return res.status(400).json({ error: "Invalid settings" });
+  if (typeof updates !== "object" || updates === null || Array.isArray(updates)) {
+    return res.status(400).json({ error: "Body must be an object" });
   }
 
   const allowedKeys = [

@@ -97,11 +97,11 @@ studio file read <SESSION_ID> src/index.ts
 
 ## Global Flags
 
-| Flag | Env Var | Default | Description |
-|------|---------|---------|-------------|
-| `--json` | — | false | JSON output for all commands |
-| `--port N` | `STUDIO_PORT` | 3001 | Server port |
-| `--host H` | `STUDIO_HOST` | 127.0.0.1 | Server host |
+| Flag       | Env Var       | Default   | Description                  |
+| ---------- | ------------- | --------- | ---------------------------- |
+| `--json`   | —             | false     | JSON output for all commands |
+| `--port N` | `STUDIO_PORT` | 3001      | Server port                  |
+| `--host H` | `STUDIO_HOST` | 127.0.0.1 | Server host                  |
 
 ## Chat Command
 
@@ -110,14 +110,17 @@ The `chat` command connects via WebSocket for real-time streaming.
 **Auto-create session**: Omit `--session` to auto-create. Session ID is printed to stderr.
 
 **Input sources** (priority order):
+
 1. `--message "text"` flag
 2. stdin pipe: `echo "text" | studio chat`
 
 **Output modes**:
+
 - Default: assistant text → stdout, tool calls → stderr (with `--verbose`)
 - `--json`: NDJSON — one JSON object per event line
 
 **NDJSON event types**:
+
 ```jsonl
 {"type":"assistant_message","content":"Here are the trends..."}
 {"type":"tool_use","toolName":"get_trending","toolId":"..."}
@@ -163,18 +166,18 @@ studio publish --account brand-casual --text "Hey did you hear..." --score 75
 
 ## Settings Keys
 
-| CLI Flag | API Key | Description |
-|----------|---------|-------------|
-| `--language` | language | UI language (en, zh-TW, ja) |
-| `--theme` | theme | UI theme (light, dark, system) |
-| `--trend-pulse-python` | trendPulseVenvPython | trend-pulse venv python path |
-| `--cf-browser-python` | cfBrowserVenvPython | cf-browser venv python path |
-| `--notebooklm-path` | notebooklmServerPath | NotebookLM server.py path |
-| `--cf-browser-url` | cfBrowserUrl | CF Browser worker URL |
-| `--cf-browser-key` | cfBrowserApiKey | CF Browser API key |
-| `--cf-account-id` | cfAccountId | Cloudflare account ID (cf-api mode) |
-| `--cf-api-token` | cfApiToken | Cloudflare API token (cf-api mode) |
-| `--default-workspace` | defaultWorkspace | Default workspace path |
+| CLI Flag               | API Key              | Description                         |
+| ---------------------- | -------------------- | ----------------------------------- |
+| `--language`           | language             | UI language (en, zh-TW, ja)         |
+| `--theme`              | theme                | UI theme (light, dark, system)      |
+| `--trend-pulse-python` | trendPulseVenvPython | trend-pulse venv python path        |
+| `--cf-browser-python`  | cfBrowserVenvPython  | cf-browser venv python path         |
+| `--notebooklm-path`    | notebooklmServerPath | NotebookLM server.py path           |
+| `--cf-browser-url`     | cfBrowserUrl         | CF Browser worker URL               |
+| `--cf-browser-key`     | cfBrowserApiKey      | CF Browser API key                  |
+| `--cf-account-id`      | cfAccountId          | Cloudflare account ID (cf-api mode) |
+| `--cf-api-token`       | cfApiToken           | Cloudflare API token (cf-api mode)  |
+| `--default-workspace`  | defaultWorkspace     | Default workspace path              |
 
 ## Instructions for Claude Code
 

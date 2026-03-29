@@ -19,6 +19,12 @@ jobs:
 
       - run: npm ci
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
       - name: Typecheck
         run: npx tsc --noEmit
 
@@ -30,3 +36,9 @@ jobs:
 
       - name: Package validation
         run: npm pack --dry-run 2>&1 | tail -20
+
+      - name: Run tests
+        run: npm run test
+
+      - name: Security audit
+        run: npm audit --audit-level=critical
