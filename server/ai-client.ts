@@ -11,7 +11,7 @@ import type { ICliSession } from "./cli-session.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-/** Load the threads-viral-agent SKILL.md at startup (strip frontmatter) */
+/** Load the threads-viral-agent SKILL.md on demand (strip frontmatter) */
 function loadViralAgentSkill(): string {
   try {
     const skillPath = join(__dirname, "../.claude/skills/threads-viral-agent/SKILL.md");
@@ -22,7 +22,6 @@ function loadViralAgentSkill(): string {
     return "";
   }
 }
-const VIRAL_AGENT_SKILL = loadViralAgentSkill();
 
 const LANGUAGE_INSTRUCTIONS: Record<Language, string> = {
   "zh-TW": `**語言規則（最高優先級）**：
@@ -81,6 +80,7 @@ export function buildSystemPrompt(
   minOverall = 70,
   minConversation = 55
 ): string {
+  const viralAgentSkill = loadViralAgentSkill();
   return `${LANGUAGE_INSTRUCTIONS[language]}
 
 You are Claude World Studio assistant — an AI-powered content pipeline for trend discovery, deep research, and social publishing.
@@ -255,7 +255,7 @@ For ALL publishing tasks (post type decision, image generation, uploading, carou
 
 ---
 
-${VIRAL_AGENT_SKILL}
+${viralAgentSkill}
 
 Be concise but thorough. Explain which tools you're using and why.`;
 }

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { existsSync, readFileSync, readdirSync } from "fs";
+import { mkdir, writeFile } from "fs/promises";
 import { execFileSync, execFile } from "child_process";
 import { promisify } from "util";
 import path from "path";
@@ -10,7 +11,7 @@ import store from "../db.js";
 import { getSettings } from "../mcp-config.js";
 import { logger } from "../logger.js";
 
-const { join, isAbsolute } = path;
+const { join, dirname, isAbsolute } = path;
 
 /** Check if uvx is available */
 function hasUvx(): boolean {
@@ -396,6 +397,58 @@ router.put("/", (req, res) => {
   }
 
   res.json({ success: true });
+});
+
+// POST /api/settings/sync-skills
+router.post("/sync-skills", async (_req, res) => {
+  const SKILL_URLS = [
+    {
+      url: "https://raw.githubusercontent.com/claude-world/claude-world-studio/main/.claude/skills/threads-viral-agent/SKILL.md",
+      path: "threads-viral-agent/SKILL.md",
+    },
+    {
+      url: "https://raw.githubusercontent.com/claude-world/claude-world-studio/main/.claude/skills/content-pipeline/SKILL.md",
+      path: "content-pipeline/SKILL.md",
+    },
+    {
+      url: "https://raw.githubusercontent.com/claude-world/claude-world-studio/main/.claude/skills/studio/SKILL.md",
+      path: "studio/SKILL.md",
+    },
+  ];
+
+  const skillsDir = join(__dirname, "../../.claude/skills");
+  const results: { path: string; success: boolean; error?: string; size?: number }[] = [];
+
+  for (const skill of SKILL_URLS) {
+    try {
+      const response = await fetch(skill.url);
+      if (!response.ok) {
+        results.push({ path: skill.path, success: false, error: `HTTP ${response.status}` });
+        continue;
+      }
+      const content = await response.text();
+      const filePath = join(skillsDir, skill.path);
+
+      // Ensure directory exists
+      const dir = dirname(filePath);
+      await mkdir(dir, { recursive: true });
+
+      await writeFile(filePath, content, "utf-8");
+      logger.info("Routes:Settings", `Synced skill: ${skill.path} (${content.length} bytes)`);
+      results.push({ path: skill.path, success: true, size: content.length });
+    } catch (err) {
+      logger.warn("Routes:Settings", `Failed to sync skill: ${skill.path}`, {
+        error: (err as Error).message,
+      });
+      results.push({ path: skill.path, success: false, error: (err as Error).message });
+    }
+  }
+
+  res.json({
+    synced: results.filter((r) => r.success).length,
+    total: SKILL_URLS.length,
+    results,
+  });
 });
 
 export default router;

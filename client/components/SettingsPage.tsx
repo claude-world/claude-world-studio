@@ -436,6 +436,7 @@ export function SettingsPage({
   const [cliEnabledSet, setCliEnabledSet] = useState<Set<string>>(new Set());
   const [cliPrimary, setCliPrimary] = useState("");
   const hasSavedCliConfig = useRef(false);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isVisible) return;
@@ -564,6 +565,23 @@ export function SettingsPage({
     setMessage(t.applied);
   };
 
+  const handleSyncSkills = async () => {
+    setSyncStatus("syncing");
+    try {
+      const res = await fetch("/api/settings/sync-skills", { method: "POST" });
+      const data = await res.json();
+      if (data.synced === data.total) {
+        setSyncStatus(`success:${data.synced}`);
+      } else {
+        setSyncStatus(`partial:${data.synced}/${data.total}`);
+      }
+    } catch {
+      setSyncStatus("error");
+    }
+    // Auto-clear after 5s
+    setTimeout(() => setSyncStatus(null), 5000);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setMessage("");
@@ -683,6 +701,56 @@ export function SettingsPage({
               })}
             </div>
           )}
+        </div>
+
+        {/* Sync Skills */}
+        <div className="bg-gray-800 rounded-xl p-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-white">
+              {language === "zh-TW"
+                ? "同步 Skills"
+                : language === "ja"
+                  ? "Skills を同期"
+                  : "Sync Skills"}
+            </h3>
+            <p className="text-xs text-gray-400 mt-1">
+              {language === "zh-TW"
+                ? "從 GitHub 取得最新的 Skill 定義（新 session 生效）"
+                : language === "ja"
+                  ? "GitHub から最新のスキル定義を取得"
+                  : "Fetch latest skill definitions from GitHub (applies to new sessions)"}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {syncStatus && (
+              <span
+                className={`text-xs ${
+                  syncStatus.startsWith("success")
+                    ? "text-green-400"
+                    : syncStatus === "syncing"
+                      ? "text-blue-400"
+                      : "text-yellow-400"
+                }`}
+              >
+                {syncStatus === "syncing"
+                  ? language === "zh-TW"
+                    ? "同步中..."
+                    : "Syncing..."
+                  : syncStatus.startsWith("success")
+                    ? "\u2705"
+                    : syncStatus.startsWith("partial")
+                      ? `\u26A0\uFE0F ${syncStatus.split(":")[1]}`
+                      : "\u274C"}
+              </span>
+            )}
+            <button
+              onClick={handleSyncSkills}
+              disabled={syncStatus === "syncing"}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white rounded-lg text-sm transition-colors"
+            >
+              {language === "zh-TW" ? "同步" : language === "ja" ? "同期" : "Sync"}
+            </button>
+          </div>
         </div>
 
         {/* AI Coding CLIs */}
