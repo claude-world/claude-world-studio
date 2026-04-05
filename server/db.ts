@@ -59,6 +59,22 @@ const db = new Database(DB_PATH);
 // Enable WAL mode for better concurrent read performance
 db.pragma("journal_mode = WAL");
 
+/**
+ * Run a function inside a SQLite transaction.
+ * Inspired by Claude Code's atomic operation patterns — ensures multi-step
+ * DB operations either fully commit or fully rollback.
+ *
+ * Usage:
+ *   const result = transaction(() => {
+ *     store.createSession(...);
+ *     store.addMessage(...);
+ *     return someValue;
+ *   });
+ */
+export function transaction<T>(fn: () => T): T {
+  return db.transaction(fn)();
+}
+
 // Create tables
 db.exec(`
   CREATE TABLE IF NOT EXISTS sessions (
@@ -197,15 +213,34 @@ db.exec(`
 
 // Social accounts are configured via the Settings UI — no hardcoded accounts.
 
-// Analytics cache with TTL
-const analyticsCache = new Map<string, { data: unknown; expiry: number }>();
+/**
+ * Bounded analytics cache with TTL + LRU eviction.
+ *
+ * Inspired by Claude Code's LRU cache patterns (memoize.ts, WebFetchTool/utils.ts):
+ * - max: 64 entries prevents unbounded growth
+ * - TTL: 60s staleness tolerance
+ * - Explicit invalidation on writes
+ */
+const ANALYTICS_CACHE_MAX = 64;
 const ANALYTICS_CACHE_TTL = 60_000; // 1 minute
+
+const analyticsCache = new Map<string, { data: unknown; expiry: number }>();
 
 function getCached<T>(key: string, compute: () => T): T {
   const cached = analyticsCache.get(key);
-  if (cached && Date.now() < cached.expiry) return cached.data as T;
+  if (cached && Date.now() < cached.expiry) {
+    // Move to end (LRU touch)
+    analyticsCache.delete(key);
+    analyticsCache.set(key, cached);
+    return cached.data as T;
+  }
   const data = compute();
   analyticsCache.set(key, { data, expiry: Date.now() + ANALYTICS_CACHE_TTL });
+  // Evict oldest if over capacity
+  if (analyticsCache.size > ANALYTICS_CACHE_MAX) {
+    const oldest = analyticsCache.keys().next().value;
+    if (oldest !== undefined) analyticsCache.delete(oldest);
+  }
   return data;
 }
 

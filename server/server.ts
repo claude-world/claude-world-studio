@@ -19,6 +19,7 @@ import scheduledTasksRouter, { setScheduler } from "./routes/scheduled-tasks.js"
 import { TaskScheduler } from "./services/scheduler.js";
 import { rateLimiter } from "./middleware/rate-limiter.js";
 import { logger } from "./logger.js";
+import { registerCleanup, runAllCleanups } from "./cleanup-registry.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -64,6 +65,23 @@ app.use("/api/settings", settingsRouter);
 app.use("/api/publish", publishRouter);
 app.use("/api/accounts", accountsRouter);
 app.use("/api/scheduled-tasks", scheduledTasksRouter);
+
+// Diagnostics endpoints — exposes error ring buffer for debugging
+// (inspired by Claude Code's in-memory error log for bug reports)
+app.get("/api/diagnostics/errors", (_req, res) => {
+  res.json(logger.getRecentErrors());
+});
+
+// Accept client-side errors (from ErrorBoundary) — truncate to prevent abuse
+app.post("/api/diagnostics/errors", (req, res) => {
+  const tag = String(req.body?.tag || "").slice(0, 64);
+  const message = String(req.body?.message || "").slice(0, 512);
+  const stack = req.body?.stack ? String(req.body.stack).slice(0, 4096) : undefined;
+  if (tag && message) {
+    logger.error(tag, message, stack ? new Error(stack) : undefined);
+  }
+  res.status(204).end();
+});
 
 // Terminal error handler
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -321,37 +339,43 @@ server.on("error", (err: NodeJS.ErrnoException) => {
   process.exit(1);
 });
 
-// Graceful shutdown
-let isShuttingDown = false;
-
-function shutdown() {
-  if (isShuttingDown) return;
-  isShuttingDown = true;
-
-  logger.info("Server", "Shutting down...");
-
-  // 1. Stop scheduled tasks
+// Register cleanup functions — inspired by Claude Code's cleanupRegistry.ts.
+// Each subsystem registers its own cleanup; shutdown() runs them all.
+registerCleanup(() => {
   taskScheduler.stop();
-
-  // 2. Close all active sessions (stops CLI subprocesses & Agent SDK)
+});
+registerCleanup(() => {
   for (const [, session] of sessions) {
     session.close();
   }
   sessions.clear();
   sessionLastActivity.clear();
-
-  // 3. Clear intervals that keep the event loop alive
+});
+registerCleanup(() => {
   clearInterval(idleCleanup);
   clearInterval(heartbeat);
+});
 
-  // 4. Close WebSocket & HTTP servers
+// Graceful shutdown
+let isShuttingDown = false;
+
+async function shutdown() {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  logger.info("Server", "Shutting down...");
+
+  // Run all registered cleanups in parallel
+  await runAllCleanups();
+
+  // Close WebSocket & HTTP servers
   wss.close();
   server.close(() => {
     logger.info("Server", "Clean exit");
     process.exit(0);
   });
 
-  // 5. Force exit if server.close() hangs (open connections, etc.)
+  // Force exit if server.close() hangs (open connections, etc.)
   setTimeout(() => {
     logger.error("Server", "Forced exit after timeout");
     process.exit(1);
