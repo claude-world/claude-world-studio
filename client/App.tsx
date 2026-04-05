@@ -17,9 +17,14 @@ import { ScheduledTasksPage } from "./components/ScheduledTasksPage";
 import { AccountPostsPage } from "./components/AccountPostsPage";
 import { TrafficDashboardPage } from "./components/TrafficDashboardPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { apiGet, apiPost, apiPut, apiPatch, apiDelete } from "./hooks/useApi";
+import { LanguageProvider } from "./hooks/useLanguage";
 
 export type Language = "zh-TW" | "en" | "ja";
 export type Theme = "light" | "dark" | "system";
+
+/** Active page — single state replaces 5 boolean flags (Claude Code pattern: single source of truth) */
+type Page = "chat" | "settings" | "social" | "scheduled" | "posts" | "traffic";
 
 interface Session {
   id: string;
@@ -62,8 +67,6 @@ type ServerWSMessage =
   | { type: "interrupted"; sessionId: string }
   | { type: "error"; error: string; sessionId?: string };
 
-const API_BASE = "/api";
-
 function getWsUrl(): string {
   const proto = window.location.protocol === "https:" ? "wss" : "ws";
   return `${proto}://${window.location.host}/ws`;
@@ -79,11 +82,13 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [cliName, setCliName] = useState("claude");
   const [showFiles, setShowFiles] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showSocial, setShowSocial] = useState(false);
-  const [showScheduled, setShowScheduled] = useState(false);
-  const [showAccountPosts, setShowAccountPosts] = useState(false);
-  const [showTrafficDashboard, setShowTrafficDashboard] = useState(false);
+  const [activePage, setActivePage] = useState<Page>("chat");
+  // Backward-compatible aliases (used by child components)
+  const showSettings = activePage === "settings";
+  const showSocial = activePage === "social";
+  const showScheduled = activePage === "scheduled";
+  const showAccountPosts = activePage === "posts";
+  const showTrafficDashboard = activePage === "traffic";
   const [showPublish, setShowPublish] = useState(false);
   const [previewFile, setPreviewFile] = useState<{
     relativePath: string;
@@ -120,6 +125,27 @@ export default function App() {
   useEffect(() => {
     selectedSessionRef.current = selectedSessionId;
   }, [selectedSessionId]);
+
+  // Data fetching — declared before handleWSMessage which references fetchSessions
+  const fetchSessions = async () => {
+    const [data] = await apiGet<Session[]>("/sessions");
+    if (data) setSessions(data);
+    setSessionsLoading(false);
+  };
+
+  const fetchSettings = async () => {
+    const [data] = await apiGet<Record<string, string>>("/settings");
+    if (!data) return;
+    setDefaultWorkspace(data.defaultWorkspace || "");
+    setLanguage((data.language as Language) || "zh-TW");
+    if (data.theme) setTheme(data.theme as Theme);
+  };
+
+  const fetchAccounts = async () => {
+    const [data] =
+      await apiGet<{ id: string; name: string; handle: string; platform: string }[]>("/accounts");
+    if (data) setAccounts(data);
+  };
 
   const handleWSMessage = useCallback((message: ServerWSMessage) => {
     // Ignore messages from sessions we're not currently viewing
@@ -272,59 +298,18 @@ export default function App() {
     }
   }, [lastJsonMessage, handleWSMessage]);
 
-  const fetchSessions = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/sessions`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setSessions(data);
-    } catch {
-      // Network error — ignore silently
-    } finally {
-      setSessionsLoading(false);
-    }
-  };
-
-  const fetchSettings = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/settings`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setDefaultWorkspace(data.defaultWorkspace || "");
-      setLanguage(data.language || "zh-TW");
-      if (data.theme) setTheme(data.theme);
-    } catch {
-      // ignore
-    }
-  };
-
   const handleThemeChange = async (newTheme: Theme) => {
     const prev = theme;
     setTheme(newTheme);
-    try {
-      const res = await fetch(`${API_BASE}/settings`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ theme: newTheme }),
-      });
-      if (!res.ok) throw new Error("Save failed");
-    } catch {
-      setTheme(prev);
-    }
+    const [, err] = await apiPut("/settings", { theme: newTheme });
+    if (err) setTheme(prev);
   };
 
   const handleLanguageChange = async (lang: Language) => {
     const prev = language;
     setLanguage(lang);
-
-    try {
-      const res = await fetch(`${API_BASE}/settings`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ language: lang }),
-      });
-      if (!res.ok) throw new Error("Save failed");
-    } catch {
+    const [, err] = await apiPut("/settings", { language: lang });
+    if (err) {
       setLanguage(prev);
       return;
     }
@@ -345,33 +330,22 @@ export default function App() {
   };
 
   const createSession = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/sessions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspacePath: defaultWorkspace || undefined }),
-      });
-      if (!res.ok) return;
-      const session = await res.json();
-      setSessions((prev) => [session, ...prev]);
-      selectSession(session.id);
-      setShowSettings(false);
-    } catch (error) {
-      console.error("Failed to create session:", error);
-    }
+    const [session, err] = await apiPost<Session>("/sessions", {
+      workspacePath: defaultWorkspace || undefined,
+    });
+    if (err || !session) return;
+    setSessions((prev) => [session, ...prev]);
+    selectSession(session.id);
+    setActivePage("chat");
   };
 
   const deleteSession = async (sessionId: string) => {
-    try {
-      const res = await fetch(`${API_BASE}/sessions/${sessionId}`, { method: "DELETE" });
-      if (!res.ok) return;
-      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-      if (selectedSessionId === sessionId) {
-        setSelectedSessionId(null);
-        setMessages([]);
-      }
-    } catch (error) {
-      console.error("Failed to delete session:", error);
+    const [, err] = await apiDelete(`/sessions/${sessionId}`);
+    if (err) return;
+    setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    if (selectedSessionId === sessionId) {
+      setSelectedSessionId(null);
+      setMessages([]);
     }
   };
 
@@ -384,11 +358,7 @@ export default function App() {
     // will include a `running` flag to restore loading state correctly
     setIsLoading(false); // temporary until history arrives
     setCliName("claude"); // reset until history arrives with actual cliName
-    setShowSettings(false);
-    setShowSocial(false);
-    setShowScheduled(false);
-    setShowAccountPosts(false);
-    setShowTrafficDashboard(false);
+    setActivePage("chat");
     setSidebarOpen(false); // close mobile overlay when switching sessions
     if (isConnected) {
       sendJsonMessage({ type: "subscribe", sessionId });
@@ -404,11 +374,7 @@ export default function App() {
         const title = content.slice(0, 80).replace(/\n/g, " ");
         setSessions((ss) => ss.map((s) => (s.id === selectedSessionId ? { ...s, title } : s)));
         // Persist title to server (fire-and-forget)
-        fetch(`${API_BASE}/sessions/${selectedSessionId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title }),
-        }).catch(() => {});
+        apiPatch(`/sessions/${selectedSessionId}`, { title });
       }
       return [
         ...prev,
@@ -462,17 +428,6 @@ export default function App() {
     setPreviewFile({ relativePath, sessionId: selectedSessionId });
   };
 
-  const fetchAccounts = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/accounts`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setAccounts(data);
-    } catch {
-      // ignore
-    }
-  };
-
   useEffect(() => {
     fetchSessions();
     fetchSettings();
@@ -493,43 +448,23 @@ export default function App() {
       }}
       onDeleteSession={deleteSession}
       onShowSettings={() => {
-        setShowSettings(true);
-        setShowSocial(false);
-        setShowScheduled(false);
-        setShowAccountPosts(false);
-        setShowTrafficDashboard(false);
+        setActivePage("settings");
         setSidebarOpen(false);
       }}
       onShowSocial={() => {
-        setShowSocial(true);
-        setShowSettings(false);
-        setShowScheduled(false);
-        setShowAccountPosts(false);
-        setShowTrafficDashboard(false);
+        setActivePage("social");
         setSidebarOpen(false);
       }}
       onShowScheduled={() => {
-        setShowScheduled(true);
-        setShowSettings(false);
-        setShowSocial(false);
-        setShowAccountPosts(false);
-        setShowTrafficDashboard(false);
+        setActivePage("scheduled");
         setSidebarOpen(false);
       }}
       onShowAccountPosts={() => {
-        setShowAccountPosts(true);
-        setShowSettings(false);
-        setShowSocial(false);
-        setShowScheduled(false);
-        setShowTrafficDashboard(false);
+        setActivePage("posts");
         setSidebarOpen(false);
       }}
       onShowTrafficDashboard={() => {
-        setShowTrafficDashboard(true);
-        setShowSettings(false);
-        setShowSocial(false);
-        setShowScheduled(false);
-        setShowAccountPosts(false);
+        setActivePage("traffic");
         setSidebarOpen(false);
       }}
       defaultWorkspace={defaultWorkspace}
@@ -543,127 +478,126 @@ export default function App() {
   );
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-950">
-      {/* Mobile hamburger button */}
-      <button
-        className="md:hidden fixed top-3 left-3 z-50 p-2 bg-gray-800 text-white rounded-lg"
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        aria-label="Toggle sidebar"
-      >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d={sidebarOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"}
-          />
-        </svg>
-      </button>
-
-      {/* Sidebar - desktop (always visible) */}
-      <div className="hidden md:flex w-64 shrink-0 overflow-hidden">
-        <ErrorBoundary name="Sidebar">{sidebarContent}</ErrorBoundary>
-      </div>
-
-      {/* Sidebar - mobile overlay */}
-      {sidebarOpen && (
-        <Fragment>
-          <div
-            className="md:hidden fixed inset-0 z-40 bg-black/50"
-            onClick={() => setSidebarOpen(false)}
-          />
-          <div className="md:hidden fixed inset-y-0 left-0 z-40 w-64 flex">
-            <ErrorBoundary name="Sidebar">{sidebarContent}</ErrorBoundary>
-          </div>
-        </Fragment>
-      )}
-
-      {/* Main content */}
-      <div className="flex-1 flex min-w-0" role="main">
-        {showSettings ? (
-          <ErrorBoundary name="Settings">
-            <SettingsPage
-              isVisible={showSettings}
-              onClose={() => setShowSettings(false)}
-              language={language}
-              onLanguageChange={handleLanguageChange}
+    <LanguageProvider value={language}>
+      <div className="flex h-screen bg-gray-50 dark:bg-gray-950">
+        {/* Mobile hamburger button */}
+        <button
+          className="md:hidden fixed top-3 left-3 z-50 p-2 bg-gray-800 text-white rounded-lg"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          aria-label="Toggle sidebar"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d={sidebarOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"}
             />
-          </ErrorBoundary>
-        ) : showSocial ? (
-          <ErrorBoundary name="SocialAccounts">
-            <SocialAccountsPage onClose={() => setShowSocial(false)} language={language} />
-          </ErrorBoundary>
-        ) : showScheduled ? (
-          <ErrorBoundary name="ScheduledTasks">
-            <ScheduledTasksPage onClose={() => setShowScheduled(false)} language={language} />
-          </ErrorBoundary>
-        ) : showAccountPosts ? (
-          <ErrorBoundary name="AccountPosts">
-            <AccountPostsPage onClose={() => setShowAccountPosts(false)} language={language} />
-          </ErrorBoundary>
-        ) : showTrafficDashboard ? (
-          <ErrorBoundary name="TrafficDashboard">
-            <TrafficDashboardPage
-              onClose={() => setShowTrafficDashboard(false)}
-              language={language}
+          </svg>
+        </button>
+
+        {/* Sidebar - desktop (always visible) */}
+        <div className="hidden md:flex w-64 shrink-0 overflow-hidden">
+          <ErrorBoundary name="Sidebar">{sidebarContent}</ErrorBoundary>
+        </div>
+
+        {/* Sidebar - mobile overlay */}
+        {sidebarOpen && (
+          <Fragment>
+            <div
+              className="md:hidden fixed inset-0 z-40 bg-black/50"
+              onClick={() => setSidebarOpen(false)}
             />
-          </ErrorBoundary>
-        ) : (
-          <ErrorBoundary name="Chat">
-            <>
-              <ChatWindow
-                sessionId={selectedSessionId}
-                messages={messages}
-                isConnected={isConnected}
-                isLoading={isLoading}
-                onSendMessage={handleSendMessage}
-                onInterrupt={handleInterrupt}
-                onShowFiles={() => setShowFiles(!showFiles)}
-                onShowPublish={() => setShowPublish(true)}
-                onNewSession={createSession}
-                onPreviewFile={handlePreviewFile}
-                workspacePath={sessions.find((s) => s.id === selectedSessionId)?.workspace_path}
-                showFilesActive={showFiles}
+            <div className="md:hidden fixed inset-y-0 left-0 z-40 w-64 flex">
+              <ErrorBoundary name="Sidebar">{sidebarContent}</ErrorBoundary>
+            </div>
+          </Fragment>
+        )}
+
+        {/* Main content */}
+        <div className="flex-1 flex min-w-0" role="main">
+          {showSettings ? (
+            <ErrorBoundary name="Settings">
+              <SettingsPage
+                isVisible={showSettings}
+                onClose={() => setActivePage("chat")}
                 language={language}
-                accounts={accounts}
-                targetAccountId={targetAccountId}
-                onTargetAccountChange={setTargetAccountId}
-                cliName={cliName}
+                onLanguageChange={handleLanguageChange}
               />
-
-              {/* FileExplorer - hidden on mobile, visible on md+ when toggled */}
-              <div className="hidden md:contents">
-                <FileExplorer
+            </ErrorBoundary>
+          ) : showSocial ? (
+            <ErrorBoundary name="SocialAccounts">
+              <SocialAccountsPage onClose={() => setActivePage("chat")} language={language} />
+            </ErrorBoundary>
+          ) : showScheduled ? (
+            <ErrorBoundary name="ScheduledTasks">
+              <ScheduledTasksPage onClose={() => setActivePage("chat")} language={language} />
+            </ErrorBoundary>
+          ) : showAccountPosts ? (
+            <ErrorBoundary name="AccountPosts">
+              <AccountPostsPage onClose={() => setActivePage("chat")} language={language} />
+            </ErrorBoundary>
+          ) : showTrafficDashboard ? (
+            <ErrorBoundary name="TrafficDashboard">
+              <TrafficDashboardPage onClose={() => setActivePage("chat")} language={language} />
+            </ErrorBoundary>
+          ) : (
+            <ErrorBoundary name="Chat">
+              <>
+                <ChatWindow
                   sessionId={selectedSessionId}
-                  isVisible={showFiles}
-                  onToggle={() => setShowFiles(!showFiles)}
-                  onPreviewFile={handleExplorerPreview}
+                  messages={messages}
+                  isConnected={isConnected}
+                  isLoading={isLoading}
+                  onSendMessage={handleSendMessage}
+                  onInterrupt={handleInterrupt}
+                  onShowFiles={() => setShowFiles(!showFiles)}
+                  onShowPublish={() => setShowPublish(true)}
+                  onNewSession={createSession}
+                  onPreviewFile={handlePreviewFile}
+                  workspacePath={sessions.find((s) => s.id === selectedSessionId)?.workspace_path}
+                  showFilesActive={showFiles}
+                  language={language}
+                  accounts={accounts}
+                  targetAccountId={targetAccountId}
+                  onTargetAccountChange={setTargetAccountId}
+                  cliName={cliName}
                 />
-              </div>
-            </>
+
+                {/* FileExplorer - hidden on mobile, visible on md+ when toggled */}
+                <div className="hidden md:contents">
+                  <FileExplorer
+                    sessionId={selectedSessionId}
+                    isVisible={showFiles}
+                    onToggle={() => setShowFiles(!showFiles)}
+                    onPreviewFile={handleExplorerPreview}
+                  />
+                </div>
+              </>
+            </ErrorBoundary>
+          )}
+        </div>
+
+        {/* File preview modal */}
+        {previewFile && (
+          <ErrorBoundary name="FilePreview" fallback={null}>
+            <FilePreviewModal
+              sessionId={previewFile.sessionId}
+              filePath={previewFile.relativePath}
+              onClose={() => setPreviewFile(null)}
+            />
           </ErrorBoundary>
         )}
-      </div>
 
-      {/* File preview modal */}
-      {previewFile && (
-        <ErrorBoundary name="FilePreview" fallback={null}>
-          <FilePreviewModal
-            sessionId={previewFile.sessionId}
-            filePath={previewFile.relativePath}
-            onClose={() => setPreviewFile(null)}
+        {/* Publish dialog */}
+        <ErrorBoundary name="PublishDialog" fallback={null}>
+          <PublishDialog
+            isOpen={showPublish}
+            onClose={() => setShowPublish(false)}
+            sessionId={selectedSessionId}
           />
         </ErrorBoundary>
-      )}
-
-      {/* Publish dialog */}
-      <ErrorBoundary name="PublishDialog" fallback={null}>
-        <PublishDialog
-          isOpen={showPublish}
-          onClose={() => setShowPublish(false)}
-          sessionId={selectedSessionId}
-        />
-      </ErrorBoundary>
-    </div>
+      </div>
+    </LanguageProvider>
   );
 }

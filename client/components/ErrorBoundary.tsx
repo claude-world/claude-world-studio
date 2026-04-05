@@ -22,11 +22,18 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
-    console.error(
-      `[ErrorBoundary${this.props.name ? `:${this.props.name}` : ""}]`,
-      error,
-      errorInfo
-    );
+    const tag = this.props.name ? `ErrorBoundary:${this.props.name}` : "ErrorBoundary";
+    console.error(`[${tag}]`, error, errorInfo);
+
+    // Report to server error ring buffer (Claude Code pattern: centralized error tracking)
+    const stack = [error.stack, errorInfo.componentStack].filter(Boolean).join("\n---\n");
+    fetch("/api/diagnostics/errors", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tag, message: error.message, stack }),
+    }).catch(() => {
+      // Fire-and-forget — don't let reporting failure break anything
+    });
   }
 
   handleRetry = (): void => {
