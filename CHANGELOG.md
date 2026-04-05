@@ -1,5 +1,41 @@
 # Changelog
 
+## [2.1.0] - 2026-04-05
+
+### Added (patterns from Claude Code v2.1.88 source)
+
+**Server Infrastructure**
+
+- **Cleanup registry** (`server/cleanup-registry.ts`) — modules self-register cleanup functions, shutdown runs all in parallel via `runAllCleanups()`. Pattern from Claude Code's `cleanupRegistry.ts`.
+- **Error ring buffer** — logger keeps last 100 errors in memory. `GET /api/diagnostics/errors` for debugging, `POST /api/diagnostics/errors` receives client-side errors. Pattern from Claude Code's `log.ts`.
+- **DB transaction helper** — `transaction<T>(fn)` wraps SQLite transactions for atomic multi-step operations.
+- **Bounded LRU analytics cache** — max 64 entries with TTL + manual LRU eviction, replacing unbounded Map. Pattern from Claude Code's `memoize.ts`.
+
+**Agent Execution Layer**
+
+- **Typed SDK output** — `SDKOutputMessage` discriminated union replaces all `any` in agent output stream. Pattern from Claude Code's `query.ts` StreamEvent.
+- **Stream retry with backoff** — `startListening()` retries transient errors (ECONNRESET, ETIMEDOUT) up to 3 times with 1s/2s/4s exponential backoff. Pattern from Claude Code's `withRetry.ts`.
+- **Abort guard** — `getOutputStream()` checks `abortController.signal.aborted` before and after each `iterator.next()`. Pattern from Claude Code's `query.ts:839`.
+- **Cumulative cost tracking** — `totalCostUsd` + `turnCount` accumulated per session, seeded from history on resume. Pattern from Claude Code's `cost-tracker.ts`.
+- **Programmatic quality gate** — `publish_to_threads` MCP tool enforces `score >= minOverallScore` from settings. Agent cannot bypass via prompt.
+- **Task failure detection** — scheduled task JSON parse failure now marked "failed" (was silently "completed"), raw output saved for audit.
+- **auto_publish violation detection** — warns when agent publishes despite `auto_publish=off`.
+
+**Client**
+
+- **Single page state** — 5 boolean page flags → `activePage: Page` discriminated union. Pattern from Claude Code's `AppStateStore.ts`.
+- **useApi hook** (`client/hooks/useApi.ts`) — typed `[data, error]` tuple replacing 12 scattered try/catch blocks.
+- **LanguageContext** (`client/hooks/useLanguage.tsx`) — React context for future prop drilling removal.
+- **ErrorBoundary reporting** — client-side React errors posted to server ring buffer.
+
+### Fixed
+
+- System prompt contradiction: MCP tool vs Python script publishing instructions now unified (MCP-first)
+- Conversation Durability threshold was hardcoded 60 in scheduler, now reads from settings
+- Session `close()` could be called twice (idle cleanup + shutdown race) — added `isClosed` guard
+- Diagnostics POST endpoint accepted unsanitized input — now truncates tag/message/stack
+- `fetchSessions` declared after `handleWSMessage` that references it — moved above callback
+
 ## [2.0.0] - 2026-03-29
 
 ### Breaking Changes
