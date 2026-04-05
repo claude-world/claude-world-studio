@@ -3,6 +3,7 @@ import { z } from "zod";
 import fs from "fs";
 import path from "path";
 import store from "../db.js";
+import { getSettings } from "../mcp-config.js";
 import { publishToThreads } from "./social-publisher.js";
 
 const publishTool = tool(
@@ -11,7 +12,10 @@ const publishTool = tool(
   {
     text: z.string().describe("Post text content (max 500 chars)"),
     account_id: z.string().describe("Account ID from Social Accounts table"),
-    score: z.number().describe("Content quality score (must be >= 70)"),
+    score: z
+      .number()
+      .min(1)
+      .describe("Content quality score (must be >= minimum threshold from settings)"),
     // Media (mutually exclusive: pick one)
     image_url: z.string().optional().describe("Public image URL (single image post)"),
     video_url: z.string().optional().describe("Public video URL (single video post)"),
@@ -68,6 +72,21 @@ const publishTool = tool(
           {
             type: "text" as const,
             text: `Error: Account "${account.name}" is ${account.platform}, not threads.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    // Programmatic quality gate — inspired by Claude Code's verification agent pattern.
+    // The agent CANNOT bypass this by passing a low score or omitting score.
+    const minScore = getSettings().minOverallScore || 70;
+    if (args.score < minScore) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Quality gate failed: score ${args.score} < minimum ${minScore}. Improve the content before publishing.`,
           },
         ],
         isError: true,

@@ -1,10 +1,11 @@
 import type { WSClient, Language, Message, CliCommand } from "./types.js";
-import type { ICliSession } from "./cli-session.js";
+import type { ICliSession, SDKOutputMessage } from "./cli-session.js";
 import { AgentSession, buildSystemPrompt } from "./ai-client.js";
 import { SubprocessCliSession } from "./subprocess-cli-session.js";
 import { getSettings, writeMcpConfigFile } from "./mcp-config.js";
 import store from "./db.js";
 import { logger } from "./logger.js";
+import { registerCleanup } from "./cleanup-registry.js";
 
 /**
  * Build a compact conversation recap from previous messages.
@@ -48,6 +49,14 @@ export class Session {
   private cliSession: ICliSession;
   private isListening = false;
   private hasResult = false;
+  private unregisterCleanup: (() => void) | null = null;
+  private isClosed = false;
+  /** Consecutive stream errors — inspired by Claude Code's retry backoff pattern */
+  private consecutiveErrors = 0;
+  private static readonly MAX_STREAM_RETRIES = 3;
+  /** Cumulative session cost tracking — inspired by Claude Code's cost-tracker.ts */
+  private totalCostUsd = 0;
+  private turnCount = 0;
 
   constructor(
     sessionId: string,
@@ -69,12 +78,10 @@ export class Session {
     const cliPrimary: CliCommand = ALLOWED_CLIS.includes(rawCli) ? rawCli : "claude";
 
     if (cliPrimary === "claude") {
-      // Use Claude Agent SDK (existing behavior)
       const resumeContext = previousMessages ? buildResumeContext(previousMessages) : undefined;
       this.cliSession = new AgentSession(workspacePath, language, resumeContext);
       this.cliName = "claude";
     } else {
-      // Use external CLI subprocess
       const lang = language || settings.language || "zh-TW";
       const accounts = store.getAllAccounts();
       const systemPrompt = buildSystemPrompt(
@@ -85,7 +92,6 @@ export class Session {
       );
       const cwd = workspacePath || settings.defaultWorkspace || process.cwd();
 
-      // Write MCP config file for external CLIs
       let mcpConfigPath: string | undefined;
       try {
         mcpConfigPath = writeMcpConfigFile(settings);
@@ -98,23 +104,78 @@ export class Session {
       this.cliSession = new SubprocessCliSession(cliPrimary, cwd, systemPrompt, mcpConfigPath);
       this.cliName = cliPrimary;
     }
+
+    // Seed cumulative cost/turn from history on resume (Claude Code cost-tracker pattern)
+    if (previousMessages) {
+      for (const m of previousMessages) {
+        if (m.role === "result" && m.cost_usd) {
+          this.totalCostUsd += m.cost_usd;
+          this.turnCount++;
+        }
+      }
+    }
+
+    // Register with cleanup registry so shutdown kills this session
+    this.unregisterCleanup = registerCleanup(() => this.close());
   }
 
-  private async startListening() {
+  /**
+   * Listen to the agent output stream with retry for transient errors.
+   * Inspired by Claude Code's withRetry.ts — uses a loop (not recursion)
+   * to avoid the finally-block overwriting isListening during retries.
+   */
+  private async startListening(): Promise<void> {
     if (this.isListening) return;
     this.isListening = true;
 
     try {
-      for await (const message of this.cliSession.getOutputStream()) {
-        this.handleSDKMessage(message);
+      while (!this.isClosed && this.consecutiveErrors < Session.MAX_STREAM_RETRIES) {
+        try {
+          for await (const message of this.cliSession.getOutputStream()) {
+            this.handleSDKMessage(message);
+            this.consecutiveErrors = 0;
+          }
+          break; // clean end of stream
+        } catch (error) {
+          this.consecutiveErrors++;
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          logger.error(
+            "Session",
+            `Stream error in session ${this.sessionId} (attempt ${this.consecutiveErrors})`,
+            error
+          );
+
+          if (
+            !this.isTransientError(error) ||
+            this.consecutiveErrors >= Session.MAX_STREAM_RETRIES
+          ) {
+            this.broadcastError(errorMsg);
+            break;
+          }
+
+          // Exponential backoff: 1s, 2s, 4s
+          const delay = 1000 * Math.pow(2, this.consecutiveErrors - 1);
+          logger.info("Session", `Retrying stream for session ${this.sessionId} in ${delay}ms...`);
+          await new Promise((r) => setTimeout(r, delay));
+        }
       }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      logger.error("Session", `Error in session ${this.sessionId}`, error);
-      this.broadcastError(errorMsg);
     } finally {
       this.isListening = false;
     }
+  }
+
+  /** Check if an error is transient (worth retrying) */
+  private isTransientError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    const msg = error.message.toLowerCase();
+    return (
+      msg.includes("econnreset") ||
+      msg.includes("econnrefused") ||
+      msg.includes("etimedout") ||
+      msg.includes("socket hang up") ||
+      msg.includes("network") ||
+      msg.includes("overloaded")
+    );
   }
 
   sendMessage(content: string) {
@@ -134,7 +195,11 @@ export class Session {
     }
   }
 
-  private handleSDKMessage(message: any) {
+  /**
+   * Handle typed SDK output messages.
+   * Inspired by Claude Code's query.ts streaming event processing.
+   */
+  private handleSDKMessage(message: SDKOutputMessage) {
     if (message.type === "assistant") {
       const content = message.message?.content;
       if (!content) return;
@@ -158,7 +223,7 @@ export class Session {
               content: block.text,
               sessionId: this.sessionId,
             });
-          } else if (block.type === "tool_use" && block.name) {
+          } else if (block.type === "tool_use") {
             store.addMessage(this.sessionId, {
               role: "tool_use",
               tool_name: block.name,
@@ -192,24 +257,30 @@ export class Session {
       }
     } else if (message.type === "result") {
       this.hasResult = true;
-      const costUsd = message.total_cost_usd;
+      this.turnCount++;
+
+      // Cumulative cost tracking (Claude Code's cost-tracker.ts pattern)
+      const turnCost = message.total_cost_usd ?? 0;
+      this.totalCostUsd += turnCost;
       const durationMs = message.duration_ms;
 
       store.addMessage(this.sessionId, {
         role: "result",
         content: JSON.stringify({
           success: message.subtype === "success",
-          cost: costUsd,
+          cost: turnCost,
+          totalCost: this.totalCostUsd,
           duration: durationMs,
+          turn: this.turnCount,
         }),
-        cost_usd: costUsd,
+        cost_usd: turnCost,
       });
 
       this.broadcast({
         type: "result",
         success: message.subtype === "success",
         sessionId: this.sessionId,
-        cost: costUsd,
+        cost: turnCost,
         duration: durationMs,
       });
     }
@@ -255,6 +326,10 @@ export class Session {
   }
 
   close() {
+    if (this.isClosed) return;
+    this.isClosed = true;
+    this.unregisterCleanup?.();
+    this.unregisterCleanup = null;
     this.cliSession.close();
   }
 }

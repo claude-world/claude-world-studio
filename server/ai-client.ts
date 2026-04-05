@@ -241,16 +241,15 @@ When writing social posts, check ALL 5 dimensions from Meta's ranking patents:
 - Character limit: Threads ≤500, IG ≤2200
 - 台灣繁中語氣 (no 簡體/AI filler like 在當今/隨著/值得注意)
 
-## Publishing: Use threads-viral-agent Skill
+## Publishing Workflow (threads-viral-agent Skill Reference)
 
-For ALL publishing tasks (post type decision, image generation, uploading, carousel, publishing), follow the threads-viral-agent skill instructions below **exactly**. The skill has the complete, tested workflow including:
-- Post type decision table (image/carousel/poll/link-comment/gif/spoiler/ghost/quote)
-- NotebookLM slides → pdftoppm → curl upload to catbox.moe → publish
-- All Threads API commands via \`python3 scripts/threads_api.py\`
-- Quality gates, penalty checks, A/B variant strategy
+For content strategy (post type decision, quality gates, Meta patent scoring), follow the threads-viral-agent skill guidelines below.
+**However, for ALL actual publishing and image upload operations, use Studio MCP tools:**
+- **Publishing**: \`publish_to_threads\` MCP tool (reads tokens from DB, handles all post types)
+- **Image upload**: \`upload_image\` MCP tool (uploads to temporary hosting, returns public URL)
+- **Publish history**: \`get_publish_history\` MCP tool
+- **Do NOT use**: \`python3 scripts/threads_api.py\`, \`curl\`, or any Bash-based publishing — those are for Claude Code CLI context only, not Studio.
 
-**Publishing commands use \`python3 scripts/threads_api.py\` via Bash (NOT the MCP publish_to_threads tool).**
-**Image upload uses \`curl\` to catbox.moe via Bash.**
 **All files saved to workspace directory, not ~/Downloads.**
 
 ---
@@ -400,8 +399,10 @@ export class AgentSession implements ICliSession {
       throw new Error("Session not initialized");
     }
     while (true) {
+      // Abort guard — stop yielding after abort (Claude Code pattern from query.ts:839)
+      if (this.abortController.signal.aborted) break;
       const { value, done } = await this.outputIterator.next();
-      if (done) break;
+      if (done || this.abortController.signal.aborted) break;
       yield value;
     }
   }

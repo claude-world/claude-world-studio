@@ -65,7 +65,7 @@ You are an automated content pipeline executing a scheduled task. Work autonomou
 
 ## Quality Requirements
 - Min score: ${task.min_score}
-- Conversation Durability >= 60
+- Conversation Durability >= ${settings.minConversationScore || 55}
 - All facts must have verified timestamps (discard >48h old)
 - Read at least 1 primary source via browser_markdown before writing
 - Hook: 10-45 chars with number or contrast
@@ -128,10 +128,18 @@ interface TaskResult {
 
 function parseTaskResult(fullOutput: string): TaskResult | null {
   const match = fullOutput.match(/---TASK_RESULT---\s*([\s\S]*?)\s*---END_TASK_RESULT---/);
-  if (!match) return null;
+  if (!match) {
+    logger.warn("Scheduler", "No ---TASK_RESULT--- block found in agent output", {
+      outputLength: String(fullOutput.length),
+      tail: fullOutput.slice(-200),
+    });
+    return null;
+  }
   try {
     return JSON.parse(match[1]);
-  } catch {
+  } catch (err) {
+    logger.error("Scheduler", "Failed to parse TASK_RESULT JSON", err);
+    logger.debug("Scheduler", "Raw JSON block", { raw: match[1].slice(0, 500) });
     return null;
   }
 }
@@ -272,17 +280,28 @@ export class TaskScheduler {
         ? JSON.stringify(taskResult.score_breakdown)
         : null;
 
-      // Determine status based on score and publish state
-      let status: "completed" | "published" | "rejected";
+      // Determine status — parsing failure is now "failed", not silently "completed"
+      let status: "completed" | "published" | "rejected" | "failed";
       let publishRecordId: string | null = null;
 
-      if (score !== null && score < task.min_score) {
+      if (!taskResult) {
+        // Agent didn't produce valid ---TASK_RESULT--- block
+        status = "failed";
+        logger.warn("Scheduler", `Task "${task.name}" failed: no valid TASK_RESULT block`);
+      } else if (score !== null && score < task.min_score) {
         status = "rejected";
         logger.info(
           "Scheduler",
           `Task "${task.name}" rejected: score ${score} < min ${task.min_score}`
         );
-      } else if (taskResult?.published) {
+      } else if (taskResult.published && !task.auto_publish) {
+        // Agent published when auto_publish is off — flag as anomaly
+        status = "published";
+        logger.warn(
+          "Scheduler",
+          `Task "${task.name}" published despite auto_publish=off (score ${score})`
+        );
+      } else if (taskResult.published) {
         status = "published";
         logger.info("Scheduler", `Task "${task.name}" published with score ${score}`);
       } else {
@@ -292,12 +311,14 @@ export class TaskScheduler {
 
       store.updateExecutionResult(execution.id, {
         status,
-        content,
+        // Store parsed content if available, otherwise truncated raw output for audit
+        content: content || result.fullOutput.slice(0, 10_000),
         score,
         score_breakdown: scoreBreakdown,
         cost_usd: result.costUsd,
         duration_ms: durationMs,
         publish_record_id: publishRecordId,
+        error: !taskResult ? "No valid TASK_RESULT block in agent output" : undefined,
       });
 
       return store.getExecution(execution.id) as TaskExecution;
