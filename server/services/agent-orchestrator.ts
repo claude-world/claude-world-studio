@@ -211,6 +211,11 @@ class AgentOrchestrator extends EventEmitter {
       memoryType: "general",
     });
 
+    // Yield-point guard — abort/pause may have fired during saveMemory (sync, but defensive).
+    // Cast through string to bypass TS narrowing that was locked in by the earlier guard + transition call.
+    const stateAfterReflect: string = run.state;
+    if (stateAfterReflect === "failed" || stateAfterReflect === "paused") return;
+
     // ── COMPLETE phase ────────────────────────────────────────────────────
     this.transition(run, "complete", onState);
     store.updateGoalStatus(run.goalId, "completed");

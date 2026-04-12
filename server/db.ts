@@ -255,6 +255,16 @@ db.exec(`
   USING fts5(content, tags, content='agent_memories', content_rowid='rowid');
 `);
 
+// Cascade-nullify agent_memories.goal_id and agent_reflections.goal_id before deleting a goal.
+// Required because better-sqlite3 v12 enforces FK constraints and the columns have no ON DELETE action.
+// BEFORE DELETE fires before the FK constraint check, allowing the delete to proceed.
+db.exec(`
+  CREATE TRIGGER IF NOT EXISTS agent_goals_bd BEFORE DELETE ON agent_goals BEGIN
+    UPDATE agent_memories SET goal_id = NULL WHERE goal_id = old.id;
+    UPDATE agent_reflections SET goal_id = NULL WHERE goal_id = old.id;
+  END;
+`);
+
 // FTS5 sync triggers — keep virtual table in sync with agent_memories
 db.exec(`
   CREATE TRIGGER IF NOT EXISTS agent_memories_ai AFTER INSERT ON agent_memories BEGIN

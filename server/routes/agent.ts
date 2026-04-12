@@ -81,7 +81,15 @@ router.patch("/goals/:id/progress", (req, res) => {
     res.status(400).json({ error: `Invalid status: must be one of ${VALID_STATUSES.join(", ")}` });
     return;
   }
-  // Normalize subTasks: arrays are JSON-serialized; strings passed through; null clears
+  // Normalize subTasks: arrays are JSON-serialized; strings validated then passed through; null clears
+  if (typeof subTasks === "string") {
+    try {
+      JSON.parse(subTasks);
+    } catch {
+      res.status(400).json({ error: "subTasks must be a valid JSON string" });
+      return;
+    }
+  }
   const subTasksJson = Array.isArray(subTasks)
     ? JSON.stringify(subTasks)
     : typeof subTasks === "string"
@@ -143,6 +151,11 @@ router.post("/goals/:id/abort", (req, res) => {
 
 /** DELETE /api/agent/goals/:id */
 router.delete("/goals/:id", (req, res) => {
+  // Abort active orchestrator run first — prevents ghost runs from calling store after row is gone
+  const run = orchestrator.getRunState(req.params.id);
+  if (run && run.state !== "complete" && run.state !== "failed") {
+    orchestrator.abortGoal(req.params.id);
+  }
   const deleted = store.deleteGoal(req.params.id);
   if (!deleted) {
     res.status(404).json({ error: "Goal not found" });
