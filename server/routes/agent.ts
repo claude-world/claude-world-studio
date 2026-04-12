@@ -42,8 +42,19 @@ router.post("/goals", (req, res) => {
     res.status(400).json({ error: "description is required" });
     return;
   }
-  const goal = store.createGoal({ description, sessionId, accountId });
-  res.status(201).json(goal);
+  try {
+    const goal = store.createGoal({ description, sessionId, accountId });
+    res.status(201).json(goal);
+  } catch (err) {
+    const msg = (err as Error).message ?? "";
+    if (msg.includes("FOREIGN KEY")) {
+      res
+        .status(400)
+        .json({ error: "Invalid sessionId or accountId — referenced record does not exist" });
+    } else {
+      res.status(500).json({ error: "Failed to create goal" });
+    }
+  }
 });
 
 /** GET /api/agent/goals/:id */

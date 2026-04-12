@@ -67,11 +67,21 @@ class AgentOrchestrator extends EventEmitter {
     }
 
     // Create persistent goal record
-    const goal = store.createGoal({
-      description: params.description,
-      sessionId: params.sessionId,
-      accountId: params.accountId,
-    });
+    // better-sqlite3 v12 enforces foreign_keys by default — propagate FK errors as user-friendly throws
+    let goal: ReturnType<typeof store.createGoal>;
+    try {
+      goal = store.createGoal({
+        description: params.description,
+        sessionId: params.sessionId,
+        accountId: params.accountId,
+      });
+    } catch (err) {
+      const msg = (err as Error).message ?? "";
+      if (msg.includes("FOREIGN KEY")) {
+        throw new Error("Invalid sessionId or accountId — referenced record does not exist");
+      }
+      throw err;
+    }
 
     const run: OrchestratorGoalRun = {
       goalId: goal.id,
