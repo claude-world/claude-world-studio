@@ -362,8 +362,9 @@ router.post("/backfill-post-ids", async (_req, res) => {
 // Analytics overview
 router.get("/analytics/overview", (req, res) => {
   const days = Math.min(Math.max(parseInt(req.query.days as string) || 30, 1), 365);
+  const offset = Math.min(Math.max(parseInt(req.query.offset as string) || 0, 0), 365);
   const accountId = req.query.account_id as string | undefined;
-  const overview = store.getAnalyticsOverview(days, accountId);
+  const overview = store.getAnalyticsOverview(days, accountId, offset);
   res.json(overview);
 });
 

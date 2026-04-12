@@ -176,7 +176,7 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       description: "一鍵完成：趨勢 → 研究 → 圖卡 → 發文（全自動）",
       mode: "send",
       prompt:
-        '執行完整 7 步驟內容產線（按照 threads-viral-agent skill 的流程，包含圖卡生成、curl 上傳 catbox.moe、python3 scripts/threads_api.py 發布）。geo="TW"，全部 20 來源。開始！',
+        '執行完整 7 步驟內容產線（按照 threads-viral-agent skill 的流程，包含圖卡生成、curl 上傳 catbox.moe 取得公開圖片 URL、使用 publish_to_threads MCP 工具發布）。geo="TW"，全部 20 來源。開始！',
     },
     {
       icon: "🎯",
@@ -184,7 +184,7 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       description: "主題 → 研究 → 圖卡 → 發文",
       mode: "fill",
       prompt:
-        "針對以下主題執行 threads-viral-agent skill 的完整 7 步驟產線（跳過 Step 1 趨勢探索，直接從 Step 2 讀原文開始）。包含圖卡生成、curl 上傳 catbox.moe、python3 scripts/threads_api.py 發布。\n\n主題：",
+        "針對以下主題執行 threads-viral-agent skill 的完整 7 步驟產線（跳過 Step 1 趨勢探索，直接從 Step 2 讀原文開始）。包含圖卡生成、curl 上傳 catbox.moe 取得圖片 URL、使用 publish_to_threads MCP 工具發布。\n\n主題：",
       hint: "輸入主題，例如：Claude Code 新功能、AI Agent 趨勢...",
     },
     {
@@ -193,7 +193,7 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       description: "主題 → 研究 → 圖卡 + 簡報 + Podcast → 發文",
       mode: "fill",
       prompt:
-        "針對以下主題執行 threads-viral-agent skill 的完整 7 步驟產線 + 多媒體生成（跳過 Step 1）。Step 4e 生成 slides 圖卡 + podcast 音頻。全部用 curl 上傳 catbox.moe 取得公開 URL，用 python3 scripts/threads_api.py 發布（支援 --carousel --image --link-comment）。\n\n主題：",
+        "針對以下主題執行 threads-viral-agent skill 的完整 7 步驟產線 + 多媒體生成（跳過 Step 1）。Step 4e 生成 slides 圖卡 + podcast 音頻。圖片用 curl 上傳 catbox.moe 取得公開 URL，使用 publish_to_threads MCP 工具發布（支援 imageUrl、carouselUrls、linkComment 參數）。\n\n主題：",
       hint: "輸入主題，例如：AI 程式碼助手比較...",
     },
   ],
@@ -204,7 +204,7 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       description: "One click: Trends → Research → Visual → Publish (fully automatic)",
       mode: "send",
       prompt:
-        'Run the full 7-step pipeline following the threads-viral-agent skill (including image generation, curl upload to catbox.moe, and python3 scripts/threads_api.py for publishing). geo="US", all 20 sources. Go!',
+        'Run the full 7-step pipeline following the threads-viral-agent skill (including image generation, curl upload to catbox.moe for image URL, and publish_to_threads MCP tool for publishing). geo="US", all 20 sources. Go!',
     },
     {
       icon: "🎯",
@@ -212,7 +212,7 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       description: "Topic → Research → Visual → Publish",
       mode: "fill",
       prompt:
-        "Run the threads-viral-agent skill's full 7-step pipeline for this topic (skip Step 1, start from Step 2 read sources). Include image generation, curl upload to catbox.moe, and python3 scripts/threads_api.py for publishing.\n\nTopic: ",
+        "Run the threads-viral-agent skill's full 7-step pipeline for this topic (skip Step 1, start from Step 2 read sources). Include image generation, curl upload to catbox.moe for image URL, and publish_to_threads MCP tool for publishing.\n\nTopic: ",
       hint: "Enter a topic, e.g. Claude Code new features, AI Agent trends...",
     },
     {
@@ -221,7 +221,7 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       description: "Topic → Research → Visual + Slides + Podcast → Publish",
       mode: "fill",
       prompt:
-        "Run the threads-viral-agent skill's full 7-step pipeline + multimedia for this topic (skip Step 1). Step 4e: generate slides + podcast. Upload all via curl to catbox.moe, publish via python3 scripts/threads_api.py (supports --carousel --image --link-comment).\n\nTopic: ",
+        "Run the threads-viral-agent skill's full 7-step pipeline + multimedia for this topic (skip Step 1). Step 4e: generate slides + podcast. Upload images via curl to catbox.moe for public URLs, then publish via publish_to_threads MCP tool (supports imageUrl, carouselUrls, linkComment).\n\nTopic: ",
       hint: "Enter a topic, e.g. AI coding assistants comparison...",
     },
   ],
@@ -232,7 +232,7 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       description: "ワンクリック：トレンド → 調査 → 図解 → 投稿（全自動）",
       mode: "send",
       prompt:
-        'threads-viral-agent skillのフル7ステップパイプライン実行（図解生成、curl catbox.moeアップロード、python3 scripts/threads_api.py投稿含む）。geo="JP"、全20ソース。開始！',
+        'threads-viral-agent skillのフル7ステップパイプライン実行（図解生成、curl catbox.moeアップロードで画像URL取得、publish_to_threads MCPツールで投稿）。geo="JP"、全20ソース。開始！',
     },
     {
       icon: "🎯",
@@ -240,7 +240,7 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       description: "トピック → 調査 → 図解 → 投稿",
       mode: "fill",
       prompt:
-        "このトピックでthreads-viral-agent skillのフル7ステップパイプライン実行（Step 1スキップ、Step 2原文読解から開始）。図解生成、curl catbox.moeアップロード、python3 scripts/threads_api.py投稿含む。\n\nトピック：",
+        "このトピックでthreads-viral-agent skillのフル7ステップパイプライン実行（Step 1スキップ、Step 2原文読解から開始）。図解生成、curl catbox.moeアップロードで画像URL取得、publish_to_threads MCPツールで投稿。\n\nトピック：",
       hint: "トピックを入力、例：Claude Codeの新機能、AIエージェントのトレンド...",
     },
     {
@@ -249,7 +249,7 @@ const PIPELINE_ACTIONS: Record<Language, PipelineAction[]> = {
       description: "トピック → 調査 → 図解 + スライド + Podcast → 投稿",
       mode: "fill",
       prompt:
-        "このトピックでthreads-viral-agent skillのフル7ステップ + マルチメディアパイプライン実行（Step 1スキップ）。Step 4e: slides + podcast生成。全てcurl catbox.moeアップロード、python3 scripts/threads_api.py投稿（--carousel --image --link-comment対応）。\n\nトピック：",
+        "このトピックでthreads-viral-agent skillのフル7ステップ + マルチメディアパイプライン実行（Step 1スキップ）。Step 4e: slides + podcast生成。curl catbox.moeアップロードで画像URLを取得し、publish_to_threads MCPツールで投稿（imageUrl、carouselUrls、linkComment対応）。\n\nトピック：",
       hint: "トピックを入力、例：AIコーディングアシスタント比較...",
     },
   ],

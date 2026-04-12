@@ -70,6 +70,10 @@ const T = {
     bottomPerformer: "低效",
     insightsUpdated: "更新於",
     insightsNever: "未取得數據",
+    publishDraft: "發布",
+    discardDraft: "丟棄",
+    publishing: "發布中...",
+    discarding: "丟棄中...",
   },
   en: {
     title: "Posts Management",
@@ -106,6 +110,10 @@ const T = {
     bottomPerformer: "Low",
     insightsUpdated: "Updated",
     insightsNever: "Never fetched",
+    publishDraft: "Publish",
+    discardDraft: "Discard",
+    publishing: "Publishing...",
+    discarding: "Discarding...",
   },
   ja: {
     title: "投稿管理",
@@ -142,6 +150,10 @@ const T = {
     bottomPerformer: "低調",
     insightsUpdated: "更新",
     insightsNever: "未取得",
+    publishDraft: "公開",
+    discardDraft: "破棄",
+    publishing: "公開中...",
+    discarding: "破棄中...",
   },
 };
 
@@ -184,6 +196,8 @@ export function AccountPostsPage({
   const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [actioningPostId, setActioningPostId] = useState<string | null>(null);
+  const [actionType, setActionType] = useState<"publish" | "discard" | null>(null);
 
   const fetchPosts = useCallback(async () => {
     setLoading(true);
@@ -325,6 +339,36 @@ export function AccountPostsPage({
     }
     await fetchPosts();
     setRefreshing(false);
+  };
+
+  const handlePublishDraft = async (postId: string) => {
+    setActioningPostId(postId);
+    setActionType("publish");
+    try {
+      await fetch("/api/publish/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [postId] }),
+      });
+      await fetchPosts();
+    } catch {
+      /* ignore */
+    }
+    setActioningPostId(null);
+    setActionType(null);
+  };
+
+  const handleDiscardDraft = async (postId: string) => {
+    setActioningPostId(postId);
+    setActionType("discard");
+    try {
+      await fetch(`/api/publish/${postId}/discard`, { method: "POST" });
+      await fetchPosts();
+    } catch {
+      /* ignore */
+    }
+    setActioningPostId(null);
+    setActionType(null);
   };
 
   const statusBadge = (status: string) => {
@@ -597,16 +641,40 @@ export function AccountPostsPage({
                   </span>
                 )}
 
-                {post.post_url && (
-                  <a
-                    href={post.post_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-blue-500 hover:text-blue-400 transition-colors"
-                  >
-                    {t.viewPost} &rarr;
-                  </a>
-                )}
+                <div className="flex items-center gap-2">
+                  {post.post_url && (
+                    <a
+                      href={post.post_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-500 hover:text-blue-400 transition-colors"
+                    >
+                      {t.viewPost} &rarr;
+                    </a>
+                  )}
+                  {post.status === "draft" && (
+                    <>
+                      <button
+                        onClick={() => handlePublishDraft(post.id)}
+                        disabled={actioningPostId === post.id}
+                        className="text-xs px-2.5 py-1 rounded bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white transition-colors"
+                      >
+                        {actioningPostId === post.id && actionType === "publish"
+                          ? t.publishing
+                          : t.publishDraft}
+                      </button>
+                      <button
+                        onClick={() => handleDiscardDraft(post.id)}
+                        disabled={actioningPostId === post.id}
+                        className="text-xs px-2.5 py-1 rounded bg-gray-600 hover:bg-gray-500 disabled:opacity-50 text-white transition-colors"
+                      >
+                        {actioningPostId === post.id && actionType === "discard"
+                          ? t.discarding
+                          : t.discardDraft}
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           ))

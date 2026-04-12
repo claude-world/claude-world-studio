@@ -751,17 +751,28 @@ export const store = {
   },
 
   // Analytics
-  getAnalyticsOverview(days = 30, accountId?: string) {
-    const cacheKey = `analytics_${days}_${accountId ?? "all"}`;
+  getAnalyticsOverview(days = 30, accountId?: string, offset = 0) {
+    const cacheKey = `analytics_${days}_${offset}_${accountId ?? "all"}`;
     return getCached(cacheKey, () => {
-      const since = new Date(Date.now() - days * 86400000)
-        .toISOString()
-        .replace("T", " ")
-        .slice(0, 19);
-      const baseWhere = accountId
-        ? `WHERE p.created_at >= ? AND p.account = ?`
-        : `WHERE p.created_at >= ?`;
-      const params = accountId ? [since, accountId] : [since];
+      const now = Date.now();
+      const endMs = now - offset * 86400000;
+      const startMs = endMs - days * 86400000;
+      const since = new Date(startMs).toISOString().replace("T", " ").slice(0, 19);
+      const until =
+        offset > 0 ? new Date(endMs).toISOString().replace("T", " ").slice(0, 19) : null;
+
+      // Build WHERE conditions dynamically
+      const conditions: string[] = [`p.created_at >= ?`];
+      const params: (string | number)[] = [since];
+      if (until) {
+        conditions.push(`p.created_at < ?`);
+        params.push(until);
+      }
+      if (accountId) {
+        conditions.push(`p.account = ?`);
+        params.push(accountId);
+      }
+      const baseWhere = `WHERE ${conditions.join(" AND ")}`;
 
       const stats = db
         .prepare(
