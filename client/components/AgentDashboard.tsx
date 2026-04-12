@@ -787,7 +787,7 @@ export function AgentDashboard({ onClose, language = "en" }: AgentDashboardProps
   ];
 
   return (
-    <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-950">
+    <div className="flex flex-col w-full h-full bg-gray-50 dark:bg-gray-950">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
         <div className="flex items-center gap-3">
