@@ -209,6 +209,16 @@ router.post("/memories", (req, res) => {
     res.status(400).json({ error: "content is required" });
     return;
   }
+  if (content.length > 10000) {
+    res.status(400).json({ error: "content too long (max 10000 chars)" });
+    return;
+  }
+  if (memoryType !== undefined && !VALID_MEMORY_TYPES.includes(memoryType as AgentMemoryType)) {
+    res
+      .status(400)
+      .json({ error: `Invalid memoryType: must be one of ${VALID_MEMORY_TYPES.join(", ")}` });
+    return;
+  }
   const memory = memoryService.saveMemory({ content, goalId, accountId, tags, memoryType });
   res.status(201).json(memory);
 });
@@ -391,8 +401,9 @@ router.post("/matrix-run", async (req, res) => {
     res.status(400).json({ error: "description is required" });
     return;
   }
-  if (description.length > 2000) {
-    res.status(400).json({ error: "description too long (max 2000 chars)" });
+  // Cap BEFORE adding the "[Matrix] " prefix (9 chars) to keep stored description ≤ 2000
+  if (description.length > 1991) {
+    res.status(400).json({ error: "description too long (max 1991 chars for matrix-run)" });
     return;
   }
 

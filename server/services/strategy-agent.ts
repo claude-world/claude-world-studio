@@ -54,7 +54,7 @@ class StrategyAgent {
     days?: number;
     includeCalendar?: boolean;
   }): StrategyReport {
-    const days = Math.min(params.days ?? 30, 365);
+    const days = Math.max(1, Math.min(params.days ?? 30, 365));
 
     const overview = store.getAnalyticsOverview(days, params.accountId);
     const contentAnalysis = store.getContentAnalysis(days, params.accountId);

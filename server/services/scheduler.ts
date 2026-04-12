@@ -282,6 +282,7 @@ export class TaskScheduler {
     const pastMemories = memoryService.searchMemory(task.name, {
       accountId: task.account_id,
       limit: 5,
+      skipTouch: true, // automated scheduler call — don't inflate access_count
     });
     const pastLessons =
       pastMemories.length > 0

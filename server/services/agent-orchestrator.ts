@@ -119,12 +119,22 @@ class AgentOrchestrator extends EventEmitter {
     return true;
   }
 
-  /** Resume a paused goal */
+  /** Resume a paused goal — re-launches the state machine from the start */
   resumeGoal(goalId: string): boolean {
     const run = this.runs.get(goalId);
     if (!run || run.state !== "paused") return false;
+    const goal = store.getGoal(goalId);
+    if (!goal) return false;
     this.transition(run, "executing");
     store.updateGoalStatus(goalId, "active");
+    // Re-launch the state machine — it was exited at the yield-point guard when paused.
+    this.executeStateMachine(run, goal.account_id ?? undefined).catch((err) => {
+      logger.error("Orchestrator", `Goal ${goalId} fatal error on resume: ${err.message}`);
+      if ((run.state as string) !== "complete") {
+        this.transition(run, "failed");
+        store.updateGoalStatus(goalId, "failed");
+      }
+    });
     return true;
   }
 

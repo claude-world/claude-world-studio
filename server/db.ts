@@ -65,6 +65,9 @@ const db = new Database(DB_PATH);
 
 // Enable WAL mode for better concurrent read performance
 db.pragma("journal_mode = WAL");
+// Explicitly enforce FK constraints. better-sqlite3 v12 enables this by default,
+// but we set it explicitly so the behaviour is independent of library version.
+db.pragma("foreign_keys = ON");
 
 /**
  * Run a function inside a SQLite transaction.
@@ -273,7 +276,14 @@ db.exec(`
   CREATE TRIGGER IF NOT EXISTS agent_memories_ad AFTER DELETE ON agent_memories BEGIN
     INSERT INTO agent_memories_fts(agent_memories_fts, rowid, content, tags) VALUES ('delete', old.rowid, old.content, COALESCE(old.tags, ''));
   END;
-  CREATE TRIGGER IF NOT EXISTS agent_memories_au AFTER UPDATE ON agent_memories BEGIN
+`);
+// Recreate the AU trigger with a WHEN condition so FTS5 reindexing only fires
+// when searchable content actually changes — touchMemory (access_count / last_accessed_at
+// updates) no longer triggers a redundant FTS5 delete+reinsert.
+db.exec(`DROP TRIGGER IF EXISTS agent_memories_au`);
+db.exec(`
+  CREATE TRIGGER agent_memories_au AFTER UPDATE ON agent_memories
+  WHEN COALESCE(old.content,'') != COALESCE(new.content,'') OR COALESCE(old.tags,'') != COALESCE(new.tags,'') BEGIN
     INSERT INTO agent_memories_fts(agent_memories_fts, rowid, content, tags) VALUES ('delete', old.rowid, old.content, COALESCE(old.tags, ''));
     INSERT INTO agent_memories_fts(rowid, content, tags) VALUES (new.rowid, new.content, COALESCE(new.tags, ''));
   END;

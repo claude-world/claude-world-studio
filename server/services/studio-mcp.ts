@@ -11,7 +11,7 @@ const publishTool = tool(
   "publish_to_threads",
   "Publish content to Threads via Graph API. Quality gate: score >= 70 required. Supports: text, image, video, carousel (2-20 images/videos), poll, link-comment, topic-tag.",
   {
-    text: z.string().describe("Post text content (max 500 chars)"),
+    text: z.string().max(500).describe("Post text content (max 500 chars)"),
     account_id: z.string().describe("Account ID from Social Accounts table"),
     score: z
       .number()
@@ -42,7 +42,11 @@ const publishTool = tool(
       .optional()
       .describe("Who can reply: everyone|accounts_you_follow|mentioned_only"),
     tag: z.string().optional().describe("Topic tag (no # prefix, one per post)"),
-    alt_text: z.string().optional().describe("Image alt text for accessibility (max 1000 chars)"),
+    alt_text: z
+      .string()
+      .max(1000)
+      .optional()
+      .describe("Image alt text for accessibility (max 1000 chars)"),
     link_comment: z
       .string()
       .optional()
