@@ -2,6 +2,7 @@ import * as cron from "node-cron";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { buildMcpServers, getSettings } from "../mcp-config.js";
 import { createStudioMcpServer } from "./studio-mcp.js";
+import { memoryService } from "./memory-service.js";
 import store from "../db.js";
 import { logger } from "../logger.js";
 import type {
@@ -35,7 +36,11 @@ function resolveTemplate(template: string, account: SocialAccount, task: Schedul
 // Task-specific system prompt (streamlined for unattended execution)
 // ---------------------------------------------------------------------------
 
-function buildTaskSystemPrompt(account: SocialAccount, task: ScheduledTask): string {
+function buildTaskSystemPrompt(
+  account: SocialAccount,
+  task: ScheduledTask,
+  pastLessons?: string
+): string {
   const settings = getSettings();
   const lang = (settings.language || "zh-TW") as Language;
 
@@ -46,8 +51,12 @@ function buildTaskSystemPrompt(account: SocialAccount, task: ScheduledTask): str
     ja: "すべてのコンテンツを日本語で作成してください。",
   };
 
-  return `${LANG_RULES[lang]}
+  const pastLessonsBlock = pastLessons
+    ? `\n## Past Lessons (from memory)\n${pastLessons}\n\nApply these lessons to improve your output.\n`
+    : "";
 
+  return `${LANG_RULES[lang]}
+${pastLessonsBlock}
 You are an automated content pipeline executing a scheduled task. Work autonomously — no user interaction.
 
 ## MCP Tools Available
@@ -269,8 +278,25 @@ export class TaskScheduler {
       `Starting execution ${execution.id} for task "${task.name}" (${triggeredBy})`
     );
 
+    // Load past memories for this task to inject as "Past Lessons"
+    const pastMemories = memoryService.searchMemory(task.name, {
+      accountId: task.account_id,
+      limit: 5,
+    });
+    const pastLessons =
+      pastMemories.length > 0
+        ? pastMemories.map((m) => `[${m.memory_type}] ${m.content}`).join("\n")
+        : undefined;
+
+    if (pastLessons) {
+      logger.info(
+        "Scheduler",
+        `Task "${task.name}": loaded ${pastMemories.length} past memories for context`
+      );
+    }
+
     try {
-      const result = await this.runAgentSession(prompt, account, task);
+      const result = await this.runAgentSession(prompt, account, task, pastLessons);
       const durationMs = Date.now() - startTime;
 
       const taskResult = parseTaskResult(result.fullOutput);
@@ -319,6 +345,15 @@ export class TaskScheduler {
         duration_ms: durationMs,
         publish_record_id: publishRecordId,
         error: !taskResult ? "No valid TASK_RESULT block in agent output" : undefined,
+      });
+
+      // Save outcome as memory for future self-improvement
+      const memType = status === "failed" || status === "rejected" ? "failure" : "success";
+      memoryService.saveMemory({
+        accountId: task.account_id,
+        content: `Task "${task.name}" ${status}: score ${score ?? "n/a"}. Topic: ${taskResult?.topic || "unknown"}. Duration: ${Math.round(durationMs / 1000)}s.`,
+        tags: ["scheduler", status, task.name],
+        memoryType: memType,
       });
 
       return store.getExecution(execution.id) as TaskExecution;
@@ -373,7 +408,8 @@ export class TaskScheduler {
   private async runAgentSession(
     prompt: string,
     account: SocialAccount,
-    task: ScheduledTask
+    task: ScheduledTask,
+    pastLessons?: string
   ): Promise<{ fullOutput: string; costUsd: number | null }> {
     const settings = getSettings();
     const mcpServers = buildMcpServers(settings);
@@ -394,7 +430,7 @@ export class TaskScheduler {
       abortController.abort();
     }, task.timeout_ms);
 
-    const systemPrompt = buildTaskSystemPrompt(account, task);
+    const systemPrompt = buildTaskSystemPrompt(account, task, pastLessons);
 
     try {
       let fullOutput = "";

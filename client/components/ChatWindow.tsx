@@ -7,7 +7,7 @@ import type { Language } from "../App";
 
 interface Message {
   id: string;
-  role: "user" | "assistant" | "tool_use" | "tool_result" | "result";
+  role: "user" | "assistant" | "tool_use" | "tool_result" | "result" | "reflection";
   content: string | null;
   timestamp?: string;
   created_at?: string;
@@ -18,6 +18,7 @@ interface Message {
   toolId?: string;
   tool_id?: string;
   cost_usd?: number;
+  reflectionId?: string;
 }
 
 interface SocialAccount {
@@ -656,6 +657,80 @@ function ToolResultBlock({
   );
 }
 
+function ReflectionBlock({ message }: { message: Message }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const content = message.content || "";
+
+  // Extract bullet points from improvement notes if present
+  const lines = content.split("\n").filter((l) => l.trim());
+  const preview = lines[0]
+    ? lines[0].slice(0, 100) + (lines[0].length > 100 ? "…" : "")
+    : content.slice(0, 80);
+
+  return (
+    <div className="my-1 mx-1">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setIsExpanded(!isExpanded)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setIsExpanded(!isExpanded);
+          }
+        }}
+        className="flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 cursor-pointer px-2 py-1 rounded border border-amber-200 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-900/20 transition-colors"
+        aria-expanded={isExpanded}
+      >
+        <svg
+          className="w-3 h-3 shrink-0"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+          />
+        </svg>
+        <span className="font-medium">self-reflect</span>
+        {!isExpanded && (
+          <span className="text-amber-500 dark:text-amber-400 truncate max-w-xs">{preview}</span>
+        )}
+        <svg
+          className={`w-3 h-3 ml-auto shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+      </div>
+      {isExpanded && (
+        <div className="mt-1 px-2 py-2 text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded">
+          {lines.length > 0 ? (
+            <ul className="space-y-0.5">
+              {lines.map((line, i) => (
+                <li key={i} className="flex items-start gap-1">
+                  <span className="shrink-0 mt-0.5">•</span>
+                  <span className="whitespace-pre-wrap break-words">
+                    {line.replace(/^[•\-*]\s*/, "")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <span className="whitespace-pre-wrap break-words">{content}</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TypingIndicator({
   language,
   cliLabel = "Claude",
@@ -1114,6 +1189,9 @@ export function ChatWindow({
             }
             if (msg.role === "result") {
               return <ResultBlock key={msg.id} message={msg} />;
+            }
+            if (msg.role === "reflection") {
+              return <ReflectionBlock key={msg.id} message={msg} />;
             }
             if (msg.role === "user" || msg.role === "assistant") {
               return (

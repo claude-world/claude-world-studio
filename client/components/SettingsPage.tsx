@@ -62,6 +62,13 @@ const T = {
     minOverallScore: "最低總分門檻",
     minConversationScore: "最低對話持久性門檻",
     qualityGates: "品質門檻",
+    agenticMode: "Agentic 模式",
+    agenticStandard: "標準",
+    agenticStandardDesc: "單次工具呼叫，無反思循環（v1.x 相容）",
+    agenticEnhanced: "增強（預設）",
+    agenticEnhancedDesc: "ReAct + Reflexion 循環，自動反思工具結果",
+    agenticFull: "完整",
+    agenticFullDesc: "目標追蹤 + Reflexion + 長期記憶，適合多步驟任務",
     notInstalled: "未安裝",
     primaryCantDisable: "主要 CLI 無法停用",
     primary: "主要",
@@ -131,6 +138,13 @@ const T = {
     minOverallScore: "Min overall score",
     minConversationScore: "Min conversation durability",
     qualityGates: "Quality Gates",
+    agenticMode: "Agentic Mode",
+    agenticStandard: "Standard",
+    agenticStandardDesc: "Single tool calls, no reflection loop (v1.x compatible)",
+    agenticEnhanced: "Enhanced (default)",
+    agenticEnhancedDesc: "ReAct + Reflexion loop — auto-reflects on tool results",
+    agenticFull: "Full",
+    agenticFullDesc: "Goal tracking + Reflexion + long-term memory — best for multi-step tasks",
     notInstalled: "Not installed",
     primaryCantDisable: "Primary CLI cannot be disabled",
     primary: "Primary",
@@ -200,6 +214,13 @@ const T = {
     minOverallScore: "最低総合スコア",
     minConversationScore: "最低会話持続性スコア",
     qualityGates: "品質ゲート",
+    agenticMode: "エージェントモード",
+    agenticStandard: "標準",
+    agenticStandardDesc: "単一ツール呼び出し、反省ループなし（v1.x 互換）",
+    agenticEnhanced: "強化（デフォルト）",
+    agenticEnhancedDesc: "ReAct + Reflexion ループ — ツール結果を自動反省",
+    agenticFull: "フル",
+    agenticFullDesc: "ゴール追跡 + Reflexion + 長期記憶 — 複数ステップタスクに最適",
     notInstalled: "未インストール",
     primaryCantDisable: "プライマリ CLI は無効にできません",
     primary: "プライマリ",
@@ -437,6 +458,7 @@ export function SettingsPage({
   const [cliPrimary, setCliPrimary] = useState("");
   const hasSavedCliConfig = useRef(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const [agenticLevel, setAgenticLevel] = useState<"standard" | "enhanced" | "full">("enhanced");
 
   useEffect(() => {
     if (!isVisible) return;
@@ -450,6 +472,7 @@ export function SettingsPage({
         setSettings(settingsData);
         if (settingsData.cliRoutingMode) setCliRoutingMode(settingsData.cliRoutingMode);
         if (settingsData.cliPrimary) setCliPrimary(settingsData.cliPrimary);
+        if (settingsData.agenticLevel) setAgenticLevel(settingsData.agenticLevel);
         if (settingsData.cliEnabledList) {
           setCliEnabledSet(new Set(settingsData.cliEnabledList.split(",").filter(Boolean)));
           hasSavedCliConfig.current = true;
@@ -591,6 +614,7 @@ export function SettingsPage({
         cliRoutingMode,
         cliPrimary,
         cliEnabledList: [...cliEnabledSet].join(","),
+        agenticLevel,
       };
       const res = await fetch("/api/settings", {
         method: "PUT",
@@ -1189,6 +1213,46 @@ export function SettingsPage({
             )}
           </div>
         ))}
+
+        {/* Agentic Mode */}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wider">
+            {t.agenticMode}
+          </h3>
+          <div className="space-y-2">
+            {(
+              [
+                { value: "standard", label: t.agenticStandard, desc: t.agenticStandardDesc },
+                { value: "enhanced", label: t.agenticEnhanced, desc: t.agenticEnhancedDesc },
+                { value: "full", label: t.agenticFull, desc: t.agenticFullDesc },
+              ] as const
+            ).map((opt) => (
+              <label
+                key={opt.value}
+                className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                  agenticLevel === opt.value
+                    ? "border-purple-300 bg-purple-50/50 dark:border-purple-500 dark:bg-purple-900/30"
+                    : "border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="agenticLevel"
+                  value={opt.value}
+                  checked={agenticLevel === opt.value}
+                  onChange={() => setAgenticLevel(opt.value)}
+                  className="mt-0.5 text-purple-600"
+                />
+                <div>
+                  <div className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                    {opt.label}
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{opt.desc}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
 
         {/* Save */}
         <div className="flex items-center gap-3">

@@ -5,6 +5,8 @@ interface ToolUseBlockProps {
   toolInput: Record<string, unknown>;
   toolId: string;
   onPreviewFile?: (absolutePath: string) => void;
+  /** Optional improvement notes from a following reflection message */
+  reflectionContent?: string;
 }
 
 // Color mapping for MCP server tools
@@ -110,10 +112,23 @@ function isPreviewable(filePath: string): boolean {
   return PREVIEWABLE_EXTS.includes(ext);
 }
 
-export function ToolUseBlock({ toolName, toolInput, toolId, onPreviewFile }: ToolUseBlockProps) {
+export function ToolUseBlock({
+  toolName,
+  toolInput,
+  toolId,
+  onPreviewFile,
+  reflectionContent,
+}: ToolUseBlockProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const colorClass = getToolColor(toolName);
   const badge = getToolBadge(toolName);
+
+  // Agentic studio tools (v2.0) — show a subtle indicator
+  const isAgenticTool =
+    toolName === "mcp__studio__create_goal_session" ||
+    toolName === "mcp__studio__run_reflection_loop" ||
+    toolName === "mcp__studio__search_memory" ||
+    toolName === "mcp__studio__generate_strategy_from_analytics";
 
   const filePath = toolInput.file_path as string | undefined;
   const canPreview =
@@ -144,6 +159,11 @@ export function ToolUseBlock({ toolName, toolInput, toolId, onPreviewFile }: Too
           {badge && (
             <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${badge.color}`}>
               {badge.label}
+            </span>
+          )}
+          {isAgenticTool && (
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-400">
+              agent
             </span>
           )}
           <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase shrink-0">

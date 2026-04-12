@@ -4,8 +4,9 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { buildMcpServers, getSettings } from "./mcp-config.js";
 import { createStudioMcpServer } from "./services/studio-mcp.js";
+import { memoryService } from "./services/memory-service.js";
 import store from "./db.js";
-import type { Language, SocialAccount } from "./types.js";
+import type { AgenticMode, Language, SocialAccount } from "./types.js";
 import type { ICliSession } from "./cli-session.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -44,6 +45,52 @@ function escMd(s: string): string {
   return s.replace(/[|\\`*_{}[\]()#+\-!~>]/g, "\\$&").replace(/\n/g, " ");
 }
 
+/** Map settings agenticLevel → AgenticMode */
+export function agenticLevelToMode(level: "standard" | "enhanced" | "full"): AgenticMode {
+  if (level === "full") return "goal";
+  if (level === "enhanced") return "reflexion";
+  return "standard";
+}
+
+/** Additional system prompt instructions injected per agentic mode */
+function buildAgenticInstructions(mode: AgenticMode): string {
+  if (mode === "standard") return "";
+
+  if (mode === "react") {
+    return `
+## ReAct Mode — Think Before Acting
+For every non-trivial task, follow this loop:
+1. **Thought**: State what you're trying to accomplish and why this tool/action is the right choice.
+2. **Action**: Execute the tool call.
+3. **Observation**: After the result, note what you learned and whether it advanced the goal.
+Keep Thought sections concise (1-2 sentences). Skip for simple lookups.`;
+  }
+
+  if (mode === "reflexion") {
+    return `
+## Reflexion Mode — Self-Evaluate After Every Tool Result
+After receiving each tool result, briefly self-evaluate:
+- Did this tool call advance the goal? (yes/partially/no)
+- Quality rating 1-10 for this step.
+- What would you do differently?
+Use \`run_reflection_loop\` Studio MCP tool when you receive a score or complete a major step.
+If score < ${70}, call \`run_reflection_loop\` before attempting another publish.`;
+  }
+
+  if (mode === "goal") {
+    return `
+## Goal Mode — Structured Multi-Step Execution
+1. **At session start**: Call \`create_goal_session\` with a clear description of what you aim to accomplish.
+2. **Track sub-tasks**: Mentally decompose the goal into steps and work through them in order.
+3. **Self-reflect**: After each significant action, call \`run_reflection_loop\` to log what worked.
+4. **Recall memory**: At the start, call \`search_memory\` to retrieve past lessons relevant to the current goal.
+5. **Learn**: Save key insights via \`run_reflection_loop\` so future sessions benefit.
+This structured approach raises pipeline success rates and average post scores over time.`;
+  }
+
+  return "";
+}
+
 function buildAccountsBlock(accounts: SocialAccount[]): string {
   if (accounts.length === 0) {
     return "No social accounts configured. User needs to add accounts in Settings first.";
@@ -78,10 +125,13 @@ export function buildSystemPrompt(
   language: Language,
   accounts: SocialAccount[],
   minOverall = 70,
-  minConversation = 55
+  minConversation = 55,
+  agenticMode: AgenticMode = "standard",
+  memoryBlock = ""
 ): string {
   const viralAgentSkill = loadViralAgentSkill();
-  return `${LANGUAGE_INSTRUCTIONS[language]}
+  const agenticInstructions = buildAgenticInstructions(agenticMode);
+  return `${LANGUAGE_INSTRUCTIONS[language]}${agenticInstructions}${memoryBlock}
 
 You are Claude World Studio assistant — an AI-powered content pipeline for trend discovery, deep research, and social publishing.
 
@@ -327,13 +377,24 @@ export class AgentSession implements ICliSession {
   private queryHandle: ReturnType<typeof query> | null = null;
   private outputIterator: AsyncIterator<any> | null = null;
   private abortController = new AbortController();
+  readonly agenticMode: AgenticMode;
+  private sessionId: string | undefined;
 
-  constructor(workspacePath?: string, language?: Language, resumeContext?: string) {
+  constructor(
+    workspacePath?: string,
+    language?: Language,
+    resumeContext?: string,
+    sessionId?: string
+  ) {
     const settings = getSettings();
     const mcpServers = buildMcpServers(settings);
     const cwd = workspacePath || settings.defaultWorkspace || process.cwd();
     const lang = language || settings.language || "zh-TW";
     const accounts = store.getAllAccounts();
+    this.sessionId = sessionId;
+
+    // Resolve agentic mode from settings
+    this.agenticMode = agenticLevelToMode(settings.agenticLevel || "enhanced");
 
     // In-process Studio MCP server (direct DB access, no env vars)
     const studioServer = createStudioMcpServer();
@@ -347,11 +408,17 @@ export class AgentSession implements ICliSession {
       allowedTools.push(`mcp__${name}`);
     }
 
+    // Load relevant long-term memories for context injection (reflexion/goal modes)
+    const memoryBlock =
+      this.agenticMode !== "standard" ? memoryService.buildMemoryBlock(undefined, 10) : "";
+
     let systemPrompt = buildSystemPrompt(
       lang,
       accounts,
       settings.minOverallScore,
-      settings.minConversationScore
+      settings.minConversationScore,
+      this.agenticMode,
+      memoryBlock
     );
 
     // Append conversation history for resumed sessions

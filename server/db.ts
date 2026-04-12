@@ -12,6 +12,13 @@ import type {
   TaskExecutionStatus,
   TaskTrigger,
   InsightsCache,
+  AgentGoal,
+  AgentGoalStatus,
+  AgentMemory,
+  AgentMemoryType,
+  AgentReflection,
+  ReflectionTrigger,
+  AgentWorkflow,
 } from "./types.js";
 
 import { existsSync, mkdirSync, copyFileSync } from "fs";
@@ -201,6 +208,92 @@ runMigration(`ALTER TABLE publish_history ADD COLUMN image_url TEXT`);
 runMigration(`ALTER TABLE publish_history ADD COLUMN link_comment TEXT`);
 runMigration(`ALTER TABLE publish_history ADD COLUMN source_url TEXT`);
 
+// Agentic tables (v2.0)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS agent_goals (
+    id TEXT PRIMARY KEY,
+    session_id TEXT REFERENCES sessions(id),
+    account_id TEXT REFERENCES social_accounts(id),
+    description TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    sub_tasks TEXT,
+    progress INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    completed_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS agent_memories (
+    id TEXT PRIMARY KEY,
+    goal_id TEXT REFERENCES agent_goals(id),
+    account_id TEXT REFERENCES social_accounts(id),
+    content TEXT NOT NULL,
+    tags TEXT,
+    memory_type TEXT NOT NULL DEFAULT 'general',
+    relevance_score REAL NOT NULL DEFAULT 1.0,
+    created_at TEXT DEFAULT (datetime('now')),
+    last_accessed_at TEXT,
+    access_count INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS agent_reflections (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    goal_id TEXT REFERENCES agent_goals(id),
+    trigger TEXT NOT NULL DEFAULT 'tool_result',
+    reflection_content TEXT NOT NULL,
+    improvement_notes TEXT,
+    score_before REAL,
+    score_after REAL,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+`);
+
+// FTS5 virtual table for memory full-text search
+db.exec(`
+  CREATE VIRTUAL TABLE IF NOT EXISTS agent_memories_fts
+  USING fts5(content, tags, content='agent_memories', content_rowid='rowid');
+`);
+
+// FTS5 sync triggers — keep virtual table in sync with agent_memories
+db.exec(`
+  CREATE TRIGGER IF NOT EXISTS agent_memories_ai AFTER INSERT ON agent_memories BEGIN
+    INSERT INTO agent_memories_fts(rowid, content, tags) VALUES (new.rowid, new.content, COALESCE(new.tags, ''));
+  END;
+  CREATE TRIGGER IF NOT EXISTS agent_memories_ad AFTER DELETE ON agent_memories BEGIN
+    INSERT INTO agent_memories_fts(agent_memories_fts, rowid, content, tags) VALUES ('delete', old.rowid, old.content, COALESCE(old.tags, ''));
+  END;
+  CREATE TRIGGER IF NOT EXISTS agent_memories_au AFTER UPDATE ON agent_memories BEGIN
+    INSERT INTO agent_memories_fts(agent_memories_fts, rowid, content, tags) VALUES ('delete', old.rowid, old.content, COALESCE(old.tags, ''));
+    INSERT INTO agent_memories_fts(rowid, content, tags) VALUES (new.rowid, new.content, COALESCE(new.tags, ''));
+  END;
+`);
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_agent_goals_session ON agent_goals(session_id);
+  CREATE INDEX IF NOT EXISTS idx_agent_goals_status ON agent_goals(status);
+  CREATE INDEX IF NOT EXISTS idx_agent_memories_account ON agent_memories(account_id);
+  CREATE INDEX IF NOT EXISTS idx_agent_memories_type ON agent_memories(memory_type);
+  CREATE INDEX IF NOT EXISTS idx_agent_reflections_session ON agent_reflections(session_id);
+`);
+
+// Workflow templates (Phase 2+3)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS agent_workflows (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    template TEXT NOT NULL,
+    account_id TEXT REFERENCES social_accounts(id),
+    tags TEXT,
+    is_public INTEGER NOT NULL DEFAULT 0,
+    run_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_agent_workflows_public ON agent_workflows(is_public);
+`);
+
 // Performance indices
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_social_accounts_platform ON social_accounts(platform);
@@ -370,6 +463,66 @@ const stmts = {
   ),
   markStaleExecutionsFailed: db.prepare(
     `UPDATE task_executions SET status = 'failed', error = 'Server restarted while execution was running', completed_at = datetime('now') WHERE status = 'running'`
+  ),
+
+  // Agent Goals
+  createGoal: db.prepare(
+    `INSERT INTO agent_goals (id, session_id, account_id, description, sub_tasks, progress) VALUES (?, ?, ?, ?, ?, 0)`
+  ),
+  getGoal: db.prepare(`SELECT * FROM agent_goals WHERE id = ?`),
+  getGoalsBySession: db.prepare(
+    `SELECT * FROM agent_goals WHERE session_id = ? ORDER BY created_at DESC`
+  ),
+  getGoalsByStatus: db.prepare(
+    `SELECT * FROM agent_goals WHERE status = ? ORDER BY created_at DESC LIMIT ?`
+  ),
+  updateGoalProgress: db.prepare(
+    `UPDATE agent_goals SET progress = ?, sub_tasks = ?, updated_at = datetime('now') WHERE id = ?`
+  ),
+  updateGoalStatus: db.prepare(
+    `UPDATE agent_goals SET status = ?, updated_at = datetime('now'), completed_at = CASE WHEN ? IN ('completed','failed') THEN datetime('now') ELSE NULL END WHERE id = ?`
+  ),
+  deleteGoal: db.prepare(`DELETE FROM agent_goals WHERE id = ?`),
+
+  // Agent Memories
+  createMemory: db.prepare(
+    `INSERT INTO agent_memories (id, goal_id, account_id, content, tags, memory_type, relevance_score) VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ),
+  getMemory: db.prepare(`SELECT * FROM agent_memories WHERE id = ?`),
+  getContextMemories: db.prepare(
+    `SELECT * FROM agent_memories WHERE (account_id = ? OR account_id IS NULL) ORDER BY access_count DESC, created_at DESC LIMIT ?`
+  ),
+  touchMemory: db.prepare(
+    `UPDATE agent_memories SET access_count = access_count + 1, last_accessed_at = datetime('now') WHERE id = ?`
+  ),
+  deleteMemory: db.prepare(`DELETE FROM agent_memories WHERE id = ?`),
+  deleteOldMemories: db.prepare(
+    `DELETE FROM agent_memories WHERE created_at < datetime('now', ?) AND access_count < 3`
+  ),
+
+  // Agent Workflows
+  createWorkflow: db.prepare(
+    `INSERT INTO agent_workflows (id, name, description, template, account_id, tags, is_public) VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ),
+  getWorkflow: db.prepare(`SELECT * FROM agent_workflows WHERE id = ?`),
+  getAllWorkflows: db.prepare(`SELECT * FROM agent_workflows ORDER BY created_at DESC LIMIT ?`),
+  getPublicWorkflows: db.prepare(
+    `SELECT * FROM agent_workflows WHERE is_public = 1 ORDER BY run_count DESC LIMIT ?`
+  ),
+  updateWorkflow: db.prepare(
+    `UPDATE agent_workflows SET name = ?, description = ?, template = ?, account_id = ?, tags = ?, is_public = ?, updated_at = datetime('now') WHERE id = ?`
+  ),
+  incrementWorkflowRunCount: db.prepare(
+    `UPDATE agent_workflows SET run_count = run_count + 1 WHERE id = ?`
+  ),
+  deleteWorkflow: db.prepare(`DELETE FROM agent_workflows WHERE id = ?`),
+
+  // Agent Reflections
+  createReflection: db.prepare(
+    `INSERT INTO agent_reflections (id, session_id, goal_id, trigger, reflection_content, improvement_notes, score_before, score_after) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ),
+  getReflectionsBySession: db.prepare(
+    `SELECT * FROM agent_reflections WHERE session_id = ? ORDER BY created_at DESC LIMIT ?`
   ),
 };
 
@@ -938,6 +1091,222 @@ export const store = {
         day_performance: dayPerformance,
       };
     });
+  },
+
+  // ── Agent Goals ────────────────────────────────────────────────────────────
+
+  createGoal(data: { sessionId?: string; accountId?: string; description: string }): AgentGoal {
+    const id = uuidv4();
+    stmts.createGoal.run(
+      id,
+      data.sessionId ?? null,
+      data.accountId ?? null,
+      data.description,
+      null
+    );
+    return stmts.getGoal.get(id) as AgentGoal;
+  },
+
+  getGoal(id: string): AgentGoal | undefined {
+    return stmts.getGoal.get(id) as AgentGoal | undefined;
+  },
+
+  getGoalsBySession(sessionId: string): AgentGoal[] {
+    return stmts.getGoalsBySession.all(sessionId) as AgentGoal[];
+  },
+
+  getGoalsByStatus(status: AgentGoalStatus, limit = 50): AgentGoal[] {
+    return stmts.getGoalsByStatus.all(status, limit) as AgentGoal[];
+  },
+
+  updateGoalProgress(id: string, progress: number, subTasks?: string | null) {
+    stmts.updateGoalProgress.run(progress, subTasks ?? null, id);
+  },
+
+  updateGoalStatus(id: string, status: AgentGoalStatus) {
+    stmts.updateGoalStatus.run(status, status, id);
+  },
+
+  deleteGoal(id: string): boolean {
+    return stmts.deleteGoal.run(id).changes > 0;
+  },
+
+  // ── Agent Memories ─────────────────────────────────────────────────────────
+
+  createMemory(data: {
+    goalId?: string;
+    accountId?: string;
+    content: string;
+    tags?: string[];
+    memoryType?: AgentMemoryType;
+    relevanceScore?: number;
+  }): AgentMemory {
+    const id = uuidv4();
+    stmts.createMemory.run(
+      id,
+      data.goalId ?? null,
+      data.accountId ?? null,
+      data.content,
+      data.tags ? JSON.stringify(data.tags) : null,
+      data.memoryType ?? "general",
+      data.relevanceScore ?? 1.0
+    );
+    return stmts.getMemory.get(id) as AgentMemory;
+  },
+
+  getMemory(id: string): AgentMemory | undefined {
+    return stmts.getMemory.get(id) as AgentMemory | undefined;
+  },
+
+  getContextMemories(accountId?: string, limit = 10): AgentMemory[] {
+    return stmts.getContextMemories.all(accountId ?? null, limit) as AgentMemory[];
+  },
+
+  searchMemories(
+    query: string,
+    options?: {
+      accountId?: string;
+      memoryType?: AgentMemoryType;
+      limit?: number;
+    }
+  ): AgentMemory[] {
+    const limit = options?.limit ?? 10;
+    // FTS5 MATCH search — returns rowid, then fetch full rows
+    let sql = `
+      SELECT m.* FROM agent_memories m
+      JOIN agent_memories_fts f ON m.rowid = f.rowid
+      WHERE agent_memories_fts MATCH ?
+    `;
+    const params: (string | number)[] = [query];
+    if (options?.accountId) {
+      sql += ` AND m.account_id = ?`;
+      params.push(options.accountId);
+    }
+    if (options?.memoryType) {
+      sql += ` AND m.memory_type = ?`;
+      params.push(options.memoryType);
+    }
+    sql += ` ORDER BY rank LIMIT ?`;
+    params.push(limit);
+    return db.prepare(sql).all(...params) as AgentMemory[];
+  },
+
+  touchMemory(id: string) {
+    stmts.touchMemory.run(id);
+  },
+
+  deleteMemory(id: string): boolean {
+    return stmts.deleteMemory.run(id).changes > 0;
+  },
+
+  cleanOldMemories(daysOld = 90): number {
+    const result = stmts.deleteOldMemories.run(`-${daysOld} days`);
+    return result.changes;
+  },
+
+  // ── Agent Reflections ──────────────────────────────────────────────────────
+
+  createReflection(data: {
+    sessionId: string;
+    goalId?: string;
+    trigger: ReflectionTrigger;
+    reflectionContent: string;
+    improvementNotes?: string;
+    scoreBefore?: number;
+    scoreAfter?: number;
+  }): AgentReflection {
+    const id = uuidv4();
+    stmts.createReflection.run(
+      id,
+      data.sessionId,
+      data.goalId ?? null,
+      data.trigger,
+      data.reflectionContent,
+      data.improvementNotes ?? null,
+      data.scoreBefore ?? null,
+      data.scoreAfter ?? null
+    );
+    return {
+      id,
+      session_id: data.sessionId,
+      goal_id: data.goalId ?? null,
+      trigger: data.trigger,
+      reflection_content: data.reflectionContent,
+      improvement_notes: data.improvementNotes ?? null,
+      score_before: data.scoreBefore ?? null,
+      score_after: data.scoreAfter ?? null,
+      created_at: new Date().toISOString(),
+    } as AgentReflection;
+  },
+
+  getReflectionsBySession(sessionId: string, limit = 20): AgentReflection[] {
+    return stmts.getReflectionsBySession.all(sessionId, limit) as AgentReflection[];
+  },
+
+  // ── Agent Workflows ────────────────────────────────────────────────────────
+
+  createWorkflow(data: {
+    name: string;
+    description?: string;
+    template: string;
+    accountId?: string;
+    tags?: string[];
+    isPublic?: boolean;
+  }): AgentWorkflow {
+    const id = uuidv4();
+    stmts.createWorkflow.run(
+      id,
+      data.name,
+      data.description ?? null,
+      data.template,
+      data.accountId ?? null,
+      data.tags ? JSON.stringify(data.tags) : null,
+      data.isPublic ? 1 : 0
+    );
+    return stmts.getWorkflow.get(id) as AgentWorkflow;
+  },
+
+  getWorkflow(id: string): AgentWorkflow | undefined {
+    return stmts.getWorkflow.get(id) as AgentWorkflow | undefined;
+  },
+
+  getAllWorkflows(limit = 100): AgentWorkflow[] {
+    return stmts.getAllWorkflows.all(limit) as AgentWorkflow[];
+  },
+
+  getPublicWorkflows(limit = 50): AgentWorkflow[] {
+    return stmts.getPublicWorkflows.all(limit) as AgentWorkflow[];
+  },
+
+  updateWorkflow(
+    id: string,
+    data: {
+      name: string;
+      description?: string;
+      template: string;
+      accountId?: string;
+      tags?: string[];
+      isPublic?: boolean;
+    }
+  ): boolean {
+    const result = stmts.updateWorkflow.run(
+      data.name,
+      data.description ?? null,
+      data.template,
+      data.accountId ?? null,
+      data.tags ? JSON.stringify(data.tags) : null,
+      data.isPublic ? 1 : 0,
+      id
+    );
+    return result.changes > 0;
+  },
+
+  incrementWorkflowRunCount(id: string) {
+    stmts.incrementWorkflowRunCount.run(id);
+  },
+
+  deleteWorkflow(id: string): boolean {
+    return stmts.deleteWorkflow.run(id).changes > 0;
   },
 };
 

@@ -16,6 +16,7 @@ import settingsRouter from "./routes/settings.js";
 import publishRouter from "./routes/publish.js";
 import accountsRouter from "./routes/accounts.js";
 import scheduledTasksRouter, { setScheduler } from "./routes/scheduled-tasks.js";
+import agentRouter from "./routes/agent.js";
 import { TaskScheduler } from "./services/scheduler.js";
 import { rateLimiter } from "./middleware/rate-limiter.js";
 import { logger } from "./logger.js";
@@ -65,6 +66,7 @@ app.use("/api/settings", settingsRouter);
 app.use("/api/publish", publishRouter);
 app.use("/api/accounts", accountsRouter);
 app.use("/api/scheduled-tasks", scheduledTasksRouter);
+app.use("/api/agent", agentRouter);
 
 // Diagnostics endpoints — exposes error ring buffer for debugging
 // (inspired by Claude Code's in-memory error log for bug reports)

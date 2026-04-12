@@ -41,6 +41,7 @@ export function getSettings(): Settings {
     defaultWorkspace: all.defaultWorkspace || process.env.DEFAULT_WORKSPACE || process.cwd(),
     minOverallScore: parseInt(all.minOverallScore as string) || 70,
     minConversationScore: parseInt(all.minConversationScore as string) || 55,
+    agenticLevel: (all.agenticLevel as Settings["agenticLevel"]) || "enhanced",
   };
 }
 

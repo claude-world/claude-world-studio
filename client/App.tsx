@@ -16,6 +16,7 @@ import { SocialAccountsPage } from "./components/SocialAccountsPage";
 import { ScheduledTasksPage } from "./components/ScheduledTasksPage";
 import { AccountPostsPage } from "./components/AccountPostsPage";
 import { TrafficDashboardPage } from "./components/TrafficDashboardPage";
+import { AgentDashboard } from "./components/AgentDashboard";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { apiGet, apiPost, apiPut, apiPatch, apiDelete } from "./hooks/useApi";
 import { LanguageProvider } from "./hooks/useLanguage";
@@ -24,7 +25,7 @@ export type Language = "zh-TW" | "en" | "ja";
 export type Theme = "light" | "dark" | "system";
 
 /** Active page — single state replaces 5 boolean flags (Claude Code pattern: single source of truth) */
-type Page = "chat" | "settings" | "social" | "scheduled" | "posts" | "traffic";
+type Page = "chat" | "settings" | "social" | "scheduled" | "posts" | "traffic" | "agent";
 
 interface Session {
   id: string;
@@ -36,7 +37,7 @@ interface Session {
 
 interface Message {
   id: string;
-  role: "user" | "assistant" | "tool_use" | "tool_result" | "result";
+  role: "user" | "assistant" | "tool_use" | "tool_result" | "result" | "reflection";
   content: string | null;
   created_at?: string;
   timestamp?: string;
@@ -47,6 +48,7 @@ interface Message {
   toolId?: string;
   tool_id?: string;
   cost_usd?: number;
+  reflectionId?: string;
 }
 
 /** Discriminated union for server→client WebSocket messages */
@@ -65,7 +67,8 @@ type ServerWSMessage =
   | { type: "tool_result"; toolId: string; content: string; sessionId: string }
   | { type: "result"; success: boolean; cost?: number; duration?: number; sessionId: string }
   | { type: "interrupted"; sessionId: string }
-  | { type: "error"; error: string; sessionId?: string };
+  | { type: "error"; error: string; sessionId?: string }
+  | { type: "reflection"; content: string; reflectionId: string; sessionId: string };
 
 function getWsUrl(): string {
   const proto = window.location.protocol === "https:" ? "wss" : "ws";
@@ -89,6 +92,7 @@ export default function App() {
   const showScheduled = activePage === "scheduled";
   const showAccountPosts = activePage === "posts";
   const showTrafficDashboard = activePage === "traffic";
+  const showAgentDashboard = activePage === "agent";
   const [showPublish, setShowPublish] = useState(false);
   const [previewFile, setPreviewFile] = useState<{
     relativePath: string;
@@ -272,6 +276,19 @@ export default function App() {
       case "error":
         console.error("Server error:", message.error);
         setIsLoading(false);
+        break;
+
+      case "reflection":
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `ref_${message.reflectionId || crypto.randomUUID()}`,
+            role: "reflection",
+            content: message.content,
+            reflectionId: message.reflectionId,
+            timestamp: new Date().toISOString(),
+          },
+        ]);
         break;
     }
   }, []);
@@ -467,6 +484,10 @@ export default function App() {
         setActivePage("traffic");
         setSidebarOpen(false);
       }}
+      onShowAgentDashboard={() => {
+        setActivePage("agent");
+        setSidebarOpen(false);
+      }}
       defaultWorkspace={defaultWorkspace}
       isConnected={isConnected}
       language={language}
@@ -540,6 +561,10 @@ export default function App() {
           ) : showTrafficDashboard ? (
             <ErrorBoundary name="TrafficDashboard">
               <TrafficDashboardPage onClose={() => setActivePage("chat")} language={language} />
+            </ErrorBoundary>
+          ) : showAgentDashboard ? (
+            <ErrorBoundary name="AgentDashboard">
+              <AgentDashboard onClose={() => setActivePage("chat")} language={language} />
             </ErrorBoundary>
           ) : (
             <ErrorBoundary name="Chat">
