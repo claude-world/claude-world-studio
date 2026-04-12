@@ -34,8 +34,10 @@ const app = express();
 const ALLOWED_ORIGINS = [
   `http://localhost:${PORT}`,
   `http://127.0.0.1:${PORT}`,
-  "http://localhost:5173", // Vite dev server
+  "http://localhost:5173", // Vite dev server (default port)
   "http://127.0.0.1:5173",
+  "http://localhost:5174", // Vite increments to 5174 when 5173 is in use
+  "http://127.0.0.1:5174",
 ];
 app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(express.json({ limit: "1mb" }));
