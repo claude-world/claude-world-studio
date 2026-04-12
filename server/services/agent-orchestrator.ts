@@ -16,7 +16,7 @@ import store from "../db.js";
 import { memoryService } from "./memory-service.js";
 import { registerCleanup } from "../cleanup-registry.js";
 import { logger } from "../logger.js";
-import type { OrchestratorGoalRun, OrchestratorState, AgentGoalStatus } from "../types.js";
+import type { OrchestratorGoalRun, OrchestratorState } from "../types.js";
 
 // Max age for in-memory run tracking before GC
 const RUN_TTL_MS = 72 * 60 * 60 * 1000; // 72 hours
