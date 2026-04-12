@@ -47,6 +47,12 @@ router.get("/", (_req, res) => {
     }
   }
 
+  // Guard: if the stored defaultWorkspace no longer exists on disk, clear it so
+  // the client doesn't send a stale path that causes POST /sessions to return 400.
+  if (merged.defaultWorkspace && !existsSync(merged.defaultWorkspace)) {
+    merged.defaultWorkspace = "";
+  }
+
   res.json(merged);
 });
 

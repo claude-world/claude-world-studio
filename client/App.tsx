@@ -350,6 +350,19 @@ export default function App() {
     const [session, err] = await apiPost<Session>("/sessions", {
       workspacePath: defaultWorkspace || undefined,
     });
+
+    // If the stored workspace path no longer exists, retry without it and clear
+    // the stale setting so the user doesn't hit this repeatedly.
+    if (err?.status === 400 && err.message.includes("does not exist")) {
+      setDefaultWorkspace("");
+      const [retrySession, retryErr] = await apiPost<Session>("/sessions", {});
+      if (retryErr || !retrySession) return;
+      setSessions((prev) => [retrySession, ...prev]);
+      selectSession(retrySession.id);
+      setActivePage("chat");
+      return;
+    }
+
     if (err || !session) return;
     setSessions((prev) => [session, ...prev]);
     selectSession(session.id);

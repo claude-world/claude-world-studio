@@ -716,10 +716,12 @@ function StrategyTab() {
                   </div>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-700 dark:text-gray-300 truncate">
-                    {entry.topic_seed}
+                  <p className="text-xs text-gray-700 dark:text-gray-300 truncate leading-tight">
+                    {entry.topic_seed.split("\n")[0].trim()}
                   </p>
-                  <span className="text-[10px] text-gray-400">{entry.format}</span>
+                  <span className="text-[10px] text-gray-400 capitalize">
+                    {entry.format.replace(/_/g, " ")}
+                  </span>
                 </div>
                 <span
                   className={`text-[10px] font-medium px-1.5 py-0.5 rounded capitalize shrink-0 ${priorityColors[entry.priority]}`}
@@ -741,8 +743,8 @@ function StrategyTab() {
           <div className="space-y-1.5">
             {report.top_formats.map((f, i) => (
               <div key={i} className="flex items-center gap-3">
-                <span className="text-xs text-gray-700 dark:text-gray-300 w-20 capitalize shrink-0">
-                  {f.format}
+                <span className="text-xs text-gray-700 dark:text-gray-300 w-24 capitalize shrink-0 truncate">
+                  {f.format.replace(/_/g, " ")}
                 </span>
                 <div className="flex-1">
                   <ProgressBar
@@ -753,8 +755,8 @@ function StrategyTab() {
                     }
                   />
                 </div>
-                <span className="text-xs text-gray-500 dark:text-gray-400 w-20 text-right shrink-0">
-                  {f.avg_views} avg views
+                <span className="text-xs text-gray-500 dark:text-gray-400 w-24 text-right shrink-0">
+                  {f.avg_views.toLocaleString()} views
                 </span>
               </div>
             ))}

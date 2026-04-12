@@ -77,8 +77,17 @@ class StrategyAgent {
       .map((h: any) => Number(h.hour));
 
     // ── Topic seeds from top-performing posts ──────────────────────────────
+    // Take only the first line and cap at 80 chars so newlines don't break the
+    // Content Calendar layout in the client (CSS truncate is single-line only).
     const topPosts = ((overview.top_posts || []) as any[])
-      .map((p) => String(p.content ?? "").slice(0, 100))
+      .map(
+        (p) =>
+          String(p.content ?? "")
+            .split("\n")
+            .find((l) => l.trim().length > 0)
+            ?.trim()
+            .slice(0, 80) ?? ""
+      )
       .filter(Boolean);
 
     // ── Past successes from memory ─────────────────────────────────────────
