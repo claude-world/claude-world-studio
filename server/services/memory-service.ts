@@ -160,9 +160,11 @@ class MemoryService {
 
   // FTS5 special characters that must be escaped or stripped
   private sanitizeFtsQuery(query: string): string {
-    // Wrap in double quotes for phrase search if query contains spaces
-    // Strip characters that break FTS5 parser
-    const stripped = query.replace(/['"*^:()]/g, " ").trim();
+    // Wrap in double quotes for phrase search if query contains spaces.
+    // Strip chars that affect FTS5 syntax:
+    //   '"*^:()  — standard FTS5 operators / delimiters
+    //   -        — FTS5 NOT prefix (e.g. "-viral" means NOT viral)
+    const stripped = query.replace(/['"*^:()-]/g, " ").trim();
     if (!stripped) return "";
     // If multi-word, wrap as phrase
     return stripped.includes(" ") ? `"${stripped}"` : stripped;

@@ -465,7 +465,7 @@ const stmts = {
     `UPDATE task_executions SET status = 'failed', error = 'Server restarted while execution was running', completed_at = datetime('now') WHERE status = 'running'`
   ),
   markStaleGoalsFailed: db.prepare(
-    `UPDATE agent_goals SET status = 'failed', updated_at = datetime('now') WHERE status = 'active'`
+    `UPDATE agent_goals SET status = 'failed', updated_at = datetime('now') WHERE status IN ('active', 'paused')`
   ),
 
   // Agent Goals

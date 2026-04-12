@@ -60,7 +60,9 @@ class AgentOrchestrator extends EventEmitter {
     accountId?: string;
     onState?: (state: OrchestratorState) => void;
   }): Promise<string> {
-    if (this.runs.size >= MAX_CONCURRENT) {
+    // Count only active (non-terminal) runs — completed/failed runs remain in the Map
+    // for 10 min post-eviction, so runs.size would over-count and block new submissions.
+    if (this.getActiveRuns().length >= MAX_CONCURRENT) {
       throw new Error(`Max concurrent goal runs (${MAX_CONCURRENT}) reached`);
     }
 

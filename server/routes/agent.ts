@@ -70,19 +70,62 @@ router.patch("/goals/:id/progress", (req, res) => {
     res.status(400).json({ error: `Invalid status: must be one of ${VALID_STATUSES.join(", ")}` });
     return;
   }
-  if (typeof progress === "number" || status !== undefined) {
+  // Normalize subTasks: arrays are JSON-serialized; strings passed through; null clears
+  const subTasksJson = Array.isArray(subTasks)
+    ? JSON.stringify(subTasks)
+    : typeof subTasks === "string"
+      ? subTasks
+      : subTasks === null
+        ? null
+        : undefined;
+
+  const hasProgress = typeof progress === "number";
+  const hasStatus = status !== undefined;
+  const hasSubTasks = subTasksJson !== undefined;
+
+  if (hasProgress || hasStatus || hasSubTasks) {
     transaction(() => {
-      if (typeof progress === "number") {
+      if (hasProgress || hasSubTasks) {
         store.updateGoalProgress(
           req.params.id,
-          Math.min(100, Math.max(0, progress)),
-          subTasks ?? null
+          hasProgress ? Math.min(100, Math.max(0, progress)) : goal.progress,
+          hasSubTasks ? subTasksJson! : (goal.sub_tasks ?? null)
         );
       }
-      if (status !== undefined) {
+      if (hasStatus) {
         store.updateGoalStatus(req.params.id, status as AgentGoalStatus);
       }
     });
+  }
+  res.json(store.getGoal(req.params.id));
+});
+
+/** POST /api/agent/goals/:id/pause */
+router.post("/goals/:id/pause", (req, res) => {
+  const paused = orchestrator.pauseGoal(req.params.id);
+  if (!paused) {
+    res.status(409).json({ error: "Goal not found or not in a pausable state" });
+    return;
+  }
+  res.json(store.getGoal(req.params.id));
+});
+
+/** POST /api/agent/goals/:id/resume */
+router.post("/goals/:id/resume", (req, res) => {
+  const resumed = orchestrator.resumeGoal(req.params.id);
+  if (!resumed) {
+    res.status(409).json({ error: "Goal not found or not paused" });
+    return;
+  }
+  res.json(store.getGoal(req.params.id));
+});
+
+/** POST /api/agent/goals/:id/abort */
+router.post("/goals/:id/abort", (req, res) => {
+  const aborted = orchestrator.abortGoal(req.params.id);
+  if (!aborted) {
+    res.status(409).json({ error: "Goal not found or already in a terminal state" });
+    return;
   }
   res.json(store.getGoal(req.params.id));
 });
@@ -99,12 +142,27 @@ router.delete("/goals/:id", (req, res) => {
 
 // ── Memories ───────────────────────────────────────────────────────────────
 
+const VALID_MEMORY_TYPES: AgentMemoryType[] = [
+  "general",
+  "reflection",
+  "preference",
+  "failure",
+  "success",
+];
+
 /** GET /api/agent/memories?q=query&goalId=x&accountId=x&type=reflection&limit=20 */
 router.get("/memories", (req, res) => {
   const q = String(req.query.q || "").trim();
   const goalId = req.query.goalId ? String(req.query.goalId) : undefined;
   const accountId = req.query.accountId ? String(req.query.accountId) : undefined;
-  const memoryType = req.query.type as AgentMemoryType | undefined;
+  const rawType = req.query.type ? String(req.query.type) : undefined;
+  if (rawType && !VALID_MEMORY_TYPES.includes(rawType as AgentMemoryType)) {
+    res
+      .status(400)
+      .json({ error: `Invalid type: must be one of ${VALID_MEMORY_TYPES.join(", ")}` });
+    return;
+  }
+  const memoryType = rawType as AgentMemoryType | undefined;
   const limit = Math.min(parseInt(String(req.query.limit || "20"), 10) || 20, 100);
 
   if (q) {
