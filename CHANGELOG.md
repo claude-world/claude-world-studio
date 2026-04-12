@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.1] - 2026-04-12
+
+### Fixed
+
+- **Analytics offset comparison** — `getAnalyticsOverview` now accepts `offset` parameter so "vs prev period" compares the correct time windows instead of always comparing current period against itself
+- **Draft post actions** — `AccountPostsPage` now shows Publish and Discard buttons for draft posts, wired to `POST /api/publish/batch` and `POST /api/publish/:id/discard`
+- **MCP-first pipeline prompts** — all 9 `PIPELINE_ACTIONS` prompts (zh-TW, en, ja × 3 actions) replaced `python3 scripts/threads_api.py` references with `publish_to_threads` MCP tool, per CLAUDE.md rule #4
+
 ## [2.1.0] - 2026-04-05
 
 ### Added (patterns from Claude Code v2.1.88 source)
