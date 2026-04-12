@@ -87,6 +87,8 @@ class AgentOrchestrator extends EventEmitter {
     this.executeStateMachine(run, params.accountId, params.onState).catch((err) => {
       logger.error("Orchestrator", `Goal ${goal.id} fatal error: ${err.message}`);
       this.transition(run, "failed");
+      // Sync DB — without this the status stays 'active' until markStaleGoalsFailed on restart
+      store.updateGoalStatus(goal.id, "failed");
     });
 
     return goal.id;

@@ -501,7 +501,7 @@ const strategyTool = tool(
       if ((overview.published_posts || 0) > 0) {
         memoryService.saveMemory({
           accountId: args.account_id,
-          content: `Analytics (${days}d): ${overview.published_posts} posts, ${Math.round((overview.engagement_rate || 0) * 100)}% engagement. Best format: ${topFormats[0]?.format || "n/a"}. Best hours: ${bestHours.join(", ")}.`,
+          content: `Analytics (${days}d): ${overview.published_posts} posts, ${Math.round((overview.engagement_rate || 0) * 10000) / 100}% engagement. Best format: ${topFormats[0]?.format || "n/a"}. Best hours: ${bestHours.join(", ")}.`,
           tags: ["analytics", "strategy"],
           memoryType: "success",
         });

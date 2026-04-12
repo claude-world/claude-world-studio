@@ -10,6 +10,7 @@
  */
 
 import store from "../db.js";
+import { logger } from "../logger.js";
 import type {
   AgentGoalStatus,
   AgentMemory,
@@ -148,6 +149,7 @@ class MemoryService {
           tagStr = ` [${(JSON.parse(m.tags) as string[]).join(", ")}]`;
         } catch {
           // malformed tags — skip rather than crash system prompt injection
+          logger.warn("MemoryService", `Memory ${m.id} has malformed tags JSON: ${m.tags}`);
         }
       }
       return `- ${m.content}${tagStr}`;

@@ -1179,6 +1179,7 @@ export const store = {
   searchMemories(
     query: string,
     options?: {
+      goalId?: string;
       accountId?: string;
       memoryType?: AgentMemoryType;
       limit?: number;
@@ -1191,7 +1192,11 @@ export const store = {
       JOIN agent_memories_fts f ON m.rowid = f.rowid
       WHERE agent_memories_fts MATCH ?
     `;
-    const params: (string | number)[] = [query];
+    const params: (string | number | null)[] = [query];
+    if (options?.goalId) {
+      sql += ` AND m.goal_id = ?`;
+      params.push(options.goalId);
+    }
     if (options?.accountId) {
       sql += ` AND m.account_id = ?`;
       params.push(options.accountId);

@@ -6,7 +6,7 @@
  */
 
 import { Router } from "express";
-import store from "../db.js";
+import store, { transaction } from "../db.js";
 import { memoryService } from "../services/memory-service.js";
 import { orchestrator } from "../services/agent-orchestrator.js";
 import type { AgentGoalStatus, AgentMemoryType } from "../types.js";
@@ -70,18 +70,28 @@ router.patch("/goals/:id/progress", (req, res) => {
     res.status(400).json({ error: `Invalid status: must be one of ${VALID_STATUSES.join(", ")}` });
     return;
   }
-  if (typeof progress === "number") {
-    store.updateGoalProgress(req.params.id, Math.min(100, Math.max(0, progress)), subTasks ?? null);
-  }
-  if (status !== undefined) {
-    store.updateGoalStatus(req.params.id, status as AgentGoalStatus);
-  }
+  transaction(() => {
+    if (typeof progress === "number") {
+      store.updateGoalProgress(
+        req.params.id,
+        Math.min(100, Math.max(0, progress)),
+        subTasks ?? null
+      );
+    }
+    if (status !== undefined) {
+      store.updateGoalStatus(req.params.id, status as AgentGoalStatus);
+    }
+  });
   res.json(store.getGoal(req.params.id));
 });
 
 /** DELETE /api/agent/goals/:id */
 router.delete("/goals/:id", (req, res) => {
   const deleted = store.deleteGoal(req.params.id);
+  if (!deleted) {
+    res.status(404).json({ error: "Goal not found" });
+    return;
+  }
   res.json({ deleted });
 });
 
@@ -117,6 +127,10 @@ router.post("/memories", (req, res) => {
 /** DELETE /api/agent/memories/:id */
 router.delete("/memories/:id", (req, res) => {
   const deleted = store.deleteMemory(req.params.id);
+  if (!deleted) {
+    res.status(404).json({ error: "Memory not found" });
+    return;
+  }
   res.json({ deleted });
 });
 
@@ -265,6 +279,10 @@ router.put("/workflows/:id", (req, res) => {
 /** DELETE /api/agent/workflows/:id */
 router.delete("/workflows/:id", (req, res) => {
   const deleted = store.deleteWorkflow(req.params.id);
+  if (!deleted) {
+    res.status(404).json({ error: "Workflow not found" });
+    return;
+  }
   res.json({ deleted });
 });
 
