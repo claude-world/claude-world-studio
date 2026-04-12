@@ -238,4 +238,6 @@ export interface OrchestratorGoalRun {
   startedAt: number;
   lastUpdatedAt: number;
   retries: number;
+  /** Set after the first terminal-state eviction timer is scheduled to prevent duplicate timeouts. */
+  evictionScheduled?: boolean;
 }

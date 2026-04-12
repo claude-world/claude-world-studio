@@ -50,15 +50,23 @@ class MemoryService {
   ): AgentMemory[] {
     const safe = this.sanitizeFtsQuery(query);
     if (!safe) return [];
+    let results: AgentMemory[];
     try {
-      const results = store.searchMemories(safe, options);
-      // Touch accessed memories to boost future relevance ranking
-      for (const m of results) store.touchMemory(m.id);
-      return results;
+      results = store.searchMemories(safe, options);
     } catch {
       // FTS5 parse errors (e.g. complex queries) — return empty rather than throw
       return [];
     }
+    // Touch accessed memories to boost future relevance ranking.
+    // Runs outside the FTS catch so a touch failure doesn't discard valid results.
+    for (const m of results) {
+      try {
+        store.touchMemory(m.id);
+      } catch {
+        // Non-fatal — skip touch on error
+      }
+    }
+    return results;
   }
 
   /**

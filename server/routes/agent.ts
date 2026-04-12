@@ -188,10 +188,13 @@ router.get("/analytics/strategy", (req, res) => {
 /** GET /api/agent/reflections?limit=20 — recent reflections as memories (across sessions) */
 router.get("/reflections", (req, res) => {
   const limit = Math.min(parseInt(String(req.query.limit || "20"), 10) || 20, 100);
-  // Return reflection-type memories as a cross-session summary
+  // Fetch a large ceiling first, then filter by type, then slice to limit.
+  // If we applied limit before filter, we'd silently return fewer than requested
+  // whenever the top-N memories don't contain reflection-type entries.
   const recentMems = store
-    .getContextMemories(undefined, limit)
-    .filter((m) => m.memory_type === "reflection");
+    .getContextMemories(undefined, 500)
+    .filter((m) => m.memory_type === "reflection")
+    .slice(0, limit);
   res.json(recentMems);
 });
 
@@ -301,8 +304,7 @@ router.post("/matrix-run", async (req, res) => {
 
   // Cap at available orchestrator slots to avoid MAX_CONCURRENT race
   const activeRuns = orchestrator.getActiveRuns().length;
-  const MAX_CONCURRENT = 5;
-  const available = Math.max(0, MAX_CONCURRENT - activeRuns);
+  const available = Math.max(0, orchestrator.maxConcurrent - activeRuns);
   const targets = allTargets.slice(0, available);
 
   if (targets.length === 0) {

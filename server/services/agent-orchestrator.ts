@@ -28,6 +28,9 @@ class AgentOrchestrator extends EventEmitter {
   private runs = new Map<string, OrchestratorGoalRun>();
   private gcInterval: ReturnType<typeof setInterval> | null = null;
 
+  /** Exposed so route handlers can reference the same cap without hardcoding it. */
+  readonly maxConcurrent = MAX_CONCURRENT;
+
   constructor() {
     super();
     // Mark any active goals from a previous server run as failed (they have no in-memory run)
@@ -215,8 +218,10 @@ class AgentOrchestrator extends EventEmitter {
     run.lastUpdatedAt = Date.now();
     this.emit("state", { goalId: run.goalId, state });
     onState?.(state);
-    // Evict terminal runs after 10 minutes so completed/failed runs don't accumulate for 72h
-    if (state === "complete" || state === "failed") {
+    // Evict terminal runs after 10 minutes so completed/failed runs don't accumulate for 72h.
+    // Guard with evictionScheduled to prevent duplicate timers on double-transition.
+    if ((state === "complete" || state === "failed") && !run.evictionScheduled) {
+      run.evictionScheduled = true;
       setTimeout(() => this.runs.delete(run.goalId), 10 * 60 * 1000);
     }
   }

@@ -157,7 +157,7 @@ class StrategyAgent {
     }
 
     // ── Save strategy to memory for future recall ──────────────────────────
-    if ((overview.total_posts as number) > 0) {
+    if ((overview.published_posts as number) > 0) {
       memoryService.saveMemory({
         accountId: params.accountId,
         content: `Content strategy (${days}d): ${overview.published_posts} posts, ${engRate}% engagement. Top format: ${topFormats[0]?.format || "text"}. Best hours: ${bestHours
