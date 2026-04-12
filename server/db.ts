@@ -495,6 +495,9 @@ const stmts = {
   getContextMemories: db.prepare(
     `SELECT * FROM agent_memories WHERE (account_id = ? OR account_id IS NULL) ORDER BY access_count DESC, created_at DESC LIMIT ?`
   ),
+  getMemoriesByType: db.prepare(
+    `SELECT * FROM agent_memories WHERE memory_type = ? AND (account_id = ? OR account_id IS NULL) ORDER BY access_count DESC, created_at DESC LIMIT ?`
+  ),
   touchMemory: db.prepare(
     `UPDATE agent_memories SET access_count = access_count + 1, last_accessed_at = datetime('now') WHERE id = ?`
   ),
@@ -1167,6 +1170,10 @@ export const store = {
 
   getContextMemories(accountId?: string, limit = 10): AgentMemory[] {
     return stmts.getContextMemories.all(accountId ?? null, limit) as AgentMemory[];
+  },
+
+  getMemoriesByType(memoryType: AgentMemoryType, accountId?: string, limit = 20): AgentMemory[] {
+    return stmts.getMemoriesByType.all(memoryType, accountId ?? null, limit) as AgentMemory[];
   },
 
   searchMemories(

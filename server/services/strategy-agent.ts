@@ -118,7 +118,7 @@ class StrategyAgent {
       );
     }
 
-    const engRate = Math.round(((overview.engagement_rate as number) || 0) * 10000) / 100;
+    const engRate = Math.round((Number(overview.engagement_rate) || 0) * 10000) / 100;
     recommendations.push(
       engRate > 5
         ? `Engagement rate ${engRate}% — strong performance, maintain current strategy`

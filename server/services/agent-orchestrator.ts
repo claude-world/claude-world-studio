@@ -113,7 +113,8 @@ class AgentOrchestrator extends EventEmitter {
   /** Abort a goal — marks as failed */
   abortGoal(goalId: string): boolean {
     const run = this.runs.get(goalId);
-    if (!run) return false;
+    // Guard: don't overwrite a terminal state — aborting a completed goal would corrupt the DB record
+    if (!run || run.state === "complete" || run.state === "failed") return false;
     this.transition(run, "failed");
     store.updateGoalStatus(goalId, "failed");
     memoryService.saveMemory({

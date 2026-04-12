@@ -498,7 +498,7 @@ const strategyTool = tool(
       const topPosts = (overview.top_posts || []).map((p: any) => p.content?.slice(0, 60));
 
       // Save as a 'success' memory for future recall
-      if (overview.total_posts > 0) {
+      if ((overview.published_posts || 0) > 0) {
         memoryService.saveMemory({
           accountId: args.account_id,
           content: `Analytics (${days}d): ${overview.published_posts} posts, ${Math.round((overview.engagement_rate || 0) * 100)}% engagement. Best format: ${topFormats[0]?.format || "n/a"}. Best hours: ${bestHours.join(", ")}.`,

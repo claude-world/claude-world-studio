@@ -65,16 +65,15 @@ router.patch("/goals/:id/progress", (req, res) => {
   }
   const { progress, subTasks, status } = req.body || {};
   const VALID_STATUSES: AgentGoalStatus[] = ["active", "completed", "failed", "paused"];
+  // Validate status before any writes so we don't partially commit progress then return 400
+  if (status !== undefined && !VALID_STATUSES.includes(status as AgentGoalStatus)) {
+    res.status(400).json({ error: `Invalid status: must be one of ${VALID_STATUSES.join(", ")}` });
+    return;
+  }
   if (typeof progress === "number") {
     store.updateGoalProgress(req.params.id, Math.min(100, Math.max(0, progress)), subTasks ?? null);
   }
   if (status !== undefined) {
-    if (!VALID_STATUSES.includes(status as AgentGoalStatus)) {
-      res
-        .status(400)
-        .json({ error: `Invalid status: must be one of ${VALID_STATUSES.join(", ")}` });
-      return;
-    }
     store.updateGoalStatus(req.params.id, status as AgentGoalStatus);
   }
   res.json(store.getGoal(req.params.id));
@@ -188,13 +187,9 @@ router.get("/analytics/strategy", (req, res) => {
 /** GET /api/agent/reflections?limit=20 — recent reflections as memories (across sessions) */
 router.get("/reflections", (req, res) => {
   const limit = Math.min(parseInt(String(req.query.limit || "20"), 10) || 20, 100);
-  // Fetch a large ceiling first, then filter by type, then slice to limit.
-  // If we applied limit before filter, we'd silently return fewer than requested
-  // whenever the top-N memories don't contain reflection-type entries.
-  const recentMems = store
-    .getContextMemories(undefined, 500)
-    .filter((m) => m.memory_type === "reflection")
-    .slice(0, limit);
+  // Query the DB directly with a memory_type filter so we get exactly `limit` reflection entries
+  // rather than fetching a large ceiling and post-filtering in JS.
+  const recentMems = store.getMemoriesByType("reflection", undefined, limit);
   res.json(recentMems);
 });
 
