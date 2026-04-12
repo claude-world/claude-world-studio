@@ -106,10 +106,10 @@ class StrategyAgent {
       );
     }
 
-    // Link vs no-link comparison
+    // Link vs no-link comparison — DB returns rows with type='with_link'|'no_link'
     const linkPerf = (contentAnalysis.link_vs_no_link || []) as any[];
-    const withLink = linkPerf.find((l) => l.has_link);
-    const noLink = linkPerf.find((l) => !l.has_link);
+    const withLink = linkPerf.find((l) => l.type === "with_link");
+    const noLink = linkPerf.find((l) => l.type === "no_link");
     if (withLink && noLink) {
       const better = withLink.avg_views > noLink.avg_views ? "with link" : "without link";
       const winViews = Math.round(Math.max(withLink.avg_views, noLink.avg_views));
@@ -130,7 +130,8 @@ class StrategyAgent {
       .sort((a, b) => b.avg_engagement - a.avg_engagement)
       .slice(0, 2);
     if (dayPerf.length > 0) {
-      const bestDayLabels = dayPerf.map((d) => DAY_LABELS[d.day_of_week] || `Day ${d.day_of_week}`);
+      // DB column is named 'day', not 'day_of_week'
+      const bestDayLabels = dayPerf.map((d) => DAY_LABELS[d.day as number] || `Day ${d.day}`);
       recommendations.push(`Top posting days: ${bestDayLabels.join(" and ")}`);
     }
 
@@ -144,7 +145,7 @@ class StrategyAgent {
       const slots = bestHours.slice(0, 3);
       slots.forEach((hour, i) => {
         const dayEntry = sortedDays[i % sortedDays.length];
-        const dayOfWeek = dayEntry ? Number(dayEntry.day_of_week) : (i * 2) % 7;
+        const dayOfWeek = dayEntry ? Number(dayEntry.day) : (i * 2) % 7;
         calendar.push({
           day_label: DAY_LABELS[dayOfWeek],
           hour,

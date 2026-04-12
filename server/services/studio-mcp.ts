@@ -206,8 +206,15 @@ const uploadImageTool = tool(
   async (args) => {
     const filePath = args.file_path;
 
-    // Resolve relative to CWD (workspace)
-    const resolved = path.resolve(filePath);
+    // Resolve relative to workspace and enforce containment boundary
+    const wsRoot = path.resolve(getSettings().defaultWorkspace || process.cwd());
+    const resolved = path.resolve(wsRoot, filePath);
+    if (!resolved.startsWith(wsRoot + path.sep) && resolved !== wsRoot) {
+      return {
+        content: [{ type: "text" as const, text: "Error: Path escapes workspace boundary" }],
+        isError: true,
+      };
+    }
     if (!fs.existsSync(resolved)) {
       return {
         content: [{ type: "text" as const, text: `Error: File not found: ${resolved}` }],
@@ -530,13 +537,13 @@ const strategyTool = tool(
 );
 
 // Lazy import to avoid circular deps — strategy-agent imports store + memoryService
-let _strategyAgent: typeof import("./strategy-agent.js").strategyAgent | null = null;
-async function getStrategyAgent() {
-  if (!_strategyAgent) {
-    const mod = await import("./strategy-agent.js");
-    _strategyAgent = mod.strategyAgent;
+// Promise latch prevents double-initialisation under concurrent tool calls
+let _strategyAgentP: Promise<typeof import("./strategy-agent.js").strategyAgent> | null = null;
+function getStrategyAgent() {
+  if (!_strategyAgentP) {
+    _strategyAgentP = import("./strategy-agent.js").then((m) => m.strategyAgent);
   }
-  return _strategyAgent;
+  return _strategyAgentP;
 }
 
 const runStrategyAgentTool = tool(

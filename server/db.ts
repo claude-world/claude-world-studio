@@ -464,6 +464,9 @@ const stmts = {
   markStaleExecutionsFailed: db.prepare(
     `UPDATE task_executions SET status = 'failed', error = 'Server restarted while execution was running', completed_at = datetime('now') WHERE status = 'running'`
   ),
+  markStaleGoalsFailed: db.prepare(
+    `UPDATE agent_goals SET status = 'failed', updated_at = datetime('now') WHERE status = 'active'`
+  ),
 
   // Agent Goals
   createGoal: db.prepare(
@@ -875,6 +878,10 @@ export const store = {
     return stmts.markStaleExecutionsFailed.run();
   },
 
+  markStaleGoalsFailed() {
+    return stmts.markStaleGoalsFailed.run();
+  },
+
   // Insights Cache
   upsertInsightsCache(
     publishId: string,
@@ -1186,7 +1193,7 @@ export const store = {
       sql += ` AND m.memory_type = ?`;
       params.push(options.memoryType);
     }
-    sql += ` ORDER BY rank LIMIT ?`;
+    sql += ` ORDER BY f.rank LIMIT ?`;
     params.push(limit);
     return db.prepare(sql).all(...params) as AgentMemory[];
   },

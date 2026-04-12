@@ -15,12 +15,24 @@ const router = Router();
 
 // ── Goals ──────────────────────────────────────────────────────────────────
 
+const VALID_GOAL_STATUSES: AgentGoalStatus[] = ["active", "completed", "failed", "paused"];
+
 /** GET /api/agent/goals?status=active&limit=50 */
 router.get("/goals", (req, res) => {
-  const status = (req.query.status as AgentGoalStatus) || "active";
+  const rawStatus = (req.query.status as string) || "active";
+  if (!VALID_GOAL_STATUSES.includes(rawStatus as AgentGoalStatus)) {
+    res
+      .status(400)
+      .json({ error: `Invalid status: must be one of ${VALID_GOAL_STATUSES.join(", ")}` });
+    return;
+  }
   const limit = Math.min(parseInt(String(req.query.limit || "50"), 10) || 50, 200);
-  const goals = store.getGoalsByStatus(status, limit);
-  res.json(goals);
+  try {
+    const goals = store.getGoalsByStatus(rawStatus as AgentGoalStatus, limit);
+    res.json(goals);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch goals" });
+  }
 });
 
 /** POST /api/agent/goals */
@@ -130,38 +142,45 @@ router.get("/analytics/strategy", (req, res) => {
   const days = Math.min(parseInt(String(req.query.days || "30"), 10) || 30, 365);
   const accountId = req.query.accountId ? String(req.query.accountId) : undefined;
 
-  const overview = store.getAnalyticsOverview(days, accountId);
-  const contentAnalysis = store.getContentAnalysis(days);
+  try {
+    const overview = store.getAnalyticsOverview(days, accountId);
+    const contentAnalysis = store.getContentAnalysis(days);
 
-  // Derive top formats from image_vs_text performance (spread to avoid mutating cached object)
-  const topFormats = [...(contentAnalysis.image_vs_text || [])]
-    .sort((a: any, b: any) => b.avg_views - a.avg_views)
-    .map((f: any) => ({ type: f.type, avg_views: Math.round(f.avg_views), count: f.count }));
+    // Derive top formats from image_vs_text performance (spread to avoid mutating cached object)
+    const topFormats = [...(contentAnalysis.image_vs_text || [])]
+      .sort((a: any, b: any) => b.avg_views - a.avg_views)
+      .map((f: any) => ({ type: f.type, avg_views: Math.round(f.avg_views), count: f.count }));
 
-  // Best posting hours (top 3 by avg engagement)
-  const bestHours = [...contentAnalysis.hour_performance]
-    .sort((a: any, b: any) => b.avg_engagement - a.avg_engagement)
-    .slice(0, 3)
-    .map((h: any) => ({ hour: h.hour, avg_engagement: Math.round(h.avg_engagement * 100) / 100 }));
+    // Best posting hours (top 3 by avg engagement)
+    const bestHours = [...(contentAnalysis.hour_performance || [])]
+      .sort((a: any, b: any) => b.avg_engagement - a.avg_engagement)
+      .slice(0, 3)
+      .map((h: any) => ({
+        hour: h.hour,
+        avg_engagement: Math.round(h.avg_engagement * 100) / 100,
+      }));
 
-  // Top performing posts as topic seeds
-  const topTopics = (overview.top_posts || []).map((p: any) => ({
-    content_preview: p.content?.slice(0, 80),
-    views: p.views,
-    account: p.handle,
-  }));
+    // Top performing posts as topic seeds
+    const topTopics = (overview.top_posts || []).map((p: any) => ({
+      content_preview: p.content?.slice(0, 80),
+      views: p.views,
+      account: p.handle,
+    }));
 
-  res.json({
-    period_days: days,
-    total_posts: overview.total_posts,
-    published_posts: overview.published_posts,
-    engagement_rate: Math.round((overview.engagement_rate || 0) * 10000) / 100, // percent
-    top_formats: topFormats,
-    best_hours: bestHours,
-    top_topics: topTopics,
-    link_vs_no_link: contentAnalysis.link_vs_no_link,
-    day_performance: contentAnalysis.day_performance,
-  });
+    res.json({
+      period_days: days,
+      total_posts: overview.total_posts,
+      published_posts: overview.published_posts,
+      engagement_rate: Math.round((overview.engagement_rate || 0) * 10000) / 100,
+      top_formats: topFormats,
+      best_hours: bestHours,
+      top_topics: topTopics,
+      link_vs_no_link: contentAnalysis.link_vs_no_link,
+      day_performance: contentAnalysis.day_performance,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Analytics query failed" });
+  }
 });
 
 // ── Recent Reflections (no sessionId filter) ───────────────────────────────
@@ -294,19 +313,18 @@ router.post("/matrix-run", async (req, res) => {
   const results: { accountId: string; goalId: string }[] = [];
   const errors: { accountId: string; error: string }[] = [];
 
-  await Promise.allSettled(
-    targets.map(async (accountId) => {
-      try {
-        const goalId = await orchestrator.runGoal({
-          description: `[Matrix] ${description}`,
-          accountId,
-        });
-        results.push({ accountId, goalId });
-      } catch (err) {
-        errors.push({ accountId, error: (err as Error).message });
-      }
-    })
-  );
+  // Sequential launch to avoid TOCTOU race on MAX_CONCURRENT slot check
+  for (const accountId of targets) {
+    try {
+      const goalId = await orchestrator.runGoal({
+        description: `[Matrix] ${description}`,
+        accountId,
+      });
+      results.push({ accountId, goalId });
+    } catch (err) {
+      errors.push({ accountId, error: (err as Error).message });
+    }
+  }
 
   res.status(202).json({
     launched: results.length,

@@ -30,6 +30,14 @@ class AgentOrchestrator extends EventEmitter {
 
   constructor() {
     super();
+    // Mark any active goals from a previous server run as failed (they have no in-memory run)
+    const stale = store.markStaleGoalsFailed();
+    if (stale.changes > 0) {
+      logger.info(
+        "Orchestrator",
+        `Marked ${stale.changes} stale active goal(s) as failed on startup`
+      );
+    }
     // GC stale runs every 30 minutes
     this.gcInterval = setInterval(() => this.gcStaleRuns(), 30 * 60 * 1000);
     registerCleanup(() => this.shutdown());
@@ -207,6 +215,10 @@ class AgentOrchestrator extends EventEmitter {
     run.lastUpdatedAt = Date.now();
     this.emit("state", { goalId: run.goalId, state });
     onState?.(state);
+    // Evict terminal runs after 10 minutes so completed/failed runs don't accumulate for 72h
+    if (state === "complete" || state === "failed") {
+      setTimeout(() => this.runs.delete(run.goalId), 10 * 60 * 1000);
+    }
   }
 
   private gcStaleRuns() {

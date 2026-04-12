@@ -74,7 +74,9 @@ class MemoryService {
    * Returns count of deleted rows.
    */
   autoClean(daysOld = 90): number {
-    return store.cleanOldMemories(daysOld);
+    // Guard against 0 or negative values deleting all recent memories
+    const safeDays = Math.max(1, Math.floor(daysOld));
+    return store.cleanOldMemories(safeDays);
   }
 
   /**
