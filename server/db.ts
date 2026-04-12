@@ -532,6 +532,9 @@ const stmts = {
   ),
 };
 
+// Cache for dynamic FTS5 search statements — at most 8 variants (2^3 filter combos)
+const searchMemoriesStmtCache = new Map<string, Database.Statement>();
+
 export const store = {
   // Sessions
   createSession(title?: string, workspacePath?: string): Session {
@@ -1186,7 +1189,9 @@ export const store = {
     }
   ): AgentMemory[] {
     const limit = options?.limit ?? 10;
-    // FTS5 MATCH search — returns rowid, then fetch full rows
+    // FTS5 MATCH search — returns rowid, then fetch full rows.
+    // Dynamic SQL varies by which filters are active (up to 8 variants).
+    // Cache statements by SQL text to avoid re-compiling on every call.
     let sql = `
       SELECT m.* FROM agent_memories m
       JOIN agent_memories_fts f ON m.rowid = f.rowid
@@ -1207,7 +1212,13 @@ export const store = {
     }
     sql += ` ORDER BY f.rank LIMIT ?`;
     params.push(limit);
-    return db.prepare(sql).all(...params) as AgentMemory[];
+    // Reuse cached statement for the same SQL variant (bounded: max 8 combos)
+    let stmt = searchMemoriesStmtCache.get(sql);
+    if (!stmt) {
+      stmt = db.prepare(sql);
+      searchMemoriesStmtCache.set(sql, stmt);
+    }
+    return stmt.all(...params) as AgentMemory[];
   },
 
   touchMemory(id: string) {

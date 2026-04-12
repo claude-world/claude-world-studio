@@ -442,14 +442,22 @@ const searchMemoryTool = tool(
         };
       }
 
-      const formatted = results.map((m) => ({
-        id: m.id,
-        content: m.content,
-        type: m.memory_type,
-        tags: m.tags ? JSON.parse(m.tags) : [],
-        access_count: m.access_count,
-        created_at: m.created_at,
-      }));
+      const formatted = results.map((m) => {
+        let tags: string[] = [];
+        try {
+          tags = m.tags ? (JSON.parse(m.tags) as string[]) : [];
+        } catch {
+          // malformed tags JSON — return empty array rather than aborting the tool call
+        }
+        return {
+          id: m.id,
+          content: m.content,
+          type: m.memory_type,
+          tags,
+          access_count: m.access_count,
+          created_at: m.created_at,
+        };
+      });
 
       return {
         content: [
@@ -493,7 +501,7 @@ const strategyTool = tool(
       const bestHours = [...(contentAnalysis.hour_performance || [])]
         .sort((a: any, b: any) => b.avg_engagement - a.avg_engagement)
         .slice(0, 3)
-        .map((h: any) => `${h.hour}:00`);
+        .map((h: any) => Number(h.hour)); // number[] to match strategy-agent output shape
 
       const topPosts = (overview.top_posts || []).map((p: any) => p.content?.slice(0, 60));
 

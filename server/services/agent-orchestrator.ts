@@ -121,7 +121,7 @@ class AgentOrchestrator extends EventEmitter {
     store.updateGoalStatus(goalId, "failed");
     memoryService.saveMemory({
       goalId,
-      content: `Goal "${store.getGoal(goalId)?.description}" was aborted by user.`,
+      content: `Goal "${store.getGoal(goalId)?.description ?? goalId}" was aborted by user.`,
       tags: ["abort", "goal"],
       memoryType: "failure",
     });
@@ -181,6 +181,9 @@ class AgentOrchestrator extends EventEmitter {
     // Simulate execution progress (actual work happens via Claude sessions)
     // The orchestrator tracks state; the real execution is done by AgentSession
     await this.sleep(100);
+    // Yield-point abort/pause check — abortGoal or pauseGoal may have fired during the await.
+    // Without this guard the state machine would overwrite the paused/failed state with "reflecting".
+    if (run.state === "failed" || run.state === "paused") return;
     store.updateGoalProgress(run.goalId, 50);
 
     // ── REFLECT phase ─────────────────────────────────────────────────────

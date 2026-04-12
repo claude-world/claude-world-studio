@@ -70,18 +70,20 @@ router.patch("/goals/:id/progress", (req, res) => {
     res.status(400).json({ error: `Invalid status: must be one of ${VALID_STATUSES.join(", ")}` });
     return;
   }
-  transaction(() => {
-    if (typeof progress === "number") {
-      store.updateGoalProgress(
-        req.params.id,
-        Math.min(100, Math.max(0, progress)),
-        subTasks ?? null
-      );
-    }
-    if (status !== undefined) {
-      store.updateGoalStatus(req.params.id, status as AgentGoalStatus);
-    }
-  });
+  if (typeof progress === "number" || status !== undefined) {
+    transaction(() => {
+      if (typeof progress === "number") {
+        store.updateGoalProgress(
+          req.params.id,
+          Math.min(100, Math.max(0, progress)),
+          subTasks ?? null
+        );
+      }
+      if (status !== undefined) {
+        store.updateGoalStatus(req.params.id, status as AgentGoalStatus);
+      }
+    });
+  }
   res.json(store.getGoal(req.params.id));
 });
 
@@ -97,15 +99,16 @@ router.delete("/goals/:id", (req, res) => {
 
 // ── Memories ───────────────────────────────────────────────────────────────
 
-/** GET /api/agent/memories?q=query&accountId=x&type=reflection&limit=20 */
+/** GET /api/agent/memories?q=query&goalId=x&accountId=x&type=reflection&limit=20 */
 router.get("/memories", (req, res) => {
   const q = String(req.query.q || "").trim();
+  const goalId = req.query.goalId ? String(req.query.goalId) : undefined;
   const accountId = req.query.accountId ? String(req.query.accountId) : undefined;
   const memoryType = req.query.type as AgentMemoryType | undefined;
   const limit = Math.min(parseInt(String(req.query.limit || "20"), 10) || 20, 100);
 
   if (q) {
-    const results = memoryService.searchMemory(q, { accountId, memoryType, limit });
+    const results = memoryService.searchMemory(q, { goalId, accountId, memoryType, limit });
     res.json(results);
   } else {
     const results = store.getContextMemories(accountId, limit);
