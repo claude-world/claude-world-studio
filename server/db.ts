@@ -19,6 +19,14 @@ import type {
   AgentReflection,
   ReflectionTrigger,
   AgentWorkflow,
+  ContentTypeRow,
+  HourPerformanceRow,
+  DayPerformanceRow,
+  TopPostRow,
+  DailyCountRow,
+  PerAccountRow,
+  PostWithInsightsRow,
+  AnalyticsStatsRow,
 } from "./types.js";
 
 import { existsSync, mkdirSync, copyFileSync } from "fs";
@@ -928,12 +936,12 @@ export const store = {
     return stmts.getInsightsCache.get(publishId) as InsightsCache | undefined;
   },
 
-  getPostsWithInsights(accountId: string, limit = 50): any[] {
-    return stmts.getPostsWithInsights.all(accountId, limit) as any[];
+  getPostsWithInsights(accountId: string, limit = 50): PostWithInsightsRow[] {
+    return stmts.getPostsWithInsights.all(accountId, limit) as PostWithInsightsRow[];
   },
 
-  getAllPostsWithInsights(limit = 100): any[] {
-    return stmts.getAllPostsWithInsights.all(limit) as any[];
+  getAllPostsWithInsights(limit = 100): PostWithInsightsRow[] {
+    return stmts.getAllPostsWithInsights.all(limit) as PostWithInsightsRow[];
   },
 
   // Analytics
@@ -978,7 +986,7 @@ export const store = {
         ${baseWhere}
       `
         )
-        .get(...params) as any;
+        .get(...params) as AnalyticsStatsRow;
 
       const perAccount = db
         .prepare(
@@ -997,7 +1005,7 @@ export const store = {
         ORDER BY total_views DESC
       `
         )
-        .all(...params) as any[];
+        .all(...params) as PerAccountRow[];
 
       const topPosts = db
         .prepare(
@@ -1011,7 +1019,7 @@ export const store = {
         ORDER BY c.views DESC LIMIT 5
       `
         )
-        .all(...params) as any[];
+        .all(...params) as TopPostRow[];
 
       const dailyCounts = db
         .prepare(
@@ -1025,7 +1033,7 @@ export const store = {
         ORDER BY date ASC
       `
         )
-        .all(...params) as any[];
+        .all(...params) as DailyCountRow[];
 
       const totalEngagement =
         (stats.total_likes || 0) +
@@ -1069,7 +1077,7 @@ export const store = {
           WHERE p.created_at >= ? AND p.status = 'published'${acctClause}
           GROUP BY type`
         )
-        .all(...baseParams) as any[];
+        .all(...baseParams) as ContentTypeRow[];
 
       const linkVsNoLink = db
         .prepare(
@@ -1084,7 +1092,7 @@ export const store = {
           WHERE p.created_at >= ? AND p.status = 'published'${acctClause}
           GROUP BY type`
         )
-        .all(...baseParams) as any[];
+        .all(...baseParams) as ContentTypeRow[];
 
       const hourPerformance = db
         .prepare(
@@ -1098,7 +1106,7 @@ export const store = {
           WHERE p.created_at >= ? AND p.status = 'published'${acctClause}
           GROUP BY hour ORDER BY hour`
         )
-        .all(...baseParams) as any[];
+        .all(...baseParams) as HourPerformanceRow[];
 
       const dayPerformance = db
         .prepare(
@@ -1112,7 +1120,7 @@ export const store = {
           WHERE p.created_at >= ? AND p.status = 'published'${acctClause}
           GROUP BY day ORDER BY day`
         )
-        .all(...baseParams) as any[];
+        .all(...baseParams) as DayPerformanceRow[];
 
       return {
         image_vs_text: imageVsText,

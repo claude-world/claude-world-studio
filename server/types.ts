@@ -241,3 +241,78 @@ export interface OrchestratorGoalRun {
   /** Set after the first terminal-state eviction timer is scheduled to prevent duplicate timeouts. */
   evictionScheduled?: boolean;
 }
+
+// ── Analytics query row types (db.ts) ─────────────────────────────────────────
+
+/** Row returned by image_vs_text and link_vs_no_link content-analysis queries. */
+export interface ContentTypeRow {
+  type: string;
+  count: number;
+  avg_views: number;
+  avg_likes: number;
+  avg_replies: number;
+}
+
+/** Row returned by hour_performance content-analysis query. */
+export interface HourPerformanceRow {
+  hour: number;
+  count: number;
+  avg_views: number;
+  avg_engagement: number;
+}
+
+/** Row returned by day_performance content-analysis query. */
+export interface DayPerformanceRow {
+  day: number;
+  count: number;
+  avg_views: number;
+  avg_engagement: number;
+}
+
+/** Row returned by the top_posts analytics-overview query. */
+export interface TopPostRow {
+  id: string;
+  content: string;
+  account: string;
+  created_at: string;
+  /** NULL when the LEFT JOIN on social_accounts finds no matching row. */
+  handle: string | null;
+  views: number;
+  likes: number;
+  replies: number;
+  reposts: number;
+  quotes: number;
+}
+
+/** Row returned by the stats aggregate analytics-overview query. */
+export interface AnalyticsStatsRow {
+  total_posts: number;
+  published_posts: number;
+  posts_with_link: number;
+  posts_without_link: number;
+  total_views: number;
+  total_likes: number;
+  total_replies: number;
+  total_reposts: number;
+  total_quotes: number;
+}
+
+/** Row returned by the daily_counts analytics-overview query. */
+export interface DailyCountRow {
+  date: string;
+  post_count: number;
+  total_views: number;
+}
+
+/** Row returned by the per_account analytics-overview query. */
+export interface PerAccountRow {
+  account_id: string;
+  name: string;
+  handle: string;
+  post_count: number;
+  total_views: number;
+  total_engagement: number;
+}
+
+/** Row returned by getPostsWithInsights / getAllPostsWithInsights. */
+export type PostWithInsightsRow = PublishRecord & InsightsCache;
