@@ -9,6 +9,7 @@ import { Router } from "express";
 import store, { transaction } from "../db.js";
 import { memoryService } from "../services/memory-service.js";
 import { orchestrator } from "../services/agent-orchestrator.js";
+import { strategyAgent } from "../services/strategy-agent.js";
 import type { AgentGoalStatus, AgentMemoryType } from "../types.js";
 
 const router = Router();
@@ -255,41 +256,8 @@ router.get("/analytics/strategy", (req, res) => {
   const accountId = req.query.accountId ? String(req.query.accountId) : undefined;
 
   try {
-    const overview = store.getAnalyticsOverview(days, accountId);
-    const contentAnalysis = store.getContentAnalysis(days, accountId);
-
-    // Derive top formats from image_vs_text performance (spread to avoid mutating cached object)
-    const topFormats = [...(contentAnalysis.image_vs_text || [])]
-      .sort((a: any, b: any) => b.avg_views - a.avg_views)
-      .map((f: any) => ({ type: f.type, avg_views: Math.round(f.avg_views), count: f.count }));
-
-    // Best posting hours (top 3 by avg engagement)
-    const bestHours = [...(contentAnalysis.hour_performance || [])]
-      .sort((a: any, b: any) => b.avg_engagement - a.avg_engagement)
-      .slice(0, 3)
-      .map((h: any) => ({
-        hour: h.hour,
-        avg_engagement: Math.round(h.avg_engagement * 100) / 100,
-      }));
-
-    // Top performing posts as topic seeds
-    const topTopics = (overview.top_posts || []).map((p: any) => ({
-      content_preview: p.content?.slice(0, 80),
-      views: p.views,
-      account: p.handle,
-    }));
-
-    res.json({
-      period_days: days,
-      total_posts: overview.total_posts,
-      published_posts: overview.published_posts,
-      engagement_rate: Math.round((overview.engagement_rate || 0) * 10000) / 100,
-      top_formats: topFormats,
-      best_hours: bestHours,
-      top_topics: topTopics,
-      link_vs_no_link: contentAnalysis.link_vs_no_link,
-      day_performance: contentAnalysis.day_performance,
-    });
+    const report = strategyAgent.runStrategy({ days, accountId, includeCalendar: true });
+    res.json(report);
   } catch (err) {
     res.status(500).json({ error: "Analytics query failed" });
   }

@@ -321,8 +321,8 @@ export function TrafficDashboardPage({
   };
 
   const linkCoveragePct = overview
-    ? overview.total_posts > 0
-      ? Math.round((overview.posts_with_link / overview.total_posts) * 100)
+    ? (overview.total_posts ?? 0) > 0
+      ? Math.round(((overview.posts_with_link ?? 0) / (overview.total_posts ?? 0)) * 100)
       : 0
     : 0;
 
@@ -454,8 +454,8 @@ export function TrafficDashboardPage({
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <OverviewCard
                 label={t.totalPosts}
-                value={String(overview.published_posts)}
-                sub={`/ ${overview.total_posts} ${t.totalPosts.toLowerCase()}`}
+                value={String(overview.published_posts ?? 0)}
+                sub={`/ ${overview.total_posts ?? 0} ${t.totalPosts.toLowerCase()}`}
                 borderColor="border-blue-500"
                 growth={
                   prevOverview
@@ -501,7 +501,7 @@ export function TrafficDashboardPage({
               <OverviewCard
                 label={t.linkCoverage}
                 value={`${linkCoveragePct}%`}
-                sub={`${overview.posts_with_link}/${overview.total_posts}`}
+                sub={`${overview.posts_with_link ?? 0}/${overview.total_posts ?? 0}`}
                 borderColor="border-purple-500"
                 valueClass={
                   linkCoveragePct >= 80
