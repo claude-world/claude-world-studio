@@ -209,7 +209,7 @@ const uploadImageTool = tool(
     // Resolve relative to workspace and enforce containment boundary
     const wsRoot = path.resolve(getSettings().defaultWorkspace || process.cwd());
     const resolved = path.resolve(wsRoot, filePath);
-    if (!resolved.startsWith(wsRoot + path.sep) && resolved !== wsRoot) {
+    if (!resolved.startsWith(wsRoot + path.sep)) {
       return {
         content: [{ type: "text" as const, text: "Error: Path escapes workspace boundary" }],
         isError: true,
@@ -371,7 +371,7 @@ const reflectionLoopTool = tool(
       }
 
       const reflection = memoryService.saveReflection({
-        sessionId: args.session_id || "unknown",
+        sessionId: args.session_id || crypto.randomUUID(),
         goalId: args.goal_id,
         trigger: (args.trigger as any) || "tool_result",
         reflectionContent: args.last_content,
@@ -492,7 +492,7 @@ const strategyTool = tool(
     try {
       const days = Math.min(args.days || 30, 365);
       const overview = store.getAnalyticsOverview(days, args.account_id);
-      const contentAnalysis = store.getContentAnalysis(days);
+      const contentAnalysis = store.getContentAnalysis(days, args.account_id);
 
       const topFormats = [...(contentAnalysis.image_vs_text || [])]
         .sort((a: any, b: any) => b.avg_views - a.avg_views)

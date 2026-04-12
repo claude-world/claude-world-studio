@@ -98,6 +98,10 @@ class AgentOrchestrator extends EventEmitter {
     // Run state machine asynchronously (non-blocking)
     this.executeStateMachine(run, params.accountId, params.onState).catch((err) => {
       logger.error("Orchestrator", `Goal ${goal.id} fatal error: ${err.message}`);
+      // Guard: if the state machine already completed successfully before throwing
+      // (e.g. store.updateGoalStatus threw after the COMPLETE transition), don't
+      // overwrite the completed DB record with failed.
+      if (run.state === "complete") return;
       this.transition(run, "failed");
       // Sync DB — without this the status stays 'active' until markStaleGoalsFailed on restart
       store.updateGoalStatus(goal.id, "failed");
@@ -172,6 +176,7 @@ class AgentOrchestrator extends EventEmitter {
     const pastMemories = memoryService.searchMemory(goal.description, {
       accountId,
       limit: 5,
+      skipTouch: true, // internal planning call — don't inflate access_count
     });
     const pastLessons =
       pastMemories.length > 0

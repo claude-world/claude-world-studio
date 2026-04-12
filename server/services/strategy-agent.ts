@@ -57,7 +57,7 @@ class StrategyAgent {
     const days = Math.min(params.days ?? 30, 365);
 
     const overview = store.getAnalyticsOverview(days, params.accountId);
-    const contentAnalysis = store.getContentAnalysis(days);
+    const contentAnalysis = store.getContentAnalysis(days, params.accountId);
 
     // ── Format performance ─────────────────────────────────────────────────
     const topFormats: { format: string; avg_views: number; posts: number }[] = [
@@ -86,6 +86,7 @@ class StrategyAgent {
       accountId: params.accountId,
       memoryType: "success",
       limit: 5,
+      skipTouch: true, // internal strategy call — don't inflate access_count
     });
     const pastSuccesses = successMems.map((m) => m.content.slice(0, 120));
 

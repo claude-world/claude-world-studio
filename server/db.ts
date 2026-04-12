@@ -1034,78 +1034,75 @@ export const store = {
     });
   },
 
-  getContentAnalysis(days = 30) {
-    return getCached(`content_analysis_${days}`, () => {
+  getContentAnalysis(days = 30, accountId?: string) {
+    // Include accountId in cache key to prevent cross-account contamination.
+    const cacheKey = `content_analysis_${days}_${accountId ?? "all"}`;
+    return getCached(cacheKey, () => {
       const since = new Date(Date.now() - days * 86400000)
         .toISOString()
         .replace("T", " ")
         .slice(0, 19);
+      // Optional account filter — appended to every sub-query when provided.
+      const acctClause = accountId ? " AND p.account = ?" : "";
+      const baseParams = accountId ? [since, accountId] : [since];
 
       const imageVsText = db
         .prepare(
-          `
-        SELECT
-          CASE WHEN p.image_url IS NOT NULL AND p.image_url != '' THEN 'with_image' ELSE 'text_only' END as type,
-          COUNT(*) as count,
-          COALESCE(AVG(c.views), 0) as avg_views,
-          COALESCE(AVG(c.likes), 0) as avg_likes,
-          COALESCE(AVG(c.replies), 0) as avg_replies
-        FROM publish_history p
-        LEFT JOIN post_insights_cache c ON p.id = c.publish_id
-        WHERE p.created_at >= ? AND p.status = 'published'
-        GROUP BY type
-      `
+          `SELECT
+            CASE WHEN p.image_url IS NOT NULL AND p.image_url != '' THEN 'with_image' ELSE 'text_only' END as type,
+            COUNT(*) as count,
+            COALESCE(AVG(c.views), 0) as avg_views,
+            COALESCE(AVG(c.likes), 0) as avg_likes,
+            COALESCE(AVG(c.replies), 0) as avg_replies
+          FROM publish_history p
+          LEFT JOIN post_insights_cache c ON p.id = c.publish_id
+          WHERE p.created_at >= ? AND p.status = 'published'${acctClause}
+          GROUP BY type`
         )
-        .all(since) as any[];
+        .all(...baseParams) as any[];
 
       const linkVsNoLink = db
         .prepare(
-          `
-        SELECT
-          CASE WHEN p.link_comment IS NOT NULL AND p.link_comment != '' THEN 'with_link' ELSE 'no_link' END as type,
-          COUNT(*) as count,
-          COALESCE(AVG(c.views), 0) as avg_views,
-          COALESCE(AVG(c.likes), 0) as avg_likes,
-          COALESCE(AVG(c.replies), 0) as avg_replies
-        FROM publish_history p
-        LEFT JOIN post_insights_cache c ON p.id = c.publish_id
-        WHERE p.created_at >= ? AND p.status = 'published'
-        GROUP BY type
-      `
+          `SELECT
+            CASE WHEN p.link_comment IS NOT NULL AND p.link_comment != '' THEN 'with_link' ELSE 'no_link' END as type,
+            COUNT(*) as count,
+            COALESCE(AVG(c.views), 0) as avg_views,
+            COALESCE(AVG(c.likes), 0) as avg_likes,
+            COALESCE(AVG(c.replies), 0) as avg_replies
+          FROM publish_history p
+          LEFT JOIN post_insights_cache c ON p.id = c.publish_id
+          WHERE p.created_at >= ? AND p.status = 'published'${acctClause}
+          GROUP BY type`
         )
-        .all(since) as any[];
+        .all(...baseParams) as any[];
 
       const hourPerformance = db
         .prepare(
-          `
-        SELECT
-          CAST(strftime('%H', p.created_at) AS INTEGER) as hour,
-          COUNT(*) as count,
-          COALESCE(AVG(c.views), 0) as avg_views,
-          COALESCE(AVG(c.likes + c.replies + c.reposts + c.quotes), 0) as avg_engagement
-        FROM publish_history p
-        LEFT JOIN post_insights_cache c ON p.id = c.publish_id
-        WHERE p.created_at >= ? AND p.status = 'published'
-        GROUP BY hour ORDER BY hour
-      `
+          `SELECT
+            CAST(strftime('%H', p.created_at) AS INTEGER) as hour,
+            COUNT(*) as count,
+            COALESCE(AVG(c.views), 0) as avg_views,
+            COALESCE(AVG(c.likes + c.replies + c.reposts + c.quotes), 0) as avg_engagement
+          FROM publish_history p
+          LEFT JOIN post_insights_cache c ON p.id = c.publish_id
+          WHERE p.created_at >= ? AND p.status = 'published'${acctClause}
+          GROUP BY hour ORDER BY hour`
         )
-        .all(since) as any[];
+        .all(...baseParams) as any[];
 
       const dayPerformance = db
         .prepare(
-          `
-        SELECT
-          CAST(strftime('%w', p.created_at) AS INTEGER) as day,
-          COUNT(*) as count,
-          COALESCE(AVG(c.views), 0) as avg_views,
-          COALESCE(AVG(c.likes + c.replies + c.reposts + c.quotes), 0) as avg_engagement
-        FROM publish_history p
-        LEFT JOIN post_insights_cache c ON p.id = c.publish_id
-        WHERE p.created_at >= ? AND p.status = 'published'
-        GROUP BY day ORDER BY day
-      `
+          `SELECT
+            CAST(strftime('%w', p.created_at) AS INTEGER) as day,
+            COUNT(*) as count,
+            COALESCE(AVG(c.views), 0) as avg_views,
+            COALESCE(AVG(c.likes + c.replies + c.reposts + c.quotes), 0) as avg_engagement
+          FROM publish_history p
+          LEFT JOIN post_insights_cache c ON p.id = c.publish_id
+          WHERE p.created_at >= ? AND p.status = 'published'${acctClause}
+          GROUP BY day ORDER BY day`
         )
-        .all(since) as any[];
+        .all(...baseParams) as any[];
 
       return {
         image_vs_text: imageVsText,
@@ -1240,7 +1237,9 @@ export const store = {
   },
 
   cleanOldMemories(daysOld = 90): number {
-    const result = stmts.deleteOldMemories.run(`-${daysOld} days`);
+    // Clamp here too — service layer (autoClean) validates, but direct callers bypass it.
+    const safe = Math.max(1, Math.floor(daysOld));
+    const result = stmts.deleteOldMemories.run(`-${safe} days`);
     return result.changes;
   },
 

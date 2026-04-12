@@ -42,6 +42,10 @@ router.post("/goals", (req, res) => {
     res.status(400).json({ error: "description is required" });
     return;
   }
+  if (description.length > 2000) {
+    res.status(400).json({ error: "description too long (max 2000 chars)" });
+    return;
+  }
   try {
     const goal = store.createGoal({ description, sessionId, accountId });
     res.status(201).json(goal);
@@ -242,7 +246,7 @@ router.get("/analytics/strategy", (req, res) => {
 
   try {
     const overview = store.getAnalyticsOverview(days, accountId);
-    const contentAnalysis = store.getContentAnalysis(days);
+    const contentAnalysis = store.getContentAnalysis(days, accountId);
 
     // Derive top formats from image_vs_text performance (spread to avoid mutating cached object)
     const topFormats = [...(contentAnalysis.image_vs_text || [])]
@@ -385,6 +389,10 @@ router.post("/matrix-run", async (req, res) => {
   const { description, accountIds } = req.body || {};
   if (!description || typeof description !== "string") {
     res.status(400).json({ error: "description is required" });
+    return;
+  }
+  if (description.length > 2000) {
+    res.status(400).json({ error: "description too long (max 2000 chars)" });
     return;
   }
 

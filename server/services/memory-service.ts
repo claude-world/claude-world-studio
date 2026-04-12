@@ -47,6 +47,9 @@ class MemoryService {
       accountId?: string;
       memoryType?: AgentMemoryType;
       limit?: number;
+      /** Pass true for internal/automated callers (strategy agent, reflection loop)
+       *  to prevent inflating access_count and skewing relevance ranking. */
+      skipTouch?: boolean;
     }
   ): AgentMemory[] {
     const safe = this.sanitizeFtsQuery(query);
@@ -59,12 +62,14 @@ class MemoryService {
       return [];
     }
     // Touch accessed memories to boost future relevance ranking.
-    // Runs outside the FTS catch so a touch failure doesn't discard valid results.
-    for (const m of results) {
-      try {
-        store.touchMemory(m.id);
-      } catch {
-        // Non-fatal — skip touch on error
+    // Skip for automated internal calls that would otherwise inflate access_count.
+    if (!options?.skipTouch) {
+      for (const m of results) {
+        try {
+          store.touchMemory(m.id);
+        } catch {
+          // Non-fatal — skip touch on error
+        }
       }
     }
     return results;
