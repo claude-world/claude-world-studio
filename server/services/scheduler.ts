@@ -348,7 +348,10 @@ export class TaskScheduler {
       });
 
       // Save outcome as memory for future self-improvement
-      const memType = status === "failed" || status === "rejected" ? "failure" : "success";
+      // Policy violations (published despite auto_publish=off) count as failure to prevent reinforcement
+      const isAnomaly = taskResult?.published && !task.auto_publish;
+      const memType =
+        status === "failed" || status === "rejected" || isAnomaly ? "failure" : "success";
       memoryService.saveMemory({
         accountId: task.account_id,
         content: `Task "${task.name}" ${status}: score ${score ?? "n/a"}. Topic: ${taskResult?.topic || "unknown"}. Duration: ${Math.round(durationMs / 1000)}s.`,

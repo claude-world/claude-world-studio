@@ -52,10 +52,17 @@ router.patch("/goals/:id/progress", (req, res) => {
     return;
   }
   const { progress, subTasks, status } = req.body || {};
+  const VALID_STATUSES: AgentGoalStatus[] = ["active", "completed", "failed", "paused"];
   if (typeof progress === "number") {
     store.updateGoalProgress(req.params.id, Math.min(100, Math.max(0, progress)), subTasks ?? null);
   }
-  if (status) {
+  if (status !== undefined) {
+    if (!VALID_STATUSES.includes(status as AgentGoalStatus)) {
+      res
+        .status(400)
+        .json({ error: `Invalid status: must be one of ${VALID_STATUSES.join(", ")}` });
+      return;
+    }
     store.updateGoalStatus(req.params.id, status as AgentGoalStatus);
   }
   res.json(store.getGoal(req.params.id));
@@ -126,8 +133,8 @@ router.get("/analytics/strategy", (req, res) => {
   const overview = store.getAnalyticsOverview(days, accountId);
   const contentAnalysis = store.getContentAnalysis(days);
 
-  // Derive top formats from image_vs_text performance
-  const topFormats = contentAnalysis.image_vs_text
+  // Derive top formats from image_vs_text performance (spread to avoid mutating cached object)
+  const topFormats = [...(contentAnalysis.image_vs_text || [])]
     .sort((a: any, b: any) => b.avg_views - a.avg_views)
     .map((f: any) => ({ type: f.type, avg_views: Math.round(f.avg_views), count: f.count }));
 
@@ -263,13 +270,24 @@ router.post("/matrix-run", async (req, res) => {
 
   // If no accountIds provided, use all accounts
   const accounts = store.getAllAccounts();
-  const targets: string[] =
+  const allTargets: string[] =
     Array.isArray(accountIds) && accountIds.length > 0
       ? (accountIds as string[]).filter((id) => accounts.some((a) => a.id === id))
       : accounts.map((a) => a.id);
 
-  if (targets.length === 0) {
+  if (allTargets.length === 0) {
     res.status(400).json({ error: "No valid accounts found for matrix run" });
+    return;
+  }
+
+  // Cap at available orchestrator slots to avoid MAX_CONCURRENT race
+  const activeRuns = orchestrator.getActiveRuns().length;
+  const MAX_CONCURRENT = 5;
+  const available = Math.max(0, MAX_CONCURRENT - activeRuns);
+  const targets = allTargets.slice(0, available);
+
+  if (targets.length === 0) {
+    res.status(429).json({ error: "Orchestrator at capacity — all slots occupied" });
     return;
   }
 

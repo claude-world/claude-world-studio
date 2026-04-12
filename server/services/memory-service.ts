@@ -132,8 +132,15 @@ class MemoryService {
     if (memories.length === 0) return "";
 
     const lines = memories.map((m) => {
-      const tags = m.tags ? ` [${JSON.parse(m.tags).join(", ")}]` : "";
-      return `- ${m.content}${tags}`;
+      let tagStr = "";
+      if (m.tags) {
+        try {
+          tagStr = ` [${(JSON.parse(m.tags) as string[]).join(", ")}]`;
+        } catch {
+          // malformed tags — skip rather than crash system prompt injection
+        }
+      }
+      return `- ${m.content}${tagStr}`;
     });
 
     return `\n\n## Long-Term Memory (${memories.length} entries)\nLessons learned from previous sessions — use these to improve quality:\n${lines.join("\n")}`;

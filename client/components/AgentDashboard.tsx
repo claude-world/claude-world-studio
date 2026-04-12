@@ -4,8 +4,18 @@
  * Tabs: Goals | Workflows | Memory | Strategy
  */
 
-import React, { useState, useEffect, useCallback } from "react";
-import { apiGet, apiPost, apiDelete, apiPut } from "../hooks/useApi";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { apiGet, apiPost, apiDelete } from "../hooks/useApi";
+
+/** Safely parse a JSON string, returning fallback on error */
+function safeParse<T>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -184,7 +194,7 @@ function GoalsTab() {
       ) : (
         <div className="space-y-2">
           {goals.map((goal) => {
-            const subTasks = goal.sub_tasks ? JSON.parse(goal.sub_tasks) : [];
+            const subTasks = safeParse<{ status: string }[]>(goal.sub_tasks, []);
             return (
               <div
                 key={goal.id}
@@ -243,6 +253,13 @@ function WorkflowsTab() {
   const [loading, setLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", template: "{}", isPublic: false });
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -287,6 +304,7 @@ function WorkflowsTab() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async (ev) => {
+      if (!mountedRef.current) return;
       try {
         const data = JSON.parse(ev.target?.result as string);
         const [wf] = await apiPost<AgentWorkflow>("/agent/workflows", {
@@ -295,9 +313,9 @@ function WorkflowsTab() {
           template: data.template,
           isPublic: false,
         });
-        if (wf) setWorkflows((prev) => [wf, ...prev]);
+        if (wf && mountedRef.current) setWorkflows((prev) => [wf, ...prev]);
       } catch {
-        // ignore parse errors
+        // ignore parse/network errors
       }
     };
     reader.readAsText(file);
@@ -410,7 +428,7 @@ function WorkflowsTab() {
                     <span className="text-[10px] text-gray-400">{wf.run_count} runs</span>
                     {wf.tags && (
                       <span className="text-[10px] text-gray-400">
-                        {(JSON.parse(wf.tags) as string[]).join(", ")}
+                        {safeParse<string[]>(wf.tags, []).join(", ")}
                       </span>
                     )}
                   </div>
@@ -544,7 +562,7 @@ function MemoryTab() {
                     <span className="text-[10px] text-gray-400">{mem.access_count} accesses</span>
                     {mem.tags && (
                       <span className="text-[10px] text-gray-400">
-                        {(JSON.parse(mem.tags) as string[]).slice(0, 3).join(", ")}
+                        {safeParse<string[]>(mem.tags, []).slice(0, 3).join(", ")}
                       </span>
                     )}
                   </div>
