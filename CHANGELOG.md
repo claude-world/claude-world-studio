@@ -1,5 +1,109 @@
 # Changelog
 
+## [2.2.0] - 2026-04-12
+
+### Added — Agentic Upgrade (Phase 1 + 2 + 3)
+
+**Memory System**
+
+- `agent_memories` table with SQLite FTS5 virtual table — full-text search over content + tags
+- `MemoryService` singleton — `saveMemory`, `searchMemory` (FTS5 + goalId/accountId/type filters), `loadContextMemories`, `autoClean`, `buildMemoryBlock`
+- System prompt memory injection — top-10 context memories prepended as `## Long-Term Memory` section
+- `searchMemoriesStmtCache` — bounded Map (max 8 SQL variants) prevents repeated `sqlite3_stmt` compilation
+
+**Agent Goals & Orchestrator**
+
+- `agent_goals` table — persistent multi-session goal tracking with sub-tasks JSON, progress 0–100, status lifecycle
+- `AgentOrchestrator` state machine — PLAN → EXECUTE → REFLECT → COMPLETE with in-memory run registry (72h TTL, 10-min terminal eviction)
+- Startup reconciliation via `markStaleGoalsFailed()` — repairs orphaned active goals from crashed server runs
+- Goals REST API: `GET/POST /api/agent/goals`, `GET/PATCH/DELETE /api/agent/goals/:id`
+
+**Self-Reflection**
+
+- `agent_reflections` table — per-session self-evaluation records (trigger, scores, improvement notes)
+- Improvement notes auto-saved as `reflection`-type memories for cross-session recall
+- Reflections API: `GET /api/agent/reflections/:sessionId`, `GET /api/agent/reflections`
+
+**Strategy Agent**
+
+- `StrategyAgent` — analytics-driven content strategy from publish history (configurable lookback window)
+- Generates top formats, best posting hours (number[]), topic seeds, 3-slot posting calendar with day labels
+- Recommendations auto-saved as `success`-type memories when published posts > 0
+- `run_strategy_agent` MCP tool + `generate_strategy_from_analytics` MCP tool
+
+**Workflow Templates**
+
+- `agent_workflows` table — reusable prompt template library with public sharing flag
+- Workflows REST API: `GET/POST /api/agent/workflows`, `GET/PUT/DELETE /api/agent/workflows/:id`
+
+**Matrix Run**
+
+- `POST /api/agent/matrix-run` — forks a goal across multiple accounts; sequential launch respects `orchestrator.maxConcurrent`
+
+**MCP Tools (5 new)**
+
+- `create_goal_session` — create a structured agent goal from a session
+- `run_reflection_loop` — save reflection + improvement notes → `reflection`-type memory
+- `search_memory` — FTS5 search with goalId/accountId/type filters; per-row tags JSON fault isolation
+- `generate_strategy_from_analytics` — inline analytics strategy (returns number[] hours, consistent with strategy-agent)
+- `run_strategy_agent` — full StrategyAgent pipeline with calendar output
+
+**Agent Dashboard** (`client/components/AgentDashboard.tsx`)
+
+- 4 tabs: Overview (active goals + recent memories), Goals, Memories, Workflows
+- Goal progress bars, memory FTS search, workflow JSON import/export
+- `safeParse<T>()` helper for all JSON fields (sub_tasks, tags) — no uncaught parse errors
+
+**Settings**
+
+- `agenticLevel` setting: `standard` | `enhanced` | `full` — persisted via `/api/settings`
+
+### Fixed (6 review passes — Claude + Codex + Gemini, 40+ issues)
+
+**Data correctness**
+
+- `strategy-agent`: DB column name `has_link` → `type === "with_link"` (link recommendations were silently skipped)
+- `strategy-agent`: DB column `day_of_week` → `day` (all calendar day labels were "Day undefined")
+- `strategy-agent`: `total_posts > 0` guard → `published_posts > 0` (drafts no longer trigger strategy memories)
+- `studio-mcp`: same `published_posts > 0` alignment; engagement rate `* 100` → `* 10000 / 100` (matches strategy-agent)
+- `studio-mcp`: `best_posting_hours` now `number[]` (was `string[]` "14:00") — type aligned with strategy-agent
+- `db`: FTS5 `ORDER BY rank` → `ORDER BY f.rank` (ambiguous column in JOIN)
+- `db`: `goalId` filter added to `searchMemories` — `filter_by_goal` MCP param was silently ignored
+- `db`: `getMemoriesByType()` new method for direct SQL filtering; replaces fetch-500-then-filter heuristic
+
+**Security**
+
+- `studio-mcp upload_image`: workspace boundary check prevents path traversal outside session workspace
+
+**Resilience & correctness**
+
+- `agent-orchestrator abortGoal`: terminal-state guard prevents completed → failed DB corruption
+- `agent-orchestrator executeStateMachine`: yield-point guard after `await sleep()` prevents abort/pause being overwritten by continuing state machine
+- `agent-orchestrator`: `evictionScheduled` flag prevents duplicate 10-min eviction timers on double-transition
+- `agent-orchestrator fatal .catch`: syncs `failed` status to DB immediately (no longer waits for `markStaleGoalsFailed` on restart)
+- `agent-orchestrator abortGoal`: description falls back to `goalId` when goal record is missing
+
+**Atomicity & consistency**
+
+- `routes/agent PATCH progress`: validates status before any writes; wraps progress+status in `transaction()`; skips no-op transaction
+- `routes/agent DELETE`: goals/memories/workflows return HTTP 404 when resource not found (was HTTP 200 `{deleted:false}`)
+- `routes/agent matrix-run`: sequential for-loop prevents TOCTOU race; uses `orchestrator.maxConcurrent`
+
+**Type safety**
+
+- `strategy-agent`: `as number` casts → `Number() || 0` coercions throughout (engagement_rate, day index, published_posts)
+- `memory-service touchMemory`: isolated in its own try/catch so FTS search results aren't discarded on touch failure
+- `memory-service buildMemoryBlock`: `logger.warn` on malformed tags JSON for diagnostics visibility
+
+**Performance**
+
+- `db searchMemories`: prepared statement cache (`searchMemoriesStmtCache` Map, max 8 variants) prevents repeated `sqlite3_stmt` allocation
+
+**API surface**
+
+- `GET /api/agent/memories`: exposes `goalId` query param and forwards to FTS search
+- `routes/agent reflections`: DB-level `memory_type` filter via `getMemoriesByType`; was fetch-500-then-filter
+
 ## [2.1.1] - 2026-04-12
 
 ### Fixed
