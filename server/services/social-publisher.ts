@@ -10,7 +10,7 @@ const CONTAINER_POLL_TIMEOUT = 120000;
 export interface PublishOptions {
   text: string;
   token: string;
-  score?: number;
+  score: number;
   // Media
   imageUrl?: string;
   videoUrl?: string;
@@ -86,6 +86,16 @@ async function getUserId(token: string): Promise<string> {
   return data.id;
 }
 
+async function getThreadPermalink(postId: string, token: string): Promise<string> {
+  try {
+    const data = await threadsRequest("GET", `/${postId}`, token, { fields: "permalink" });
+    return typeof data.permalink === "string" ? data.permalink : "";
+  } catch (err) {
+    logger.warn("Publisher", `Permalink fetch failed: ${(err as Error).message}`);
+    return "";
+  }
+}
+
 async function waitForContainer(
   containerId: string,
   token: string,
@@ -115,7 +125,10 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // ── Main Publish Function ──
 
 export async function publishToThreads(opts: PublishOptions): Promise<PublishResult> {
-  if (opts.score !== undefined && opts.score < MIN_PUBLISH_SCORE) {
+  if (!Number.isFinite(opts.score)) {
+    throw new Error("Quality score is required before publishing.");
+  }
+  if (opts.score < MIN_PUBLISH_SCORE) {
     throw new Error(
       `Score ${opts.score} below minimum ${MIN_PUBLISH_SCORE}. Improve content before publishing.`
     );
@@ -249,7 +262,8 @@ export async function publishToThreads(opts: PublishOptions): Promise<PublishRes
     }
   }
 
-  return { id: postId, permalink: "" };
+  const permalink = await getThreadPermalink(postId, opts.token);
+  return { id: postId, permalink };
 }
 
 // ── Fetch User Threads (for backfill) ──

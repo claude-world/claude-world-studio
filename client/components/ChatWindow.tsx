@@ -308,7 +308,7 @@ const UI_TEXT: Record<
     stepsDesc: [
       "從 Google Trends、Hacker News、GitHub 等 15+ 來源發現熱門話題",
       "透過網頁擷取、NotebookLM、AI 分析深入研究主題",
-      "評分優化後一鍵發佈到 Threads 和 Instagram",
+      "評分優化後一鍵發佈到 Threads",
     ],
   },
   en: {
@@ -336,7 +336,7 @@ const UI_TEXT: Record<
     stepsDesc: [
       "Find trending topics from Google Trends, Hacker News, GitHub, Reddit, and 11 more sources",
       "Deep dive with web scraping, NotebookLM, and AI-powered analysis",
-      "Score-optimized content published to Threads and Instagram with one click",
+      "Score-optimized content published to Threads with one click",
     ],
   },
   ja: {
@@ -364,7 +364,7 @@ const UI_TEXT: Record<
     stepsDesc: [
       "Google Trends、Hacker News、GitHub、Redditなど15+ソースからトレンドを発見",
       "Webスクレイピング、NotebookLM、AI分析で深掘り調査",
-      "スコア最適化後ワンクリックでThreadsとInstagramに投稿",
+      "スコア最適化後ワンクリックでThreadsに投稿",
     ],
   },
 };

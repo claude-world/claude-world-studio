@@ -29,42 +29,33 @@ import type {
   AnalyticsStatsRow,
 } from "./types.js";
 
-import { existsSync, mkdirSync, copyFileSync } from "fs";
-import { homedir } from "os";
+import { existsSync, mkdirSync } from "fs";
 import { logger } from "./logger.js";
+import {
+  getDbPath,
+  getDefaultWorkspace,
+  getUserDataDir,
+  isPackagedRuntime,
+} from "./runtime-paths.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// In packaged Electron app, store DB in user data dir (survives reinstalls).
-// In dev mode, use project-local data/.
 function resolveDbPath(): string {
-  const localPath = path.join(__dirname, "../data/studio.db");
+  const dbPath = getDbPath();
 
-  // Detect Electron packaged app (asar in path)
-  if (__dirname.includes("app.asar")) {
-    const userDataDir = path.join(
-      homedir(),
-      "Library",
-      "Application Support",
-      "Claude World Studio"
-    );
+  if (isPackagedRuntime()) {
+    const userDataDir = getUserDataDir();
     if (!existsSync(userDataDir)) mkdirSync(userDataDir, { recursive: true });
-    const userDbPath = path.join(userDataDir, "studio.db");
 
-    // Migrate: copy bundled DB to user dir on first launch (but don't overwrite existing)
-    if (!existsSync(userDbPath)) {
-      const bundledDb = localPath.replace("app.asar", "app.asar.unpacked");
-      if (existsSync(bundledDb)) {
-        copyFileSync(bundledDb, userDbPath);
-        logger.info("DB", `Migrated bundled DB to ${userDbPath}`);
-      }
+    if (!existsSync(dbPath)) {
+      logger.info("DB", `Initializing packaged user DB at ${dbPath}`);
     }
-    logger.info("DB", `Using user data: ${userDbPath}`);
-    return userDbPath;
+    logger.info("DB", `Using user data: ${dbPath}`);
+    return dbPath;
   }
 
-  return localPath;
+  return dbPath;
 }
 
 const DB_PATH = resolveDbPath();
@@ -127,6 +118,7 @@ db.exec(`
     platform TEXT NOT NULL,
     account TEXT NOT NULL,
     content TEXT NOT NULL,
+    score REAL,
     post_id TEXT,
     post_url TEXT,
     status TEXT DEFAULT 'pending',
@@ -218,6 +210,17 @@ runMigration(`ALTER TABLE social_accounts ADD COLUMN auto_publish INTEGER NOT NU
 runMigration(`ALTER TABLE publish_history ADD COLUMN image_url TEXT`);
 runMigration(`ALTER TABLE publish_history ADD COLUMN link_comment TEXT`);
 runMigration(`ALTER TABLE publish_history ADD COLUMN source_url TEXT`);
+runMigration(`ALTER TABLE publish_history ADD COLUMN score REAL`);
+// Backfill legacy publish_history rows that predate the score column. ALTER TABLE ADD COLUMN
+// without DEFAULT leaves existing rows at NULL, which the new /batch guard rejects with
+// "Draft has no quality score" — legacy drafts would be un-publishable after upgrade.
+// 70 matches MIN_PUBLISH_SCORE so the quality gate still holds (score >= min).
+try {
+  db.prepare(`UPDATE publish_history SET score = 70 WHERE score IS NULL`).run();
+} catch (e: any) {
+  // Column absence (fresh DB where migration just created it with no rows) — no-op.
+  if (!String(e?.message).includes("no such column")) throw e;
+}
 
 // Agentic tables (v2.0)
 db.exec(`
@@ -401,8 +404,8 @@ const stmts = {
 
   // Publish History
   addPublish: db.prepare(
-    `INSERT INTO publish_history (id, session_id, platform, account, content, image_url, post_id, post_url, status, link_comment, source_url)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO publish_history (id, session_id, platform, account, content, score, image_url, post_id, post_url, status, link_comment, source_url)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ),
   getPublishHistory: db.prepare(`SELECT * FROM publish_history ORDER BY created_at DESC LIMIT ?`),
   getPublishByAccount: db.prepare(
@@ -450,6 +453,17 @@ const stmts = {
   ),
   updateAccountToken: db.prepare(`UPDATE social_accounts SET token = ? WHERE id = ?`),
   deleteAccount: db.prepare(`DELETE FROM social_accounts WHERE id = ?`),
+  // Dependent cleanup — FK constraints are enforced (foreign_keys = ON), so we must
+  // null-out or delete rows that reference social_accounts(id) before the parent delete.
+  nullAccountInGoals: db.prepare(`UPDATE agent_goals SET account_id = NULL WHERE account_id = ?`),
+  nullAccountInMemories: db.prepare(
+    `UPDATE agent_memories SET account_id = NULL WHERE account_id = ?`
+  ),
+  nullAccountInWorkflows: db.prepare(
+    `UPDATE agent_workflows SET account_id = NULL WHERE account_id = ?`
+  ),
+  // scheduled_tasks.account_id is NOT NULL, so cascade-delete rather than null.
+  deleteScheduledTasksForAccount: db.prepare(`DELETE FROM scheduled_tasks WHERE account_id = ?`),
 
   // Scheduled Tasks
   createScheduledTask: db.prepare(
@@ -493,7 +507,10 @@ const stmts = {
     `UPDATE task_executions SET status = 'failed', error = 'Server restarted while execution was running', completed_at = datetime('now') WHERE status = 'running'`
   ),
   markStaleGoalsFailed: db.prepare(
-    `UPDATE agent_goals SET status = 'failed', updated_at = datetime('now') WHERE status IN ('active', 'paused')`
+    `UPDATE agent_goals SET status = 'failed', updated_at = datetime('now') WHERE status = 'active'`
+  ),
+  countOrphanedPausedGoals: db.prepare(
+    `SELECT COUNT(*) AS n FROM agent_goals WHERE status = 'paused'`
   ),
 
   // Agent Goals
@@ -525,6 +542,12 @@ const stmts = {
   ),
   getMemoriesByType: db.prepare(
     `SELECT * FROM agent_memories WHERE memory_type = ? AND (account_id = ? OR account_id IS NULL) ORDER BY access_count DESC, created_at DESC LIMIT ?`
+  ),
+  // Used when no accountId is supplied — returns all memories of the given type across
+  // accounts. Without this, passing account_id=NULL to the bound SQL above collapses to
+  // "account_id IS NULL only", silently dropping per-account memories.
+  getMemoriesByTypeAllAccounts: db.prepare(
+    `SELECT * FROM agent_memories WHERE memory_type = ? ORDER BY access_count DESC, created_at DESC LIMIT ?`
   ),
   touchMemory: db.prepare(
     `UPDATE agent_memories SET access_count = access_count + 1, last_accessed_at = datetime('now') WHERE id = ?`
@@ -567,7 +590,7 @@ export const store = {
   // Sessions
   createSession(title?: string, workspacePath?: string): Session {
     const id = uuidv4();
-    const ws = workspacePath || process.env.DEFAULT_WORKSPACE || process.cwd();
+    const ws = workspacePath || getDefaultWorkspace();
     stmts.createSession.run(id, title || "New Session", ws);
     return stmts.getSession.get(id) as Session;
   },
@@ -666,6 +689,7 @@ export const store = {
       record.platform,
       record.account,
       record.content,
+      record.score ?? null,
       record.image_url ?? null,
       record.post_id,
       record.post_url,
@@ -763,8 +787,17 @@ export const store = {
   },
 
   deleteAccount(id: string): boolean {
-    const result = stmts.deleteAccount.run(id);
-    return result.changes > 0;
+    // Pre-clean dependents inside a transaction so the parent DELETE doesn't trip
+    // foreign_key constraints on agent_goals / agent_memories / agent_workflows (nullable refs)
+    // or scheduled_tasks (NOT NULL, must cascade-delete).
+    return transaction(() => {
+      stmts.nullAccountInGoals.run(id);
+      stmts.nullAccountInMemories.run(id);
+      stmts.nullAccountInWorkflows.run(id);
+      stmts.deleteScheduledTasksForAccount.run(id);
+      const result = stmts.deleteAccount.run(id);
+      return result.changes > 0;
+    });
   },
 
   // Scheduled Tasks
@@ -914,6 +947,11 @@ export const store = {
 
   markStaleGoalsFailed() {
     return stmts.markStaleGoalsFailed.run();
+  },
+
+  countOrphanedPausedGoals(): number {
+    const row = stmts.countOrphanedPausedGoals.get() as { n: number };
+    return row?.n ?? 0;
   },
 
   // Insights Cache
@@ -1201,7 +1239,13 @@ export const store = {
   },
 
   getMemoriesByType(memoryType: AgentMemoryType, accountId?: string, limit = 20): AgentMemory[] {
-    return stmts.getMemoriesByType.all(memoryType, accountId ?? null, limit) as AgentMemory[];
+    // When no accountId is supplied, return memories across all accounts (used by
+    // /api/agent/reflections). Binding null to `account_id = ?` yields NULL (never true),
+    // so we need a separate statement rather than a single-statement NULL trick.
+    if (accountId === undefined) {
+      return stmts.getMemoriesByTypeAllAccounts.all(memoryType, limit) as AgentMemory[];
+    }
+    return stmts.getMemoriesByType.all(memoryType, accountId, limit) as AgentMemory[];
   },
 
   searchMemories(
@@ -1228,7 +1272,10 @@ export const store = {
       params.push(options.goalId);
     }
     if (options?.accountId) {
-      sql += ` AND m.account_id = ?`;
+      // Match getContextMemories/getMemoriesByType semantics — per-account search
+      // also surfaces account-agnostic (global) memories, which CLAUDE.md documents
+      // as cross-session recall behaviour.
+      sql += ` AND (m.account_id = ? OR m.account_id IS NULL)`;
       params.push(options.accountId);
     }
     if (options?.memoryType) {

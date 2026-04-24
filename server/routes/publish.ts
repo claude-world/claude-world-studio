@@ -48,17 +48,17 @@ router.post("/", async (req, res) => {
   if (!account) {
     return res.status(400).json({ error: `Account not found: ${accountId}` });
   }
-  if (!account.token) {
-    return res.status(400).json({ error: `No token configured for account: ${account.name}` });
+  if (account.platform !== "threads") {
+    return res.status(400).json({ error: `Platform not supported: ${account.platform}` });
   }
 
-  // If auto_publish is off, save as draft for review
-  if (!account.auto_publish) {
+  const saveDraft = (message: string) => {
     const record = store.addPublish({
       session_id: sessionId || null,
       platform: account.platform,
       account: accountId,
       content: text,
+      score: score ?? null,
       image_url: imageUrl || null,
       post_id: null,
       post_url: null,
@@ -70,8 +70,21 @@ router.post("/", async (req, res) => {
       success: true,
       id: record.id,
       status: "draft",
-      message: "Post saved as draft for review",
+      message,
     });
+  };
+
+  if (score === undefined) {
+    return saveDraft("Post saved as draft because no quality score was provided");
+  }
+
+  // If auto_publish is off, save as draft for review
+  if (!account.auto_publish) {
+    return saveDraft("Post saved as draft for review");
+  }
+
+  if (!account.token) {
+    return res.status(400).json({ error: `No token configured for account: ${account.name}` });
   }
 
   const record = store.addPublish({
@@ -79,6 +92,7 @@ router.post("/", async (req, res) => {
     platform: account.platform,
     account: accountId,
     content: text,
+    score,
     image_url: imageUrl || null,
     post_id: null,
     post_url: null,
@@ -90,30 +104,26 @@ router.post("/", async (req, res) => {
   try {
     let result: any;
 
-    if (account.platform === "threads") {
-      result = await publishToThreads({
-        text,
-        token: account.token,
-        score,
-        imageUrl,
-        videoUrl,
-        carouselUrls,
-        pollOptions,
-        gifId,
-        linkAttachment,
-        textAttachment,
-        spoilerMedia,
-        spoilerText,
-        ghost,
-        quotePostId,
-        replyControl,
-        topicTag,
-        altText,
-        linkComment,
-      });
-    } else {
-      throw new Error(`Publishing to ${account.platform} is not yet supported`);
-    }
+    result = await publishToThreads({
+      text,
+      token: account.token,
+      score,
+      imageUrl,
+      videoUrl,
+      carouselUrls,
+      pollOptions,
+      gifId,
+      linkAttachment,
+      textAttachment,
+      spoilerMedia,
+      spoilerText,
+      ghost,
+      quotePostId,
+      replyControl,
+      topicTag,
+      altText,
+      linkComment,
+    });
 
     store.updatePublishStatus(record.id, "published", result?.id, result?.permalink);
 
@@ -166,21 +176,26 @@ router.post("/batch", async (req, res) => {
       results.push({ id, success: false, error: "Account or token missing" });
       continue;
     }
+    if (account.platform !== "threads") {
+      store.updatePublishStatus(id, "failed");
+      results.push({ id, success: false, error: `Platform not supported: ${account.platform}` });
+      continue;
+    }
+    if (record.score === null || record.score === undefined) {
+      results.push({ id, success: false, error: "Draft has no quality score" });
+      continue;
+    }
 
     store.updatePublishStatus(id, "pending");
 
     try {
-      let result: any;
-      if (account.platform === "threads") {
-        result = await publishToThreads({
-          text: record.content,
-          token: account.token,
-          imageUrl: record.image_url || undefined,
-          linkComment: record.link_comment || undefined,
-        });
-      } else {
-        throw new Error(`Platform ${account.platform} not supported`);
-      }
+      const result = await publishToThreads({
+        text: record.content,
+        token: account.token,
+        score: record.score,
+        imageUrl: record.image_url || undefined,
+        linkComment: record.link_comment || undefined,
+      });
 
       store.updatePublishStatus(id, "published", result?.id, result?.permalink);
       results.push({ id, success: true, postUrl: result?.permalink });

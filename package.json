@@ -52,7 +52,8 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"**/*.{ts,tsx,json,md,yml,yaml,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,json,md,yml,yaml,css}\"",
-    "test": "npx tsx --test test/*.test.ts",
+    "test": "node --import tsx --test test/*.test.ts",
+    "test:desktop-smoke": "node scripts/desktop-smoke.cjs",
     "test:cli": "node bin/cli.js help > /dev/null",
     "prepare": "husky"
   },
@@ -65,9 +66,13 @@
       "**"
     ],
     "electronVersion": "41.1.0",
+    "electronUpdaterCompatibility": ">=2.16",
     "mac": {
       "category": "public.app-category.developer-tools",
-      "target": "dmg",
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "identity": "Wang LongWei (QJX3775S8M)",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
@@ -76,19 +81,27 @@
     },
     "files": [
       "bin/**/*",
+      ".claude/skills/**/*",
       "electron/**/*",
       "server/**/*",
       "scripts/**/*",
       "dist/index.html",
       "dist/assets/**/*",
       "data/**/*",
-      ".env",
       "package.json"
     ],
     "extraResources": [
       {
         "from": "data",
         "to": "data"
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "claude-world",
+        "repo": "claude-world-studio",
+        "releaseType": "release"
       }
     ]
   },
@@ -100,6 +113,7 @@
     "better-sqlite3": "^12.8.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.1",
+    "electron-updater": "^6.6.7",
     "express": "^5.2.1",
     "node-cron": "^4.2.1",
     "tsx": "^4.21.0",

@@ -79,7 +79,7 @@ export class Session {
 
     if (cliPrimary === "claude") {
       const resumeContext = previousMessages ? buildResumeContext(previousMessages) : undefined;
-      this.cliSession = new AgentSession(workspacePath, language, resumeContext);
+      this.cliSession = new AgentSession(workspacePath, language, resumeContext, sessionId);
       this.cliName = "claude";
     } else {
       const lang = language || settings.language || "zh-TW";

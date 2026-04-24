@@ -1,13 +1,25 @@
 const { app, BrowserWindow, shell, Menu } = require("electron");
-const { spawn } = require("child_process");
 const path = require("path");
 const http = require("http");
+const fs = require("fs");
+const { spawn } = require("child_process");
+const { autoUpdater } = require("electron-updater");
+const { buildServerSpawnConfig } = require("./server-runtime.cjs");
+const { createDesktopUpdater } = require("./updater.cjs");
 
-const PORT = 3001;
+const PORT = parseInt(process.env.STUDIO_PORT || process.env.PORT || "3001", 10);
 const SERVER_URL = `http://127.0.0.1:${PORT}`;
+
+const electronUserDataPath = process.env.STUDIO_ELECTRON_USER_DATA_PATH || process.env.STUDIO_USER_DATA_PATH;
+if (electronUserDataPath) {
+  fs.mkdirSync(electronUserDataPath, { recursive: true });
+  app.setPath("userData", electronUserDataPath);
+}
 
 let serverProcess = null;
 let mainWindow = null;
+let desktopUpdater = null;
+let isInstallingUpdate = false;
 
 function startServer() {
   // In packaged app, spawnable files live in app.asar.unpacked
@@ -15,7 +27,6 @@ function startServer() {
   const projectDir = app.isPackaged
     ? appPath.replace("app.asar", "app.asar.unpacked")
     : path.join(__dirname, "..");
-  const fs = require("fs");
 
   // Build client assets if dist/ doesn't exist (dev mode only)
   if (!app.isPackaged) {
@@ -29,44 +40,18 @@ function startServer() {
     }
   }
 
-  // Start Express server via tsx
-  // In packaged mode: .bin symlinks are broken, use node + tsx CLI directly
-  // In dev mode: .bin/tsx symlink works fine
-  // Get the full login-shell PATH (Electron launched from Finder has a minimal PATH)
-  const { execSync } = require("child_process");
-  let shellPath;
-  try {
-    shellPath = execSync("/bin/zsh -lc 'echo $PATH'", { encoding: "utf-8", timeout: 5000 }).trim();
-  } catch {
-    shellPath = process.env.PATH || "";
-  }
-  // Merge: use the shell PATH (which has nvm/homebrew/etc) as base
-  const mergedPath = shellPath || process.env.PATH || "/usr/local/bin:/usr/bin:/bin";
+  const { spawnCmd, spawnArgs, spawnEnv, mergedPath, runtimeNodePath } = buildServerSpawnConfig({
+    app,
+    projectDir,
+    port: PORT,
+    host: "127.0.0.1",
+  });
+
   console.log(`[Electron] PATH for server: ${mergedPath.split(":").slice(0, 5).join(":")}...`);
-
-  // Find system node absolute path for the SDK to spawn
-  let systemNode;
-  try {
-    systemNode = execSync("/bin/zsh -lc 'which node'", { encoding: "utf-8", timeout: 5000 }).trim();
-  } catch {
-    systemNode = "/usr/local/bin/node";
+  console.log(`[Electron] Runtime node: ${runtimeNodePath}`);
+  if (app.isPackaged && !fs.existsSync(runtimeNodePath)) {
+    console.warn(`[Electron] Bundled node missing, falling back to runtime path: ${runtimeNodePath}`);
   }
-  console.log(`[Electron] System node: ${systemNode}`);
-
-  const spawnEnv = { ...process.env, PORT: String(PORT), HOST: "127.0.0.1", PATH: mergedPath, STUDIO_NODE_PATH: systemNode };
-
-  // Find system node for packaged mode (Electron's Node has different ABI for native modules)
-  let spawnCmd, spawnArgs;
-  if (app.isPackaged) {
-    const tsxCli = path.join(projectDir, "node_modules", "tsx", "dist", "cli.mjs");
-    // Reuse systemNode resolved above — already captured in STUDIO_NODE_PATH as well
-    spawnCmd = systemNode;
-    spawnArgs = [tsxCli, "server/server.ts"];
-  } else {
-    spawnCmd = path.join(projectDir, "node_modules", ".bin", "tsx");
-    spawnArgs = ["server/server.ts"];
-  }
-
   console.log(`[Electron] Starting server: ${path.basename(spawnCmd)} ${spawnArgs.join(" ")}`);
   serverProcess = spawn(spawnCmd, spawnArgs, {
     cwd: projectDir,
@@ -117,6 +102,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, "preload.cjs"),
     },
   });
 
@@ -139,6 +125,12 @@ function buildMenu() {
       label: app.name,
       submenu: [
         { role: "about" },
+        {
+          label: "Check for Updates...",
+          click: () => {
+            desktopUpdater?.checkForUpdates("menu");
+          },
+        },
         { type: "separator" },
         { role: "hide" },
         { role: "hideOthers" },
@@ -222,12 +214,26 @@ function killServer() {
 let isQuitting = false;
 
 app.whenReady().then(async () => {
+  desktopUpdater = createDesktopUpdater({
+    app,
+    autoUpdater,
+    dialog: require("electron").dialog,
+    getWindows: () => (mainWindow ? [mainWindow] : []),
+    ipcMain: require("electron").ipcMain,
+    quitAndInstall: async () => {
+      if (isInstallingUpdate) return;
+      isInstallingUpdate = true;
+      await killServer();
+      autoUpdater.quitAndInstall(false, true);
+    },
+  });
   buildMenu();
   startServer();
 
   try {
     await waitForServer();
     createWindow();
+    desktopUpdater.scheduleStartupCheck();
   } catch (err) {
     console.error("[Electron] Failed to start server:", err.message);
     app.quit();
@@ -240,6 +246,9 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", (event) => {
   // Wait for server to actually exit before allowing quit
+  if (isInstallingUpdate) {
+    return;
+  }
   if (serverProcess && !isQuitting) {
     isQuitting = true;
     event.preventDefault();
@@ -251,4 +260,8 @@ app.on("activate", () => {
   if (mainWindow === null && serverProcess) {
     createWindow();
   }
+});
+
+app.on("quit", () => {
+  desktopUpdater?.dispose();
 });

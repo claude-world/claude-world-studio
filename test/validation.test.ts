@@ -127,12 +127,12 @@ describe("CreateAccountSchema", () => {
     assert.ok(result.success);
   });
 
-  it('accepts "instagram" platform', () => {
+  it('rejects "instagram" platform', () => {
     const result = CreateAccountSchema.safeParse({
       ...validAccount,
       platform: "instagram",
     });
-    assert.ok(result.success);
+    assert.strictEqual(result.success, false);
   });
 
   it("rejects name longer than 100 characters", () => {

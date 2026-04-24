@@ -65,6 +65,7 @@ function buildTestDb() {
       platform TEXT NOT NULL,
       account TEXT NOT NULL,
       content TEXT NOT NULL,
+      score REAL,
       image_url TEXT,
       post_id TEXT,
       post_url TEXT,
@@ -114,8 +115,8 @@ function buildTestDb() {
     ),
     deleteAccount: db.prepare(`DELETE FROM social_accounts WHERE id = ?`),
     addPublish: db.prepare(
-      `INSERT INTO publish_history (id, session_id, platform, account, content, image_url, post_id, post_url, status, link_comment, source_url)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO publish_history (id, session_id, platform, account, content, score, image_url, post_id, post_url, status, link_comment, source_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ),
     getPublishHistory: db.prepare(`SELECT * FROM publish_history ORDER BY created_at DESC LIMIT ?`),
     createTask: db.prepare(
@@ -196,6 +197,7 @@ function buildTestDb() {
       platform: string;
       account: string;
       content: string;
+      score?: number | null;
       status: string;
     }) {
       const id = uuidv4();
@@ -205,6 +207,7 @@ function buildTestDb() {
         record.platform,
         record.account,
         record.content,
+        record.score ?? null,
         null,
         null,
         null,
@@ -467,16 +470,19 @@ describe("DB store: publish history CRUD", () => {
       platform: "threads",
       account: "acc-1",
       content: "My first post",
+      score: 88,
       status: "published",
     });
 
     assert.ok(record.id, "addPublish should return a record with an id");
     assert.strictEqual(record.content, "My first post");
+    assert.strictEqual(record.score, 88);
     assert.strictEqual(record.status, "published");
 
     const history = store.getPublishHistory(50);
     assert.strictEqual(history.length, 1);
     assert.strictEqual(history[0].content, "My first post");
+    assert.strictEqual(history[0].score, 88);
   });
 
   it("getPublishHistory respects the limit parameter", () => {

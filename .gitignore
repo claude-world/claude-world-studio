@@ -3,6 +3,7 @@ dist/
 data/
 workspaces/
 mcp-servers/
+downloads/
 
 # Secrets — never commit
 .env

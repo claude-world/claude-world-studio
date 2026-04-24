@@ -530,15 +530,20 @@ async function cmdPublish(args, port, host) {
   const body = { accountId, text };
   if (score) body.score = parseInt(score, 10);
   if (imageUrl) body.imageUrl = imageUrl;
-  if (poll) body.pollOptions = poll.split("|");
+  if (poll) body.pollOptions = poll;
   if (linkComment) body.linkComment = linkComment;
-  if (tag) body.tag = tag;
+  if (tag) body.topicTag = tag;
 
   const result = await api("POST", "/api/publish", body, port, host);
   output(result, (r) => {
     if (r.success) {
-      console.log(`Published! Post ID: ${r.postId || "pending"}`);
-      if (r.postUrl) console.log(`  URL: ${r.postUrl}`);
+      if (r.status === "draft") {
+        console.log(`Saved as draft: ${r.id}`);
+        if (r.message) console.log(`  ${r.message}`);
+      } else {
+        console.log(`Published! Post ID: ${r.postId || "pending"}`);
+        if (r.postUrl) console.log(`  URL: ${r.postUrl}`);
+      }
     } else {
       console.log(`Publish failed: ${r.error}`);
     }

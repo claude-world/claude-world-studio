@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import type { Language } from "../App";
+import { DesktopUpdateCard } from "./DesktopUpdateCard";
+import type { DesktopUpdateState } from "../hooks/useDesktopUpdater";
 
 const T = {
   "zh-TW": {
@@ -236,6 +238,10 @@ interface SettingsPageProps {
   onClose: () => void;
   language: Language;
   onLanguageChange: (lang: Language) => void;
+  desktopUpdateState: DesktopUpdateState;
+  onCheckForUpdates: () => void | Promise<unknown>;
+  onDownloadUpdate: () => void | Promise<unknown>;
+  onInstallUpdate: () => void | Promise<unknown>;
 }
 
 interface SettingsData {
@@ -443,6 +449,10 @@ export function SettingsPage({
   onClose,
   language,
   onLanguageChange,
+  desktopUpdateState,
+  onCheckForUpdates,
+  onDownloadUpdate,
+  onInstallUpdate,
 }: SettingsPageProps) {
   const t = T[language];
   const SETTING_GROUPS = getSettingGroups(t);
@@ -654,6 +664,14 @@ export function SettingsPage({
       </div>
 
       <div className="p-6 max-w-2xl space-y-8">
+        <DesktopUpdateCard
+          language={language}
+          state={desktopUpdateState}
+          onCheckForUpdates={onCheckForUpdates}
+          onDownloadUpdate={onDownloadUpdate}
+          onInstallUpdate={onInstallUpdate}
+        />
+
         {/* Auto-detect */}
         <div className="p-4 bg-gradient-to-r from-emerald-50 to-blue-50 border border-emerald-200 rounded-lg dark:from-emerald-900/40 dark:to-blue-900/40 dark:border-emerald-700">
           <div className="flex items-center justify-between mb-2">

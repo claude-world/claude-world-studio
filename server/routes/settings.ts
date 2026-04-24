@@ -10,6 +10,7 @@ import { fileURLToPath } from "url";
 import store from "../db.js";
 import { getSettings } from "../mcp-config.js";
 import { logger } from "../logger.js";
+import { getDefaultWorkspace, getSkillsDir, validateWorkspacePath } from "../runtime-paths.js";
 
 const { join, dirname, isAbsolute } = path;
 
@@ -49,8 +50,9 @@ router.get("/", (_req, res) => {
 
   // Guard: if the stored defaultWorkspace no longer exists on disk, clear it so
   // the client doesn't send a stale path that causes POST /sessions to return 400.
-  if (merged.defaultWorkspace && !existsSync(merged.defaultWorkspace)) {
-    merged.defaultWorkspace = "";
+  if (merged.defaultWorkspace) {
+    const validation = validateWorkspacePath(merged.defaultWorkspace);
+    merged.defaultWorkspace = validation.ok ? validation.realPath : "";
   }
 
   res.json(merged);
@@ -76,8 +78,7 @@ router.get("/pick-folder", async (_req, res) => {
 // Auto-detect installed MCP tools
 router.get("/detect", (_req, res) => {
   const home = process.env.HOME || "";
-  const workspace =
-    getSettings().defaultWorkspace || process.env.DEFAULT_WORKSPACE || process.cwd();
+  const workspace = getSettings().defaultWorkspace || getDefaultWorkspace();
 
   const projectMcp = join(__dirname, "../../mcp-servers");
   const searchRoots = [
@@ -170,8 +171,7 @@ router.get("/detect", (_req, res) => {
 // Apply detected values to DB
 router.post("/detect/apply", (_req, res) => {
   const home = process.env.HOME || "";
-  const workspace =
-    getSettings().defaultWorkspace || process.env.DEFAULT_WORKSPACE || process.cwd();
+  const workspace = getSettings().defaultWorkspace || getDefaultWorkspace();
 
   let applied = 0;
 
@@ -386,6 +386,17 @@ router.put("/", (req, res) => {
       if (!isAbsolute(value) || /[;&|`$(){}]/.test(value)) continue;
     }
 
+    if (key === "defaultWorkspace") {
+      if (!value) {
+        store.setSetting(key, "");
+        continue;
+      }
+      const validation = validateWorkspacePath(value);
+      if (!validation.ok) continue;
+      store.setSetting(key, validation.realPath);
+      continue;
+    }
+
     // Validate CLI command names
     if (key === "cliPrimary" && value && !VALID_CLI_COMMANDS.has(value)) continue;
     if (key === "cliEnabledList" && value) {
@@ -422,7 +433,7 @@ router.post("/sync-skills", async (_req, res) => {
     },
   ];
 
-  const skillsDir = join(__dirname, "../../.claude/skills");
+  const skillsDir = getSkillsDir();
   const results: { path: string; success: boolean; error?: string; size?: number }[] = [];
 
   for (const skill of SKILL_URLS) {

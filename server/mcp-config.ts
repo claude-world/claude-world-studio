@@ -1,10 +1,11 @@
 import { chmodSync, existsSync, mkdtempSync, writeFileSync } from "fs";
-import { isAbsolute, join } from "path";
+import { basename, dirname, isAbsolute, join } from "path";
 import { execFileSync } from "child_process";
 import { tmpdir } from "os";
 import type { Settings, Language, Theme, CfBrowserMode } from "./types.js";
 import store from "./db.js";
 import { logger } from "./logger.js";
+import { getDefaultWorkspace } from "./runtime-paths.js";
 
 /** Validate a path setting: must be absolute and exist on disk */
 function isValidPath(p: string): boolean {
@@ -38,7 +39,7 @@ export function getSettings(): Settings {
     cfBrowserApiKey: all.cfBrowserApiKey || process.env.CF_BROWSER_API_KEY || "",
     cfAccountId: all.cfAccountId || process.env.CF_ACCOUNT_ID || "",
     cfApiToken: all.cfApiToken || process.env.CF_API_TOKEN || "",
-    defaultWorkspace: all.defaultWorkspace || process.env.DEFAULT_WORKSPACE || process.cwd(),
+    defaultWorkspace: all.defaultWorkspace || getDefaultWorkspace(),
     minOverallScore: parseInt(all.minOverallScore as string) || 70,
     minConversationScore: parseInt(all.minConversationScore as string) || 55,
     agenticLevel: (all.agenticLevel as Settings["agenticLevel"]) || "enhanced",
@@ -95,10 +96,15 @@ export function buildMcpServers(settings: Settings) {
       name: "notebooklm",
       path: settings.notebooklmServerPath,
       build: () => {
-        // Use the venv python from the same project directory as server.py
-        const serverDir = settings.notebooklmServerPath.replace(/\/mcp_server\/server\.py$/, "");
-        const venvPython = `${serverDir}/.venv/bin/python`;
-        const cmd = existsSync(venvPython) ? venvPython : "python3";
+        const serverDir = dirname(settings.notebooklmServerPath);
+        const projectDir = ["mcp-server", "mcp_server"].includes(basename(serverDir))
+          ? dirname(serverDir)
+          : serverDir;
+        const candidates = [
+          join(projectDir, ".venv/bin/python"),
+          join(serverDir, ".venv/bin/python"),
+        ];
+        const cmd = candidates.find(existsSync) || "python3";
         return {
           command: cmd,
           args: [settings.notebooklmServerPath],

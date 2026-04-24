@@ -33,12 +33,21 @@ class AgentOrchestrator extends EventEmitter {
 
   constructor() {
     super();
-    // Mark any active goals from a previous server run as failed (they have no in-memory run)
+    // Mark any active goals from a previous server run as failed (they have no in-memory run).
+    // Paused goals are preserved — resuming them across restarts is not yet supported,
+    // but rewriting user-set 'paused' → 'failed' would destroy user intent silently.
     const stale = store.markStaleGoalsFailed();
     if (stale.changes > 0) {
       logger.info(
         "Orchestrator",
         `Marked ${stale.changes} stale active goal(s) as failed on startup`
+      );
+    }
+    const orphanedPaused = store.countOrphanedPausedGoals();
+    if (orphanedPaused > 0) {
+      logger.info(
+        "Orchestrator",
+        `${orphanedPaused} paused goal(s) preserved across restart — resume across restart is not yet supported, re-create the goal if you need it to continue`
       );
     }
     // GC stale runs every 30 minutes
@@ -119,12 +128,15 @@ class AgentOrchestrator extends EventEmitter {
     return true;
   }
 
-  /** Resume a paused goal — re-launches the state machine from the start */
+  /** Resume a paused goal — re-launches the state machine from the start.
+   * Sets `run.resumed` so the state machine skips duplicate "Started goal" memories
+   * and never rewinds progress below its current value. */
   resumeGoal(goalId: string): boolean {
     const run = this.runs.get(goalId);
     if (!run || run.state !== "paused") return false;
     const goal = store.getGoal(goalId);
     if (!goal) return false;
+    run.resumed = true;
     this.transition(run, "executing");
     store.updateGoalStatus(goalId, "active");
     // Re-launch the state machine — it was exited at the yield-point guard when paused.
@@ -203,7 +215,9 @@ class AgentOrchestrator extends EventEmitter {
     // ── EXECUTE phase ─────────────────────────────────────────────────────
     this.transition(run, "executing", onState);
     store.updateGoalStatus(run.goalId, "active");
-    store.updateGoalProgress(run.goalId, 25);
+    // Progress updates are monotonic — on a resumed run the DB already reflects
+    // a later phase, so never rewind.
+    this.advanceProgress(run.goalId, 25);
 
     // Simulate execution progress (actual work happens via Claude sessions)
     // The orchestrator tracks state; the real execution is done by AgentSession
@@ -211,20 +225,23 @@ class AgentOrchestrator extends EventEmitter {
     // Yield-point abort/pause check — abortGoal or pauseGoal may have fired during the await.
     // Without this guard the state machine would overwrite the paused/failed state with "reflecting".
     if (run.state === "failed" || run.state === "paused") return;
-    store.updateGoalProgress(run.goalId, 50);
+    this.advanceProgress(run.goalId, 50);
 
     // ── REFLECT phase ─────────────────────────────────────────────────────
     this.transition(run, "reflecting", onState);
-    store.updateGoalProgress(run.goalId, 75);
+    this.advanceProgress(run.goalId, 75);
 
-    // Save a "goal started" memory for future sessions
-    memoryService.saveMemory({
-      goalId: run.goalId,
-      accountId,
-      content: `Started goal: "${goal.description}". ${pastLessons}`,
-      tags: ["goal-start", "orchestrator"],
-      memoryType: "general",
-    });
+    // Save a "goal started" memory for future sessions — only on a fresh run.
+    // On resume, the row already exists; re-writing it would duplicate and poison FTS5 ranking.
+    if (!run.resumed) {
+      memoryService.saveMemory({
+        goalId: run.goalId,
+        accountId,
+        content: `Started goal: "${goal.description}". ${pastLessons}`,
+        tags: ["goal-start", "orchestrator"],
+        memoryType: "general",
+      });
+    }
 
     // Yield-point guard — abort/pause may have fired during saveMemory (sync, but defensive).
     // Cast through string to bypass TS narrowing that was locked in by the earlier guard + transition call.
@@ -234,7 +251,7 @@ class AgentOrchestrator extends EventEmitter {
     // ── COMPLETE phase ────────────────────────────────────────────────────
     this.transition(run, "complete", onState);
     store.updateGoalStatus(run.goalId, "completed");
-    store.updateGoalProgress(run.goalId, 100);
+    this.advanceProgress(run.goalId, 100);
 
     memoryService.saveMemory({
       goalId: run.goalId,
@@ -271,6 +288,17 @@ class AgentOrchestrator extends EventEmitter {
         this.runs.delete(id);
         logger.info("Orchestrator", `GC'd stale run for goal ${id}`);
       }
+    }
+  }
+
+  /** Monotonic progress update — only writes if the new value is greater than
+   * what's already stored. Prevents resumeGoal from rewinding a paused goal's progress
+   * bar on the dashboard when the state machine re-enters earlier phases. */
+  private advanceProgress(goalId: string, next: number): void {
+    const current = store.getGoal(goalId);
+    if (!current) return;
+    if (next > current.progress) {
+      store.updateGoalProgress(goalId, next);
     }
   }
 

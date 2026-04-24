@@ -310,10 +310,12 @@ export class TaskScheduler {
       // Determine status — parsing failure is now "failed", not silently "completed"
       let status: "completed" | "published" | "rejected" | "failed";
       let publishRecordId: string | null = null;
+      let executionError: string | undefined;
 
       if (!taskResult) {
         // Agent didn't produce valid ---TASK_RESULT--- block
         status = "failed";
+        executionError = "No valid TASK_RESULT block in agent output";
         logger.warn("Scheduler", `Task "${task.name}" failed: no valid TASK_RESULT block`);
       } else if (score !== null && score < task.min_score) {
         status = "rejected";
@@ -323,7 +325,8 @@ export class TaskScheduler {
         );
       } else if (taskResult.published && !task.auto_publish) {
         // Agent published when auto_publish is off — flag as anomaly
-        status = "published";
+        status = "failed";
+        executionError = "Agent reported published despite auto_publish=off";
         logger.warn(
           "Scheduler",
           `Task "${task.name}" published despite auto_publish=off (score ${score})`
@@ -345,7 +348,7 @@ export class TaskScheduler {
         cost_usd: result.costUsd,
         duration_ms: durationMs,
         publish_record_id: publishRecordId,
-        error: !taskResult ? "No valid TASK_RESULT block in agent output" : undefined,
+        error: executionError,
       });
 
       // Save outcome as memory for future self-improvement
@@ -418,7 +421,10 @@ export class TaskScheduler {
     const settings = getSettings();
     const mcpServers = buildMcpServers(settings);
     const cwd = settings.defaultWorkspace || process.cwd();
-    const studioServer = createStudioMcpServer();
+    const studioServer = createStudioMcpServer({
+      workspaceRoot: cwd,
+      publishMode: task.auto_publish ? "publish" : "draft",
+    });
 
     const allMcpServers: Record<string, any> = { ...mcpServers, studio: studioServer };
     const allowedTools = ["WebSearch", "WebFetch"];

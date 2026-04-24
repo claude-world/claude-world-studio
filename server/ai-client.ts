@@ -1,5 +1,5 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { buildMcpServers, getSettings } from "./mcp-config.js";
@@ -8,6 +8,7 @@ import { memoryService } from "./services/memory-service.js";
 import store from "./db.js";
 import type { AgenticMode, Language, SocialAccount } from "./types.js";
 import type { ICliSession } from "./cli-session.js";
+import { getSkillCandidatePaths } from "./runtime-paths.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -15,13 +16,16 @@ const __dirname = dirname(__filename);
 /** Load the threads-viral-agent SKILL.md on demand (strip frontmatter) */
 function loadViralAgentSkill(): string {
   try {
-    const skillPath = join(__dirname, "../.claude/skills/threads-viral-agent/SKILL.md");
-    const raw = readFileSync(skillPath, "utf-8");
-    // Strip YAML frontmatter (--- ... ---)
-    return raw.replace(/^---[\s\S]*?---\n*/, "").trim();
+    for (const skillPath of getSkillCandidatePaths("threads-viral-agent/SKILL.md")) {
+      if (!existsSync(skillPath)) continue;
+      const raw = readFileSync(skillPath, "utf-8");
+      // Strip YAML frontmatter (--- ... ---)
+      return raw.replace(/^---[\s\S]*?---\n*/, "").trim();
+    }
   } catch {
     return "";
   }
+  return "";
 }
 
 const LANGUAGE_INSTRUCTIONS: Record<Language, string> = {
@@ -397,7 +401,7 @@ export class AgentSession implements ICliSession {
     this.agenticMode = agenticLevelToMode(settings.agenticLevel || "enhanced");
 
     // In-process Studio MCP server (direct DB access, no env vars)
-    const studioServer = createStudioMcpServer();
+    const studioServer = createStudioMcpServer({ workspaceRoot: cwd, sessionId: this.sessionId });
 
     const allowedTools = ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebSearch", "WebFetch"];
 

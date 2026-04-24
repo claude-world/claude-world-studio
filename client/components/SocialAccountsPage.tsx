@@ -458,7 +458,6 @@ function AccountForm({
             className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded text-sm"
           >
             <option value="threads">Threads</option>
-            <option value="instagram">Instagram</option>
           </select>
         </div>
         <div>
@@ -547,7 +546,7 @@ export function SocialAccountsPage({
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Accounts tab filter
-  const [platformFilter, setPlatformFilter] = useState<"all" | "threads" | "instagram">("all");
+  const [platformFilter, setPlatformFilter] = useState<"all" | "threads">("all");
 
   // Review queue
   const [pendingPosts, setPendingPosts] = useState<Post[]>([]);
@@ -774,7 +773,7 @@ export function SocialAccountsPage({
             {/* Toolbar: filter pills + add button */}
             <div className="flex items-center justify-between">
               <div className="flex gap-1">
-                {(["all", "threads", "instagram"] as const).map((f) => {
+                {(["all", "threads"] as const).map((f) => {
                   const count =
                     f === "all" ? accounts.length : accounts.filter((a) => a.platform === f).length;
                   return (

@@ -169,7 +169,7 @@ export function Sidebar({
                 </div>
                 <div className="flex gap-2">
                   <span className="text-blue-400 font-mono shrink-0">4.</span>
-                  <span className="text-gray-400">Publish directly to Threads/IG</span>
+                  <span className="text-gray-400">Publish directly to Threads</span>
                 </div>
               </div>
             </div>

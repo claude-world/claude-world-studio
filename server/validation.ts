@@ -14,7 +14,7 @@ export const UpdateSessionSchema = z.object({
 export const CreateAccountSchema = z.object({
   name: z.string().min(1).max(100),
   handle: z.string().min(1).max(100),
-  platform: z.enum(["threads", "instagram"]),
+  platform: z.literal("threads"),
   token: z.string().optional(),
   user_id: z.string().optional(),
   style: z.string().max(500).optional(),

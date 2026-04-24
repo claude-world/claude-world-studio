@@ -54,7 +54,7 @@ Full support for Traditional Chinese, English, and Japanese — all UI, system p
 
 ### Social Publishing (Native TypeScript)
 
-Built-in Threads/Instagram publishing via native `fetch()` — no Python dependency. Every post is checked against Meta's patent-based 5-dimension scoring:
+Built-in Threads publishing via native `fetch()` — no Python dependency. Every post is checked against Meta's patent-based 5-dimension scoring:
 
 | Dimension               | Patent      | What it checks                                   |
 | ----------------------- | ----------- | ------------------------------------------------ |
@@ -70,7 +70,7 @@ Quality gates: Overall >= 70, Conversation Durability >= 55.
 
 ### Multi-Account & Persona
 
-- Multiple Threads/Instagram accounts with independent personas
+- Multiple Threads accounts with independent personas
 - Per-account style (e.g., "tech-educator", "futurist")
 - Per-account persona prompt for tone adaptation
 - Matrix publishing: same topic → unique content per account
@@ -199,7 +199,7 @@ Download the latest `.dmg` from [GitHub Releases](https://github.com/claude-worl
 - Double-click to launch — server starts automatically
 - No terminal, no Node.js install needed
 - MCP servers auto-detected via uvx (install [uv](https://docs.astral.sh/uv/) first)
-- All features included: Web UI + CLI + MCP + Publishing
+- All desktop features included: Web UI + MCP + Publishing
 
 > **Requires**: macOS (Apple Silicon). Intel Mac build available on request.
 

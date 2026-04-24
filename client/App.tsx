@@ -19,6 +19,7 @@ import { TrafficDashboardPage } from "./components/TrafficDashboardPage";
 import { AgentDashboard } from "./components/AgentDashboard";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { apiGet, apiPost, apiPut, apiPatch, apiDelete } from "./hooks/useApi";
+import { useDesktopUpdater } from "./hooks/useDesktopUpdater";
 import { LanguageProvider } from "./hooks/useLanguage";
 
 export type Language = "zh-TW" | "en" | "ja";
@@ -105,6 +106,7 @@ export default function App() {
     { id: string; name: string; handle: string; platform: string }[]
   >([]);
   const [targetAccountId, setTargetAccountId] = useState("");
+  const desktopUpdater = useDesktopUpdater();
 
   // Apply dark class to <html>
   useEffect(() => {
@@ -557,6 +559,10 @@ export default function App() {
                 onClose={() => setActivePage("chat")}
                 language={language}
                 onLanguageChange={handleLanguageChange}
+                desktopUpdateState={desktopUpdater.state}
+                onCheckForUpdates={desktopUpdater.checkForUpdates}
+                onDownloadUpdate={desktopUpdater.downloadUpdate}
+                onInstallUpdate={desktopUpdater.installUpdate}
               />
             </ErrorBoundary>
           ) : showSocial ? (

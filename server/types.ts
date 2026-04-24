@@ -72,6 +72,7 @@ export interface PublishRecord {
   platform: string;
   account: string;
   content: string;
+  score: number | null;
   image_url: string | null;
   post_id: string | null;
   post_url: string | null;
@@ -240,6 +241,9 @@ export interface OrchestratorGoalRun {
   retries: number;
   /** Set after the first terminal-state eviction timer is scheduled to prevent duplicate timeouts. */
   evictionScheduled?: boolean;
+  /** Set when resumeGoal re-launches the state machine so phases skip re-emitting side effects
+   * (duplicate "Started goal" memory, progress regression). */
+  resumed?: boolean;
 }
 
 // ── Analytics query row types (db.ts) ─────────────────────────────────────────

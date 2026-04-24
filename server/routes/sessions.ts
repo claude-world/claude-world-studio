@@ -1,12 +1,8 @@
 import { Router } from "express";
-import { existsSync } from "fs";
-import { isAbsolute } from "path";
 import store from "../db.js";
 import { removeSession } from "../server.js";
 import { CreateSessionSchema, UpdateSessionSchema, parseBody } from "../validation.js";
-
-/** Paths that must never be used as a workspace */
-const BLOCKED_ROOTS = ["/etc", "/usr", "/bin", "/sbin", "/var", "/System", "/Library", "/private"];
+import { validateWorkspacePath } from "../runtime-paths.js";
 
 const router = Router();
 
@@ -22,23 +18,16 @@ router.post("/", (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error });
 
   const { title, workspacePath } = parsed.data;
+  let safeWorkspacePath = workspacePath;
 
   // Validate workspacePath if provided (filesystem checks that Zod can't do)
   if (workspacePath) {
-    if (!isAbsolute(workspacePath)) {
-      return res.status(400).json({ error: "workspacePath must be an absolute path" });
-    }
-    if (!existsSync(workspacePath)) {
-      return res.status(400).json({ error: "workspacePath does not exist" });
-    }
-    if (
-      BLOCKED_ROOTS.some((root) => workspacePath === root || workspacePath.startsWith(root + "/"))
-    ) {
-      return res.status(400).json({ error: "workspacePath cannot be a system directory" });
-    }
+    const validation = validateWorkspacePath(workspacePath);
+    if (!validation.ok) return res.status(400).json({ error: validation.error });
+    safeWorkspacePath = validation.realPath;
   }
 
-  const session = store.createSession(title, workspacePath);
+  const session = store.createSession(title, safeWorkspacePath);
   res.status(201).json(session);
 });
 
