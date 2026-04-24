@@ -1,6 +1,25 @@
 # Changelog
 
-## [2.2.0] - 2026-04-12
+## [2.2.0] - 2026-04-24
+
+### Added — Desktop Auto-Updater
+
+- `electron/updater.cjs` — in-app update checker (manifest-based, signature-verified download + install)
+- `electron/preload.cjs` — exposes `window.desktopUpdater` API with typed bridge
+- `electron/server-runtime.cjs` — packaged server bootstrap, unifies dev vs. app.asar path resolution
+- `server/runtime-paths.ts` — single source of truth for DB path, user data dir, workspace root, skill paths across tsx / packaged runtimes
+- `DesktopUpdateCard` + `useDesktopUpdater` — Settings page UI to check / download / install updates
+- `scripts/desktop-smoke.cjs` — packaged-app smoke test (`npm run test:desktop-smoke`)
+
+### Fixed — Ultrareview Round (v2.2.0 pre-release)
+
+- `deleteAccount` no longer throws `SQLITE_CONSTRAINT_FOREIGNKEY` for accounts referenced by goals/memories/workflows/scheduled_tasks — dependents are null-cleaned (or cascade-deleted for scheduled_tasks) inside a transaction before the parent delete
+- `markStaleGoalsFailed` narrowed back to `status='active'` — paused goals now survive server restarts; orphaned paused rows get a distinct log line instead of being silently rewritten to `failed`
+- `publish_history.score` backfilled to 70 (= MIN_PUBLISH_SCORE) on the `ADD COLUMN score REAL` migration — legacy drafts are publishable via `/batch` again instead of rejecting with "Draft has no quality score"
+- `PublishDialog` sends `score: 70` on manual human-reviewed publishes so the dialog no longer silently force-drafts every post (regression for `auto_publish=on` accounts)
+- `resumeGoal` sets a `resumed` flag on the run; progress updates are now monotonic via `advanceProgress()` and the "Started goal" memory save is skipped on resume — no more 25→50→75→100 progress rewind or duplicate FTS5 rows poisoning future planning lookups
+- `getMemoriesByType(undefined, ...)` uses a dedicated SQL statement so `/api/agent/reflections` returns reflections across accounts instead of only globally-scoped ones (SQL `account_id = NULL` never matches)
+- `searchMemories` accountId branch widened to `(account_id = ? OR account_id IS NULL)` so per-account search also surfaces account-agnostic memories — aligns with `getContextMemories` / `getMemoriesByType` semantics
 
 ### Added — Agentic Upgrade (Phase 1 + 2 + 3)
 
