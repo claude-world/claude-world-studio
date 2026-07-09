@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.2.2] - 2026-07-09
+
+### Fixed — Desktop
+
+- **Automatic port fallback.** The packaged app no longer refuses to launch when its default port (3001) is taken by another local service — it binds the first free port at or after the preferred one and loads the window from that same port. Replaces the previous "port in use → startup error" behavior. `STUDIO_PORT`/`PORT` still set the preferred starting point.
+
 ## [2.2.1] - 2026-07-08
 
 ### Security
