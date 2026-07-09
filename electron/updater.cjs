@@ -1,3 +1,5 @@
+// Keep these channel names in sync with electron/preload.cjs — the sandboxed
+// preload cannot require this file, so it carries its own copies.
 const UPDATE_STATE_CHANNEL = "studio:update/state";
 const IPC_GET_STATE = "studio:update/get-state";
 const IPC_CHECK = "studio:update/check";
@@ -70,6 +72,7 @@ function createDesktopUpdater({
   isPackaged = app.isPackaged,
   platform = process.platform,
   autoCheckDelayMs = 5000,
+  checkTimeoutMs = 60000,
 }) {
   let state = createDefaultUpdateState({
     currentVersion: app.getVersion(),
@@ -77,6 +80,7 @@ function createDesktopUpdater({
     platform,
   });
   let startupCheckTimer = null;
+  let checkTimeoutTimer = null;
 
   const listeners = [];
 
@@ -94,7 +98,18 @@ function createDesktopUpdater({
     }
   }
 
+  function clearCheckTimeout() {
+    if (checkTimeoutTimer) {
+      clearTimeout(checkTimeoutTimer);
+      checkTimeoutTimer = null;
+    }
+  }
+
   function setState(patch) {
+    // Any transition away from "checking" resolves the pending check watchdog.
+    if (patch.status && patch.status !== "checking") {
+      clearCheckTimeout();
+    }
     state = { ...state, ...patch };
     broadcast();
     return snapshot();
@@ -166,6 +181,21 @@ function createDesktopUpdater({
       message: source === "startup" ? "Checking for desktop updates..." : "Checking for updates...",
     });
 
+    // Watchdog: if electron-updater never emits a result or error, reset the
+    // state so the "checking" guard doesn't block every future check.
+    clearCheckTimeout();
+    checkTimeoutTimer = setTimeout(() => {
+      checkTimeoutTimer = null;
+      if (state.status === "checking") {
+        setState({
+          status: "error",
+          checkedAt: new Date().toISOString(),
+          message: "Update check timed out. Please try again.",
+        });
+      }
+    }, checkTimeoutMs);
+    checkTimeoutTimer.unref?.();
+
     try {
       await autoUpdater.checkForUpdates();
     } catch (error) {
@@ -207,7 +237,7 @@ function createDesktopUpdater({
     }
 
     setState({
-      status: "downloaded",
+      status: "installing",
       message: "Installing update...",
     });
 
@@ -227,6 +257,7 @@ function createDesktopUpdater({
 
   function dispose() {
     clearTimeout(startupCheckTimer);
+    clearCheckTimeout();
     for (const [event, handler] of listeners) {
       autoUpdater.removeListener(event, handler);
     }

@@ -550,6 +550,7 @@ export function SocialAccountsPage({
 
   // Review queue
   const [pendingPosts, setPendingPosts] = useState<Post[]>([]);
+  const [pendingError, setPendingError] = useState(false);
   const [reviewFilter, setReviewFilter] = useState<string>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [publishing, setPublishing] = useState(false);
@@ -557,6 +558,7 @@ export function SocialAccountsPage({
   // History
   const [historyAccount, setHistoryAccount] = useState<string>("all");
   const [posts, setPosts] = useState<Post[]>([]);
+  const [historyError, setHistoryError] = useState(false);
 
   const fetchAccounts = useCallback(() => {
     fetch("/api/accounts")
@@ -567,9 +569,15 @@ export function SocialAccountsPage({
 
   const fetchPending = useCallback(() => {
     fetch("/api/publish/pending")
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setPendingPosts)
-      .catch(() => {});
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data) => {
+        setPendingPosts(data);
+        setPendingError(false);
+      })
+      .catch(() => setPendingError(true));
   }, []);
 
   const fetchHistory = useCallback((accountId: string) => {
@@ -578,9 +586,15 @@ export function SocialAccountsPage({
         ? "/api/publish/history?limit=200"
         : `/api/accounts/${accountId}/posts?limit=200`;
     fetch(url)
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setPosts)
-      .catch(() => {});
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data) => {
+        setPosts(data);
+        setHistoryError(false);
+      })
+      .catch(() => setHistoryError(true));
   }, []);
 
   useEffect(() => {
@@ -619,6 +633,7 @@ export function SocialAccountsPage({
   };
 
   const handleDelete = async (id: string) => {
+    if (!window.confirm("Delete this account?")) return;
     try {
       const res = await fetch(`/api/accounts/${id}`, { method: "DELETE" });
       if (res.ok) fetchAccounts();
@@ -923,7 +938,9 @@ export function SocialAccountsPage({
         {/* ===== Review Queue Tab ===== */}
         {tab === "review" && (
           <div className="space-y-4">
-            {pendingPosts.length === 0 ? (
+            {pendingError ? (
+              <p className="text-sm text-red-500 text-center py-8">Failed to load review queue.</p>
+            ) : pendingPosts.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-3xl mb-3">&#9989;</div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">{t.noPendingTitle}</p>
@@ -1028,7 +1045,9 @@ export function SocialAccountsPage({
               </button>
             </div>
 
-            {posts.length === 0 ? (
+            {historyError ? (
+              <p className="text-sm text-red-500 text-center py-8">Failed to load post history.</p>
+            ) : posts.length === 0 ? (
               <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">
                 {t.noPostsYet}
               </p>

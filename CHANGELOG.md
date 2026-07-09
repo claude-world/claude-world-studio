@@ -1,5 +1,58 @@
 # Changelog
 
+## [2.2.1] - 2026-07-08
+
+### Security
+
+- **Stopped shipping the developer's live SQLite DB in release artifacts.** `data/**/*` and the `data`→`data` `extraResources` mapping were removed from the electron-builder config; every prior `.dmg`/`.zip` bundled `data/studio.db`. GitHub releases that leaked real Threads access tokens or a `.env` with `CF_BROWSER_API_KEY` (v1.3.0–v1.7.0, v2.0.0) were deleted. **Rotate any Threads tokens and Cloudflare browser API keys that were live before this release.**
+- `upload_image` MCP tool now re-verifies workspace containment with `realpathSync` after the lexical check, matching the file-serving route — a symlink inside the workspace can no longer exfiltrate arbitrary files to public image hosting.
+
+### Fixed — Quality gates & publishing
+
+- All REST publish paths (`POST /api/publish`, `/batch`) now enforce the configurable `minOverallScore` setting instead of a hardcoded 70, matching the MCP tool; scheduled tasks thread their per-task `min_score` into the publish gate _before_ posting (previously a below-threshold post could go live and then be recorded as "rejected").
+- The `score = 70` draft backfill is now a true one-time migration (guarded by a `migration_publish_score_backfill` flag) — it no longer re-runs on every restart and converts fresh unscored drafts into publishable ones.
+- Publish timeout during the final step now records status `"unknown"` (verify before retrying) instead of a false `"failed"` when Threads may have actually published.
+
+### Fixed — Agent, scheduler & sessions
+
+- `agenticLevel` (standard/enhanced/full) now persists via `PUT /api/settings` (was silently dropped by the allow-list); invalid values are reported in a new `skipped[]` response field.
+- `getContextMemories(undefined)` no longer collapses to global-only memories — per-account lessons are again injected into agent context and shown in the dashboard.
+- Scheduler retry no longer releases and re-acquires the overlap guard, closing a window where a cron tick could launch a duplicate concurrent run of the same task; invalid task timezones are validated on save and one bad row can no longer disable all remaining jobs at boot.
+- Subprocess CLI sessions (codex/gemini/opencode) no longer wedge permanently when a message arrives mid-turn, and successful turns no longer emit a duplicate `result`.
+- Idle-session eviction skips sessions that are actively running — long unattended agent runs are no longer killed mid-flight.
+- Per-session MCP config temp dirs (containing credentials) are cleaned up on session close plus a stale-dir sweep on startup.
+
+### Fixed — Desktop app
+
+- In-app updater now actually works: the sandboxed preload no longer `require()`s a sibling module (which threw and left `window.desktopUpdater` undefined). Added single-instance lock, foreign-server / port-in-use detection, an `will-navigate` + `openExternal` scheme allow-list, a startup-error dialog + log file, process-group kill so the server can't orphan on the port, and a check-timeout watchdog in the updater.
+
+### Fixed — Client
+
+- Chat history no longer duplicates on WebSocket reconnect; WS errors now surface as visible chat messages; the Publish dialog no longer wipes input while the agent streams; dashboard deletes only mutate the UI on server success and confirm first; account list refreshes across pages; reconnect retries indefinitely with capped backoff.
+
+### Added — Install & first-run automation
+
+- **Fresh-clone crash fixed:** the data directory is auto-created for all runtimes, so `npm run dev` / `npm start` / `electron:dev` work on a clean checkout.
+- `studio doctor` — first-boot preflight (Node version, native module ABI, Claude auth, uvx, data dir, port).
+- `studio setup-mcp` — the documented `npx @claude-world/studio setup-mcp` now works (spawns the setup script).
+- `scripts/ensure-native-abi.cjs` — wired as `predev`/`pretest`/`prestart`/`postinstall`; auto-heals the better-sqlite3 ABI mismatch left behind by `electron:build` (no more manual `npm rebuild`).
+- npm package now ships the built UI (`dist/`) and bundled skills (`.claude/skills/`) so `studio serve` serves a real web UI; global installs store their DB in the OS user-data dir instead of inside `node_modules`.
+- `engines: node >=20.19`, `.nvmrc`, `LICENSE` (MIT) added; `.env.example` trimmed to only the variables the code actually reads; stale `pnpm-lock.yaml` removed; Vite dev proxy honors `PORT` and cleans its output dir between builds.
+
+### Changed
+
+- Docs corrected: README React 18→19, Node prerequisite, added the Agentic v2.2 feature section and a Threads-token acquisition guide; CHANGELOG/CLAUDE.md dashboard tab names and `scripts/` description brought in line with the code.
+
+### Fixed — Adversarial review round (post-fix)
+
+- Chat reconnect merge compared a SQLite naive-UTC `created_at` (parsed as local time) against ISO-UTC local timestamps — in UTC+ zones this re-duplicated the whole recent conversation on every reconnect, in UTC− zones it dropped an in-flight message. Timestamps are now normalized to UTC before comparison.
+- Publish outcome is now recorded as `"unknown"` (not a false `"failed"`) on any non-HTTP failure of the final publish POST — the per-request 30s timeout and network drops are covered, not just caller aborts — across the MCP tool and both REST publish routes, preventing duplicate-posting retries.
+- `PUT /api/settings` now reports dropped values to the client (`skipped[]` surfaced in the Settings UI instead of an unconditional "Saved!"), no longer leaks internal `migration_*` flags via GET, and accepts the numeric round-trip of `minOverallScore`/`minConversationScore` (previously silently dropped on every save).
+- `upload_image` reads through a single held file descriptor (open→fstat→read), closing the realpath-check-then-read TOCTOU window.
+- Desktop app kills the detached server process group on `SIGINT`/`SIGTERM`/`SIGHUP`, so Ctrl+C on `npm run electron:dev` no longer orphans the server and blocks the next launch.
+- `studio doctor` probes the `claude`/`uvx` CLIs with `shell:true` on Windows so the `.cmd` shims resolve (no false "No Claude credentials found").
+- Vite dev proxy reads `PORT` from `.env` as well as the shell, matching the documented config method.
+
 ## [2.2.0] - 2026-04-24
 
 ### Added — Desktop Auto-Updater
@@ -69,7 +122,7 @@
 
 **Agent Dashboard** (`client/components/AgentDashboard.tsx`)
 
-- 4 tabs: Overview (active goals + recent memories), Goals, Memories, Workflows
+- 4 tabs: Goals, Workflows, Memory, Strategy
 - Goal progress bars, memory FTS search, workflow JSON import/export
 - `safeParse<T>()` helper for all JSON fields (sub_tasks, tags) — no uncaught parse errors
 

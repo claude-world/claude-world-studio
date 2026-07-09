@@ -123,6 +123,16 @@ Content integrity enforced at the system level:
 - Idle session eviction (30min TTL)
 - Query cancellation via interrupt button or CLI
 
+### Agentic Memory, Goals & Strategy (v2.2)
+
+- **Agent Dashboard** (`Agent` page) — four tabs: Goals, Workflows, Memory, Strategy
+- **Persistent goals** — PLAN→EXECUTE→REFLECT→COMPLETE state machine with pause/resume/abort, progress tracking, and multi-account matrix runs (`POST /api/agent/matrix-run`)
+- **Long-term memory** — SQLite FTS5 knowledge store, type-tagged, searchable from the dashboard and injected into agent context
+- **Reflections** — per-session self-evaluation records feeding improvement memories
+- **Workflow library** — reusable prompt templates with JSON import/export
+- **Strategy agent** — analytics-driven posting-time and content-mix recommendations
+- Full REST API under `/api/agent/*` (goals, memories, reflections, workflows, analytics)
+
 ### Dark Mode
 
 System/light/dark theme with persistent preference across sessions.
@@ -163,7 +173,7 @@ Full CJK input method support — Enter during Chinese/Japanese character compos
 
 | Layer       | Tech                                          |
 | ----------- | --------------------------------------------- |
-| Frontend    | React 18 + Vite + Tailwind CSS                |
+| Frontend    | React 19 + Vite + Tailwind CSS                |
 | Backend     | Express + WebSocket + Claude Agent SDK        |
 | AI Model    | Claude Sonnet 4.6 / Opus 4.6                  |
 | MCP Servers | trend-pulse, cf-browser, notebooklm           |
@@ -174,7 +184,7 @@ Full CJK input method support — Enter during Chinese/Japanese character compos
 
 ## Prerequisites
 
-- **Node.js** >= 18
+- **Node.js** >= 20.19 (see `.nvmrc`; required by better-sqlite3 12 and Vite 8)
 - **Claude Code CLI** installed and authenticated (`npm install -g @anthropic-ai/claude-code`)
 - **Python** 3.10+ (for MCP servers — or use `uvx` for zero-config setup)
 
@@ -213,8 +223,7 @@ npx @claude-world/studio setup-mcp
 
 # Start
 studio serve
-# Web UI: http://localhost:5173
-# API:    http://127.0.0.1:3001
+# Web UI + API: http://127.0.0.1:3001  (the built UI is bundled and served here)
 ```
 
 After install, both `studio` and `claude-world-studio` commands are available globally.
@@ -347,7 +356,13 @@ studio serve
 
 ### Step 2: Add Social Accounts
 
-Via UI: **Settings > Social Accounts**
+**Getting a Threads access token** (one-time):
+
+1. Create a Meta app at [developers.facebook.com](https://developers.facebook.com/) and add the **Threads API** use case
+2. Add your Threads profile as a tester and accept the invite in the Threads app (**Settings > Account > Website permissions > Invites**)
+3. Generate a long-lived access token with `threads_basic` + `threads_content_publish` scopes (Graph API Explorer or your app's Threads token tool). Long-lived tokens last 60 days and can be refreshed via `GET https://graph.threads.net/refresh_access_token`
+
+Then add the account — via UI: **Settings > Social Accounts**
 
 Via CLI:
 

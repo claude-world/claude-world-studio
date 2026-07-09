@@ -197,9 +197,11 @@ async function main() {
   if (!fs.existsSync(LATEST_MAC_YML_PATH)) {
     throw new Error(`latest-mac.yml missing: ${LATEST_MAC_YML_PATH}`);
   }
+  // Accept both local artifact names ("Claude World Studio-…") and the
+  // publish pipeline's dashed safeArtifactName ("Claude-World-Studio-…").
   const zipArtifact = fs
     .readdirSync(DIST_DIR)
-    .find((name) => /^Claude World Studio-.*\.zip$/.test(name));
+    .find((name) => /^Claude[ -]World[ -]Studio-.*\.zip$/.test(name));
   if (!zipArtifact) {
     throw new Error(`macOS zip artifact missing in ${DIST_DIR}`);
   }

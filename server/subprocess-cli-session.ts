@@ -7,8 +7,9 @@ import { logger } from "./logger.js";
 /**
  * Async queue for normalized SDK-format events.
  * Consumers iterate with `for await (const event of queue)`.
+ * Exported for tests.
  */
-class EventQueue {
+export class EventQueue {
   private buffer: any[] = [];
   private waiting: { resolve: (v: IteratorResult<any>) => void } | null = null;
   private done = false;
@@ -36,7 +37,11 @@ class EventQueue {
   reset() {
     this.done = false;
     this.buffer = [];
-    this.waiting = null;
+    // IMPORTANT: keep any pending waiter. A consumer's `for await` may be
+    // parked on it mid-turn; the next turn's push()/finish() will resolve it
+    // so the same listening loop continues seamlessly across turns.
+    // Discarding the waiter would leave that iteration pending forever
+    // (wedging Session.startListening with isListening stuck at true).
   }
 
   [Symbol.asyncIterator]() {
@@ -321,9 +326,16 @@ export class SubprocessCliSession implements ICliSession {
     }
 
     const parser = PARSERS[this.cliName] || parseClaudeLine;
-    // Capture queue reference so stale exit handlers from a killed process
-    // don't corrupt a reset queue belonging to the next sendMessage() call.
+    // Per-turn captures: reset() reuses the same queue object, so the exit
+    // and error handlers below must check process identity (this.process !==
+    // proc) and no-op once a newer sendMessage()/close() has superseded this
+    // turn — otherwise a late exit from a killed process would inject a
+    // spurious result into the next turn's queue and finish() its stream.
     const queue = this.eventQueue;
+    const proc = this.process;
+    // Whether this turn's CLI already emitted a result event — the exit
+    // handler only synthesizes one if it didn't.
+    const turn = { resultEmitted: false };
 
     // Parse stdout JSONL line by line
     if (this.process.stdout) {
@@ -336,6 +348,7 @@ export class SubprocessCliSession implements ICliSession {
           const data = JSON.parse(trimmed);
           const events = parser(data);
           for (const event of events) {
+            if (event.type === "result") turn.resultEmitted = true;
             queue.push(event);
           }
         } catch {
@@ -355,8 +368,11 @@ export class SubprocessCliSession implements ICliSession {
       });
     }
 
-    this.process.on("exit", (code) => {
+    proc.on("exit", (code) => {
       logger.info("SubprocessCLI", `Process exited with code ${code}`, { cli: this.cliName });
+      // Stale exit from a process superseded by a newer sendMessage()/close():
+      // don't clobber the new process ref or push into the new turn's queue.
+      if (this.process !== proc) return;
       this.process = null;
       if (this.forceKillTimer) {
         clearTimeout(this.forceKillTimer);
@@ -364,17 +380,22 @@ export class SubprocessCliSession implements ICliSession {
       }
 
       // If no result event was emitted, create one
-      queue.push({
-        type: "result",
-        subtype: code === 0 ? "success" : "error",
-        total_cost_usd: 0,
-        duration_ms: 0,
-      });
+      if (!turn.resultEmitted) {
+        turn.resultEmitted = true;
+        queue.push({
+          type: "result",
+          subtype: code === 0 ? "success" : "error",
+          total_cost_usd: 0,
+          duration_ms: 0,
+        });
+      }
       queue.finish();
     });
 
-    this.process.on("error", (err) => {
+    proc.on("error", (err) => {
       logger.error("SubprocessCLI", `Spawn error for ${this.cliName}`, err);
+      if (this.process !== proc) return;
+      turn.resultEmitted = true;
       queue.push({
         type: "assistant",
         message: {

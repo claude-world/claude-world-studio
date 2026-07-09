@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import store from "../db.js";
 import { getSettings } from "../mcp-config.js";
-import { publishToThreads } from "./social-publisher.js";
+import { publishToThreads, PublishAmbiguousError } from "./social-publisher.js";
 import { memoryService } from "./memory-service.js";
 import type { ContentTypeRow, HourPerformanceRow, TopPostRow } from "../types.js";
 import { resolveWorkspaceFilePath } from "../runtime-paths.js";
@@ -13,6 +13,9 @@ interface StudioMcpOptions {
   workspaceRoot?: string;
   sessionId?: string;
   publishMode?: "publish" | "draft";
+  /** Per-task minimum score (e.g. scheduled task min_score). The publish gate
+   *  enforces max(settings.minOverallScore, minScore). */
+  minScore?: number;
 }
 
 function buildPublishTool(options: StudioMcpOptions) {
@@ -129,7 +132,8 @@ function buildPublishTool(options: StudioMcpOptions) {
 
       // Programmatic quality gate — inspired by Claude Code's verification agent pattern.
       // The agent CANNOT bypass this by passing a low score or omitting score.
-      const minScore = getSettings().minOverallScore || 70;
+      // Per-task thresholds (scheduled task min_score) raise the gate but never lower it.
+      const minScore = Math.max(getSettings().minOverallScore || 70, options.minScore ?? 0);
       if (args.score < minScore) {
         return {
           content: [
@@ -151,6 +155,7 @@ function buildPublishTool(options: StudioMcpOptions) {
           text: args.text,
           token: account.token,
           score: args.score,
+          minScore,
           imageUrl: args.image_url,
           videoUrl: args.video_url,
           carouselUrls: args.carousel_urls,
@@ -199,10 +204,16 @@ function buildPublishTool(options: StudioMcpOptions) {
         };
       } catch (err) {
         clearTimeout(timeoutId);
-        const message = controller.signal.aborted
-          ? "Publishing timed out after 60 seconds. Check your network and try again."
-          : (err as Error).message;
-        // Log failed attempt
+        // Abort after the media container was created (mid publish request):
+        // the post may actually be live on Threads — record "unknown", not "failed",
+        // so users verify instead of blindly re-publishing a duplicate.
+        const ambiguous = err instanceof PublishAmbiguousError;
+        const message = ambiguous
+          ? "Publishing timed out during the final publish step — the post MAY still be live on Threads. Recorded as 'unknown'; verify on Threads before retrying."
+          : controller.signal.aborted
+            ? "Publishing timed out after 60 seconds. Check your network and try again."
+            : (err as Error).message;
+        // Log failed (or ambiguous) attempt
         store.addPublish({
           session_id: options.sessionId || null,
           platform: "threads",
@@ -212,7 +223,7 @@ function buildPublishTool(options: StudioMcpOptions) {
           image_url: args.image_url || null,
           post_id: null,
           post_url: null,
-          status: "failed",
+          status: ambiguous ? "unknown" : "failed",
           link_comment: args.link_comment || null,
           source_url: null,
         });
@@ -271,6 +282,26 @@ function buildUploadImageTool(options: StudioMcpOptions) {
         };
       }
       if (!fs.existsSync(resolved)) {
+        return {
+          content: [{ type: "text" as const, text: `Error: File not found: ${resolved}` }],
+          isError: true,
+        };
+      }
+
+      // Symlink containment — resolveWorkspaceFilePath is lexical only, so a
+      // symlink inside the workspace could point at (and upload) arbitrary files.
+      // Resolve real paths and re-verify containment (same pattern as routes/files.ts).
+      try {
+        const realResolved = fs.realpathSync(resolved);
+        const realRoot = fs.realpathSync(wsRoot);
+        if (realResolved !== realRoot && !realResolved.startsWith(realRoot + path.sep)) {
+          return {
+            content: [{ type: "text" as const, text: "Error: Path escapes workspace boundary" }],
+            isError: true,
+          };
+        }
+        resolved = realResolved;
+      } catch {
         return {
           content: [{ type: "text" as const, text: `Error: File not found: ${resolved}` }],
           isError: true,
@@ -387,79 +418,87 @@ const createGoalTool = tool(
   }
 );
 
-const reflectionLoopTool = tool(
-  "run_reflection_loop",
-  "Self-evaluate the last content or tool result. Saves a reflection record and extracts improvement notes as long-term memories. Use after scoring content or after a failed publish attempt.",
-  {
-    last_content: z
-      .string()
-      .describe(
-        "The content or outcome to reflect on (post text, score result, error message, etc.)"
-      ),
-    score_details: z
-      .record(z.string(), z.unknown())
-      .optional()
-      .describe(
-        "Score breakdown object if available (e.g. {overall: 72, hook: 65, engagement: 80})"
-      ),
-    goal_id: z.string().optional().describe("Goal ID to associate this reflection with"),
-    session_id: z.string().optional().describe("Session ID (auto-detected if omitted)"),
-    trigger: z
-      .enum(["tool_result", "turn_end", "score_gate_fail"])
-      .optional()
-      .describe("What triggered this reflection"),
-  },
-  async (args) => {
-    try {
-      const rawScore = args.score_details?.["overall"] ?? args.score_details?.["score"];
-      const scoreBefore = typeof rawScore === "number" ? rawScore : undefined;
+function buildReflectionLoopTool(options: StudioMcpOptions) {
+  return tool(
+    "run_reflection_loop",
+    "Self-evaluate the last content or tool result. Saves a reflection record and extracts improvement notes as long-term memories. Use after scoring content or after a failed publish attempt.",
+    {
+      last_content: z
+        .string()
+        .describe(
+          "The content or outcome to reflect on (post text, score result, error message, etc.)"
+        ),
+      score_details: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe(
+          "Score breakdown object if available (e.g. {overall: 72, hook: 65, engagement: 80})"
+        ),
+      goal_id: z.string().optional().describe("Goal ID to associate this reflection with"),
+      session_id: z
+        .string()
+        .optional()
+        .describe("Session ID (defaults to the current Studio session; pass only to override)"),
+      trigger: z
+        .enum(["tool_result", "turn_end", "score_gate_fail"])
+        .optional()
+        .describe("What triggered this reflection"),
+    },
+    async (args) => {
+      try {
+        const rawScore = args.score_details?.["overall"] ?? args.score_details?.["score"];
+        const scoreBefore = typeof rawScore === "number" ? rawScore : undefined;
 
-      // Extract actionable improvement notes from the content
-      let improvementNotes: string | undefined;
-      if (args.score_details) {
-        const scores = args.score_details as Record<string, number>;
-        const weak = Object.entries(scores)
-          .filter(([k, v]) => k !== "overall" && typeof v === "number" && v < 70)
-          .map(([k, v]) => `${k}: ${v}`);
-        if (weak.length > 0) {
-          improvementNotes = `Low scores in: ${weak.join(", ")}. Focus on improving these dimensions next time.`;
+        // Extract actionable improvement notes from the content
+        let improvementNotes: string | undefined;
+        if (args.score_details) {
+          const scores = args.score_details as Record<string, number>;
+          const weak = Object.entries(scores)
+            .filter(([k, v]) => k !== "overall" && typeof v === "number" && v < 70)
+            .map(([k, v]) => `${k}: ${v}`);
+          if (weak.length > 0) {
+            improvementNotes = `Low scores in: ${weak.join(", ")}. Focus on improving these dimensions next time.`;
+          }
         }
+
+        const reflection = memoryService.saveReflection({
+          // Prefer the real session from server options over the agent-supplied arg;
+          // random UUIDs are a last resort (e.g. scheduler runs with no session) and
+          // never link back to a real session row.
+          sessionId: args.session_id || options.sessionId || crypto.randomUUID(),
+          goalId: args.goal_id,
+          trigger: args.trigger ?? "tool_result",
+          reflectionContent: args.last_content,
+          improvementNotes,
+          scoreBefore,
+        });
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify({
+                success: true,
+                reflection_id: reflection.id,
+                improvement_notes: improvementNotes || null,
+                next_action_suggestion: improvementNotes
+                  ? "Address the low-scoring dimensions before next publish attempt."
+                  : "Content quality looks good — proceed with confidence.",
+              }),
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          content: [
+            { type: "text" as const, text: `Error in reflection loop: ${(err as Error).message}` },
+          ],
+          isError: true,
+        };
       }
-
-      const reflection = memoryService.saveReflection({
-        sessionId: args.session_id || crypto.randomUUID(),
-        goalId: args.goal_id,
-        trigger: args.trigger ?? "tool_result",
-        reflectionContent: args.last_content,
-        improvementNotes,
-        scoreBefore,
-      });
-
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify({
-              success: true,
-              reflection_id: reflection.id,
-              improvement_notes: improvementNotes || null,
-              next_action_suggestion: improvementNotes
-                ? "Address the low-scoring dimensions before next publish attempt."
-                : "Content quality looks good — proceed with confidence.",
-            }),
-          },
-        ],
-      };
-    } catch (err) {
-      return {
-        content: [
-          { type: "text" as const, text: `Error in reflection loop: ${(err as Error).message}` },
-        ],
-        isError: true,
-      };
     }
-  }
-);
+  );
+}
 
 const searchMemoryTool = tool(
   "search_memory",
@@ -663,7 +702,7 @@ export function createStudioMcpServer(options: StudioMcpOptions = {}) {
       historyTool,
       buildUploadImageTool(options),
       createGoalTool,
-      reflectionLoopTool,
+      buildReflectionLoopTool(options),
       searchMemoryTool,
       strategyTool,
       runStrategyAgentTool,

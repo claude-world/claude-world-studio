@@ -9,7 +9,8 @@ import { fileURLToPath } from "url";
 import type { WSClient, IncomingWSMessage } from "./types.js";
 import store from "./db.js";
 import { Session } from "./session.js";
-import { getSettings } from "./mcp-config.js";
+import { getSettings, cleanupStaleMcpConfigDirs } from "./mcp-config.js";
+import { SendMessageSchema, parseBody } from "./validation.js";
 import sessionsRouter from "./routes/sessions.js";
 import filesRouter from "./routes/files.js";
 import settingsRouter from "./routes/settings.js";
@@ -95,6 +96,10 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   }
 });
 
+// Best-effort sweep of credential-bearing MCP config temp dirs left by
+// previous server runs (live dirs are removed by Session.close()).
+cleanupStaleMcpConfigDirs();
+
 // Session management (long-lived agent sessions)
 const sessions: Map<string, Session> = new Map();
 
@@ -110,7 +115,15 @@ const idleCleanup = setInterval(() => {
   const now = Date.now();
   for (const [id, lastActive] of sessionLastActivity) {
     const session = sessions.get(id);
-    if (session && !session.hasSubscribers() && now - lastActive > SESSION_IDLE_MS) {
+    if (!session) continue;
+    // A running agent counts as activity — never evict mid-flight work just
+    // because no WS subscriber is watching. Touch it so the idle clock starts
+    // from the end of the run.
+    if (session.isRunning()) {
+      touchSession(id);
+      continue;
+    }
+    if (!session.hasSubscribers() && now - lastActive > SESSION_IDLE_MS) {
       session.close();
       sessions.delete(id);
       sessionLastActivity.delete(id);
@@ -237,7 +250,16 @@ wss.on("connection", (ws: WSClient) => {
         }
 
         case "chat": {
-          if (!message.content?.trim()) {
+          // Enforce the same schema as REST message input (50k char cap) —
+          // don't let a ~1MiB WS payload go straight to DB and model.
+          const parsed = parseBody(SendMessageSchema, { content: message.content });
+          if (!parsed.success) {
+            ws.send(
+              JSON.stringify({ type: "error", error: parsed.error, sessionId: message.sessionId })
+            );
+            break;
+          }
+          if (!parsed.data.content.trim()) {
             ws.send(JSON.stringify({ type: "error", error: "Empty message" }));
             break;
           }
@@ -258,7 +280,7 @@ wss.on("connection", (ws: WSClient) => {
             break;
           }
           session.subscribe(ws);
-          session.sendMessage(message.content);
+          session.sendMessage(parsed.data.content);
           break;
         }
 

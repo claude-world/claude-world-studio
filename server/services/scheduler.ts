@@ -175,10 +175,22 @@ export class TaskScheduler {
   /** Load all enabled tasks and register cron jobs */
   start() {
     const tasks = store.getEnabledScheduledTasks();
+    let registered = 0;
     for (const task of tasks) {
-      this.registerJob(task);
+      // Per-task isolation: node-cron 4 throws (e.g. RangeError on an invalid
+      // timezone) from cron.schedule — one bad row must not disable the rest.
+      try {
+        this.registerJob(task);
+        registered++;
+      } catch (err) {
+        logger.error(
+          "Scheduler",
+          `Failed to register job for task "${task.name}" (${task.id})`,
+          err
+        );
+      }
     }
-    logger.info("Scheduler", `Started with ${tasks.length} enabled task(s)`);
+    logger.info("Scheduler", `Started with ${registered}/${tasks.length} enabled task(s)`);
   }
 
   /** Stop all cron jobs and abort running tasks */
@@ -236,30 +248,50 @@ export class TaskScheduler {
     const existing = this.jobs.get(taskId);
     if (existing) {
       existing.stop();
+      // node-cron v4 keeps stopped tasks in its internal registry — destroy()
+      // removes them so repeated toggles/re-registers don't leak entries.
+      void existing.destroy?.();
       this.jobs.delete(taskId);
     }
   }
 
   /** Execute a task (called by cron tick or manual trigger) */
-  async executeTask(
-    taskId: string,
-    triggeredBy: TaskTrigger,
-    retryCount = 0
-  ): Promise<TaskExecution> {
+  async executeTask(taskId: string, triggeredBy: TaskTrigger): Promise<TaskExecution> {
     if (this.stopped) throw new Error("Scheduler is stopped");
 
+    // Overlap guard — acquired exactly ONCE for the task's entire lifecycle,
+    // including retries. The previous recursive retry released and re-acquired
+    // the guard, letting the outer finally strip it from the retried execution
+    // (which allowed concurrent duplicate executions).
+    if (this.runningTasks.has(taskId)) {
+      throw new Error(`Task ${taskId} is already running — skipping`);
+    }
+    this.runningTasks.add(taskId);
+    try {
+      // Iterative retry loop — no recursion, guard stays held across backoffs
+      let retryCount = 0;
+      for (;;) {
+        const { execution, retry } = await this.executeAttempt(taskId, triggeredBy, retryCount);
+        if (!retry) return execution;
+        retryCount++;
+      }
+    } finally {
+      this.runningTasks.delete(taskId);
+    }
+  }
+
+  /** One execution attempt. Returns retry=true when the caller should re-attempt. */
+  private async executeAttempt(
+    taskId: string,
+    triggeredBy: TaskTrigger,
+    retryCount: number
+  ): Promise<{ execution: TaskExecution; retry: boolean }> {
     const task = store.getScheduledTask(taskId);
     if (!task) throw new Error(`Task ${taskId} not found`);
 
     const account = store.getAccount(task.account_id);
     if (!account) throw new Error(`Account ${task.account_id} not found for task ${taskId}`);
 
-    // Overlap guard
-    if (this.runningTasks.has(taskId)) {
-      throw new Error(`Task ${taskId} is already running — skipping`);
-    }
-
-    this.runningTasks.add(taskId);
     const startTime = Date.now();
 
     // Resolve template
@@ -363,7 +395,7 @@ export class TaskScheduler {
         memoryType: memType,
       });
 
-      return store.getExecution(execution.id) as TaskExecution;
+      return { execution: store.getExecution(execution.id) as TaskExecution, retry: false };
     } catch (err) {
       const durationMs = Date.now() - startTime;
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -381,7 +413,8 @@ export class TaskScheduler {
           duration_ms: durationMs,
           retry_count: retryCount + 1,
         });
-        // Keep taskId in runningTasks during backoff to prevent concurrent execution
+        // The overlap guard is held by executeTask() across this backoff,
+        // so no concurrent execution can start during the wait.
         await new Promise((r) => setTimeout(r, 30000));
         // Re-check after sleep — stop() may have been called during the 30s wait
         if (this.stopped) {
@@ -391,11 +424,9 @@ export class TaskScheduler {
             duration_ms: Date.now() - startTime,
             retry_count: retryCount + 1,
           });
-          return store.getExecution(execution.id) as TaskExecution;
+          return { execution: store.getExecution(execution.id) as TaskExecution, retry: false };
         }
-        // Release before recursive call (which re-acquires the guard)
-        this.runningTasks.delete(taskId);
-        return this.executeTask(taskId, triggeredBy, retryCount + 1);
+        return { execution: store.getExecution(execution.id) as TaskExecution, retry: true };
       }
 
       store.updateExecutionResult(execution.id, {
@@ -405,9 +436,7 @@ export class TaskScheduler {
         retry_count: retryCount,
       });
 
-      return store.getExecution(execution.id) as TaskExecution;
-    } finally {
-      this.runningTasks.delete(taskId);
+      return { execution: store.getExecution(execution.id) as TaskExecution, retry: false };
     }
   }
 
@@ -424,6 +453,10 @@ export class TaskScheduler {
     const studioServer = createStudioMcpServer({
       workspaceRoot: cwd,
       publishMode: task.auto_publish ? "publish" : "draft",
+      // Enforce the task's threshold in the publish gate itself (max with the
+      // settings gate) — otherwise a below-threshold post publishes first and
+      // only gets marked "rejected" after it is already live.
+      minScore: task.min_score,
     });
 
     const allMcpServers: Record<string, any> = { ...mcpServers, studio: studioServer };

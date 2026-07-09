@@ -11,6 +11,9 @@ export interface PublishOptions {
   text: string;
   token: string;
   score: number;
+  // Quality gate threshold — pass settings.minOverallScore so all entry points
+  // enforce the configured gate. Falls back to MIN_PUBLISH_SCORE (70) if omitted.
+  minScore?: number;
   // Media
   imageUrl?: string;
   videoUrl?: string;
@@ -40,16 +43,36 @@ export interface PublishResult {
   permalink: string;
 }
 
+/**
+ * Thrown when the final publish request was aborted mid-flight (e.g. caller
+ * timeout) AFTER the media container was created — the post may or may not be
+ * live on Threads. Callers should record the outcome as "unknown", not "failed".
+ */
+export class PublishAmbiguousError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PublishAmbiguousError";
+  }
+}
+
 // ── API Helpers ──
 
 async function threadsRequest(
   method: "GET" | "POST",
   endpoint: string,
   token: string,
-  params?: Record<string, string>
+  params?: Record<string, string>,
+  signal?: AbortSignal
 ): Promise<any> {
   const url = new URL(`${API_BASE}${endpoint}`);
   url.searchParams.set("access_token", token);
+
+  // Combine the per-request 30s timeout with the caller's abort signal so an
+  // outer timeout (e.g. the publish tool's 60s AbortController) actually
+  // cancels in-flight fetches instead of only being checked between steps.
+  const requestSignal = signal
+    ? AbortSignal.any([AbortSignal.timeout(30000), signal])
+    : AbortSignal.timeout(30000);
 
   if (method === "GET") {
     if (params) {
@@ -57,7 +80,7 @@ async function threadsRequest(
         url.searchParams.set(k, v);
       }
     }
-    const res = await fetch(url.toString(), { signal: AbortSignal.timeout(30000) });
+    const res = await fetch(url.toString(), { signal: requestSignal });
     if (!res.ok) {
       const body = await res.text();
       throw new Error(`Threads API error (${res.status}): ${body}`);
@@ -71,7 +94,7 @@ async function threadsRequest(
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
-    signal: AbortSignal.timeout(30000),
+    signal: requestSignal,
   });
   if (!res.ok) {
     const errBody = await res.text();
@@ -80,15 +103,19 @@ async function threadsRequest(
   return res.json();
 }
 
-async function getUserId(token: string): Promise<string> {
-  const data = await threadsRequest("GET", "/me", token, { fields: "id" });
+async function getUserId(token: string, signal?: AbortSignal): Promise<string> {
+  const data = await threadsRequest("GET", "/me", token, { fields: "id" }, signal);
   if (!data.id) throw new Error("Failed to get user ID from Threads API");
   return data.id;
 }
 
-async function getThreadPermalink(postId: string, token: string): Promise<string> {
+async function getThreadPermalink(
+  postId: string,
+  token: string,
+  signal?: AbortSignal
+): Promise<string> {
   try {
-    const data = await threadsRequest("GET", `/${postId}`, token, { fields: "permalink" });
+    const data = await threadsRequest("GET", `/${postId}`, token, { fields: "permalink" }, signal);
     return typeof data.permalink === "string" ? data.permalink : "";
   } catch (err) {
     logger.warn("Publisher", `Permalink fetch failed: ${(err as Error).message}`);
@@ -104,9 +131,13 @@ async function waitForContainer(
   const start = Date.now();
   while (Date.now() - start < CONTAINER_POLL_TIMEOUT) {
     if (signal?.aborted) throw new Error("Publish aborted");
-    const status = await threadsRequest("GET", `/${containerId}`, token, {
-      fields: "status,error_message",
-    });
+    const status = await threadsRequest(
+      "GET",
+      `/${containerId}`,
+      token,
+      { fields: "status,error_message" },
+      signal
+    );
     if (status.status === "FINISHED") return;
     if (status.status === "ERROR") {
       throw new Error(`Container error: ${status.error_message || "unknown"}`);
@@ -128,9 +159,12 @@ export async function publishToThreads(opts: PublishOptions): Promise<PublishRes
   if (!Number.isFinite(opts.score)) {
     throw new Error("Quality score is required before publishing.");
   }
-  if (opts.score < MIN_PUBLISH_SCORE) {
+  // Configurable quality gate — callers pass settings.minOverallScore so REST
+  // routes enforce the same threshold as the Studio MCP tool. 70 is the fallback.
+  const minPublishScore = opts.minScore ?? MIN_PUBLISH_SCORE;
+  if (opts.score < minPublishScore) {
     throw new Error(
-      `Score ${opts.score} below minimum ${MIN_PUBLISH_SCORE}. Improve content before publishing.`
+      `Score ${opts.score} below minimum ${minPublishScore}. Improve content before publishing.`
     );
   }
   if (opts.text.length > MAX_TEXT_LENGTH) {
@@ -141,7 +175,7 @@ export async function publishToThreads(opts: PublishOptions): Promise<PublishRes
   }
 
   if (opts.signal?.aborted) throw new Error("Publish aborted");
-  const userId = await getUserId(opts.token);
+  const userId = await getUserId(opts.token, opts.signal);
   const params: Record<string, string> = {};
 
   // ── Determine media type ──
@@ -157,7 +191,13 @@ export async function publishToThreads(opts: PublishOptions): Promise<PublishRes
         [isVideo ? "video_url" : "image_url"]: url,
         is_carousel_item: "true",
       };
-      const child = await threadsRequest("POST", `/${userId}/threads`, opts.token, childParams);
+      const child = await threadsRequest(
+        "POST",
+        `/${userId}/threads`,
+        opts.token,
+        childParams,
+        opts.signal
+      );
       childIds.push(child.id);
       if (isVideo) {
         await waitForContainer(child.id, opts.token, opts.signal);
@@ -225,7 +265,13 @@ export async function publishToThreads(opts: PublishOptions): Promise<PublishRes
 
   // ── Step 1: Create container ──
   if (opts.signal?.aborted) throw new Error("Publish aborted");
-  const container = await threadsRequest("POST", `/${userId}/threads`, opts.token, params);
+  const container = await threadsRequest(
+    "POST",
+    `/${userId}/threads`,
+    opts.token,
+    params,
+    opts.signal
+  );
   const containerId = container.id;
   if (!containerId) throw new Error("Failed to create media container");
 
@@ -238,9 +284,30 @@ export async function publishToThreads(opts: PublishOptions): Promise<PublishRes
 
   // ── Step 3: Publish ──
   if (opts.signal?.aborted) throw new Error("Publish aborted");
-  const result = await threadsRequest("POST", `/${userId}/threads_publish`, opts.token, {
-    creation_id: containerId,
-  });
+  let result: any;
+  try {
+    result = await threadsRequest(
+      "POST",
+      `/${userId}/threads_publish`,
+      opts.token,
+      { creation_id: containerId },
+      opts.signal
+    );
+  } catch (err) {
+    // A definitive HTTP rejection from Threads (4xx/5xx) means the publish did
+    // NOT happen — that's a clean failure. But an abort (caller signal OR the
+    // per-request 30s timeout) or a network drop leaves NO definitive response
+    // after the non-idempotent publish POST was dispatched, so the post may or
+    // may not be live. Surface those as ambiguous so callers record "unknown",
+    // never a false "failed" that would trigger a duplicate-posting retry.
+    const httpRejection = err instanceof Error && err.message.startsWith("Threads API error (");
+    if (!httpRejection) {
+      throw new PublishAmbiguousError(
+        `Publish outcome unknown (${err instanceof Error ? err.message : String(err)}) — the post may or may not be live on Threads. Verify before retrying.`
+      );
+    }
+    throw err;
+  }
   const postId = result.id;
   if (!postId) throw new Error("Threads API returned no post ID after publish");
 
@@ -248,21 +315,31 @@ export async function publishToThreads(opts: PublishOptions): Promise<PublishRes
   if (opts.linkComment && postId) {
     await delay(3000);
     try {
-      const replyContainer = await threadsRequest("POST", `/${userId}/threads`, opts.token, {
-        media_type: "TEXT",
-        text: opts.linkComment,
-        reply_to_id: postId,
-      });
+      const replyContainer = await threadsRequest(
+        "POST",
+        `/${userId}/threads`,
+        opts.token,
+        {
+          media_type: "TEXT",
+          text: opts.linkComment,
+          reply_to_id: postId,
+        },
+        opts.signal
+      );
       await delay(3000);
-      await threadsRequest("POST", `/${userId}/threads_publish`, opts.token, {
-        creation_id: replyContainer.id,
-      });
+      await threadsRequest(
+        "POST",
+        `/${userId}/threads_publish`,
+        opts.token,
+        { creation_id: replyContainer.id },
+        opts.signal
+      );
     } catch (e) {
       logger.warn("Publisher", `Link reply failed: ${(e as Error).message}`);
     }
   }
 
-  const permalink = await getThreadPermalink(postId, opts.token);
+  const permalink = await getThreadPermalink(postId, opts.token, opts.signal);
   return { id: postId, permalink };
 }
 

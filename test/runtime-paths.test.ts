@@ -1,15 +1,17 @@
 import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
 
 import {
   getDbPath,
   getDefaultWorkspace,
+  getOsUserDataDir,
   getSkillCandidatePaths,
   getSkillsDir,
   getUserDataDir,
+  isInsideNodeModules,
   resolveWorkspaceFilePath,
   validateWorkspacePath,
 } from "../server/runtime-paths.js";
@@ -57,6 +59,46 @@ describe("runtime paths", () => {
       path.join(skillsDir, "threads-viral-agent/SKILL.md"),
       path.join(bundledSkillsDir, "threads-viral-agent/SKILL.md"),
     ]);
+  });
+
+  it("honors STUDIO_USER_DATA_PATH without STUDIO_PACKAGED and creates the directory", () => {
+    const base = makeTempDir("studio-unpackaged-data-");
+    const userDataDir = path.join(base, "nested", "user-data");
+
+    const env = { STUDIO_USER_DATA_PATH: userDataDir };
+
+    assert.strictEqual(getUserDataDir(env), userDataDir);
+    assert.strictEqual(getDbPath(env), path.join(userDataDir, "studio.db"));
+    assert.equal(existsSync(userDataDir), true);
+  });
+
+  it("creates the DB directory for the default dev runtime", () => {
+    const dbPath = getDbPath({});
+
+    assert.equal(path.basename(dbPath), "studio.db");
+    assert.equal(existsSync(path.dirname(dbPath)), true);
+  });
+
+  it("detects node_modules installs and picks an OS user-data dir", () => {
+    assert.equal(
+      isInsideNodeModules(
+        path.join(path.sep, "usr", "lib", "node_modules", "@claude-world", "studio")
+      ),
+      true
+    );
+    assert.equal(
+      isInsideNodeModules(path.join(path.sep, "home", "me", "claude-world-studio")),
+      false
+    );
+    // The repo checkout itself must not be treated as a node_modules install
+    assert.equal(isInsideNodeModules(), false);
+
+    const osDir = getOsUserDataDir({});
+    assert.equal(path.isAbsolute(osDir), true);
+    assert.equal(path.basename(osDir), "Claude World Studio");
+    if (process.platform === "darwin") {
+      assert.equal(osDir.includes(path.join("Library", "Application Support")), true);
+    }
   });
 
   it("rejects workspace paths that escape the workspace root", () => {

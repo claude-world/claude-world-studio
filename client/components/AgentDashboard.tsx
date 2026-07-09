@@ -118,11 +118,21 @@ function GoalsTab() {
   const [loading, setLoading] = useState(false);
   const [newDesc, setNewDesc] = useState("");
   const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Stale-response guard for rapid filter switches
+  const loadReqRef = useRef(0);
 
   const load = useCallback(async () => {
+    const reqId = ++loadReqRef.current;
     setLoading(true);
-    const [data] = await apiGet<AgentGoal[]>(`/agent/goals?status=${filter}&limit=50`);
-    if (data) setGoals(data);
+    const [data, err] = await apiGet<AgentGoal[]>(`/agent/goals?status=${filter}&limit=50`);
+    if (reqId !== loadReqRef.current) return; // stale response — ignore
+    if (data) {
+      setGoals(data);
+      setError(null);
+    } else {
+      setError(err?.message || "Failed to load goals");
+    }
     setLoading(false);
   }, [filter]);
 
@@ -131,18 +141,32 @@ function GoalsTab() {
   }, [load]);
 
   const handleCreate = async () => {
-    if (!newDesc.trim()) return;
+    if (!newDesc.trim() || creating) return;
     setCreating(true);
-    const [goal] = await apiPost<AgentGoal>("/agent/goals", { description: newDesc.trim() });
+    const [goal, err] = await apiPost<AgentGoal>("/agent/goals", { description: newDesc.trim() });
     if (goal) {
-      setGoals((prev) => [goal, ...prev]);
       setNewDesc("");
+      setError(null);
+      // New goals are always active — switch the filter instead of prepending
+      // into a completed/failed/paused list where the goal doesn't belong.
+      if (filter === "active") {
+        setGoals((prev) => [goal, ...prev]);
+      } else {
+        setFilter("active"); // triggers reload including the new goal
+      }
+    } else if (err) {
+      setError(err.message || "Failed to create goal");
     }
     setCreating(false);
   };
 
   const handleDelete = async (id: string) => {
-    await apiDelete(`/agent/goals/${id}`);
+    if (!window.confirm("Delete this goal?")) return;
+    const [, err] = await apiDelete(`/agent/goals/${id}`);
+    if (err) {
+      setError(err.message || "Failed to delete goal");
+      return;
+    }
     setGoals((prev) => prev.filter((g) => g.id !== id));
   };
 
@@ -184,12 +208,15 @@ function GoalsTab() {
         ))}
       </div>
 
+      {/* Error line */}
+      {error && <div className="text-xs text-red-500">{error}</div>}
+
       {/* Goals list */}
       {loading ? (
         <div className="text-xs text-gray-500 dark:text-gray-400">Loading...</div>
       ) : goals.length === 0 ? (
         <div className="text-xs text-gray-500 dark:text-gray-400 py-8 text-center">
-          No {filter} goals
+          {error ? "Could not load goals" : `No ${filter} goals`}
         </div>
       ) : (
         <div className="space-y-2">
@@ -252,6 +279,8 @@ function WorkflowsTab() {
   const [workflows, setWorkflows] = useState<AgentWorkflow[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", description: "", template: "{}", isPublic: false });
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -263,15 +292,17 @@ function WorkflowsTab() {
 
   useEffect(() => {
     setLoading(true);
-    apiGet<AgentWorkflow[]>("/agent/workflows?limit=50").then(([data]) => {
+    apiGet<AgentWorkflow[]>("/agent/workflows?limit=50").then(([data, err]) => {
       if (data) setWorkflows(data);
+      else setError(err?.message || "Failed to load workflows");
       setLoading(false);
     });
   }, []);
 
   const handleCreate = async () => {
-    if (!form.name.trim()) return;
-    const [wf] = await apiPost<AgentWorkflow>("/agent/workflows", {
+    if (!form.name.trim() || creating) return;
+    setCreating(true);
+    const [wf, err] = await apiPost<AgentWorkflow>("/agent/workflows", {
       name: form.name.trim(),
       description: form.description.trim() || undefined,
       template: form.template,
@@ -281,11 +312,20 @@ function WorkflowsTab() {
       setWorkflows((prev) => [wf, ...prev]);
       setForm({ name: "", description: "", template: "{}", isPublic: false });
       setShowCreate(false);
+      setError(null);
+    } else if (err) {
+      setError(err.message || "Failed to create workflow");
     }
+    setCreating(false);
   };
 
   const handleDelete = async (id: string) => {
-    await apiDelete(`/agent/workflows/${id}`);
+    if (!window.confirm("Delete this workflow?")) return;
+    const [, err] = await apiDelete(`/agent/workflows/${id}`);
+    if (err) {
+      setError(err.message || "Failed to delete workflow");
+      return;
+    }
     setWorkflows((prev) => prev.filter((w) => w.id !== id));
   };
 
@@ -384,21 +424,24 @@ function WorkflowsTab() {
               </button>
               <button
                 onClick={handleCreate}
-                disabled={!form.name.trim()}
+                disabled={!form.name.trim() || creating}
                 className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded disabled:opacity-50 transition-colors"
               >
-                Create
+                {creating ? "..." : "Create"}
               </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Error line */}
+      {error && <div className="text-xs text-red-500">{error}</div>}
+
       {loading ? (
         <div className="text-xs text-gray-500 dark:text-gray-400">Loading...</div>
       ) : workflows.length === 0 ? (
         <div className="text-xs text-gray-500 dark:text-gray-400 py-8 text-center">
-          No workflow templates yet
+          {error ? "Could not load workflows" : "No workflow templates yet"}
         </div>
       ) : (
         <div className="space-y-2">
@@ -476,14 +519,24 @@ function MemoryTab() {
   const [memories, setMemories] = useState<AgentMemory[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Stale-response guard for rapid consecutive searches
+  const loadReqRef = useRef(0);
 
   const load = useCallback(async (q?: string) => {
+    const reqId = ++loadReqRef.current;
     setLoading(true);
     const url = q
       ? `/agent/memories?q=${encodeURIComponent(q)}&limit=30`
       : "/agent/memories?limit=30";
-    const [data] = await apiGet<AgentMemory[]>(url);
-    if (data) setMemories(data);
+    const [data, err] = await apiGet<AgentMemory[]>(url);
+    if (reqId !== loadReqRef.current) return; // stale response — ignore
+    if (data) {
+      setMemories(data);
+      setError(null);
+    } else {
+      setError(err?.message || "Failed to load memories");
+    }
     setLoading(false);
   }, []);
 
@@ -497,7 +550,12 @@ function MemoryTab() {
   };
 
   const handleDelete = async (id: string) => {
-    await apiDelete(`/agent/memories/${id}`);
+    if (!window.confirm("Delete this memory?")) return;
+    const [, err] = await apiDelete(`/agent/memories/${id}`);
+    if (err) {
+      setError(err.message || "Failed to delete memory");
+      return;
+    }
     setMemories((prev) => prev.filter((m) => m.id !== id));
   };
 
@@ -538,12 +596,15 @@ function MemoryTab() {
         </button>
       </form>
 
+      {/* Error line */}
+      {error && <div className="text-xs text-red-500">{error}</div>}
+
       {/* List */}
       {loading ? (
         <div className="text-xs text-gray-500 dark:text-gray-400">Loading...</div>
       ) : memories.length === 0 ? (
         <div className="text-xs text-gray-500 dark:text-gray-400 py-8 text-center">
-          No memories stored yet
+          {error ? "Could not load memories" : "No memories stored yet"}
         </div>
       ) : (
         <div className="space-y-2">
@@ -600,12 +661,22 @@ function MemoryTab() {
 function StrategyTab() {
   const [report, setReport] = useState<StrategyReport | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState(30);
+  // Stale-response guard for rapid lookback-period switches
+  const loadReqRef = useRef(0);
 
   const loadStrategy = useCallback(async () => {
+    const reqId = ++loadReqRef.current;
     setLoading(true);
-    const [data] = await apiGet<StrategyReport>(`/agent/analytics/strategy?days=${days}`);
-    if (data) setReport(data);
+    const [data, err] = await apiGet<StrategyReport>(`/agent/analytics/strategy?days=${days}`);
+    if (reqId !== loadReqRef.current) return; // stale response — ignore
+    if (data) {
+      setReport(data);
+      setError(null);
+    } else {
+      setError(err?.message || "Failed to load strategy");
+    }
     setLoading(false);
   }, [days]);
 
@@ -622,7 +693,11 @@ function StrategyTab() {
   if (!report) {
     return (
       <div className="text-xs text-gray-500 dark:text-gray-400 py-8 text-center">
-        No analytics data yet — start publishing to generate strategy
+        {error ? (
+          <span className="text-red-500">Failed to load strategy: {error}</span>
+        ) : (
+          "No analytics data yet — start publishing to generate strategy"
+        )}
       </div>
     );
   }
@@ -652,6 +727,9 @@ function StrategyTab() {
           </button>
         ))}
       </div>
+
+      {/* Error line (stale report kept visible) */}
+      {error && <div className="text-xs text-red-500">{error}</div>}
 
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-2">

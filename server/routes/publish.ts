@@ -1,9 +1,11 @@
 import { Router } from "express";
 import store from "../db.js";
+import { getSettings } from "../mcp-config.js";
 import {
   publishToThreads,
   fetchThreadsInsights,
   fetchUserThreads,
+  PublishAmbiguousError,
 } from "../services/social-publisher.js";
 import {
   PublishSchema,
@@ -108,6 +110,8 @@ router.post("/", async (req, res) => {
       text,
       token: account.token,
       score,
+      // Same configurable quality gate as the Studio MCP publish tool
+      minScore: getSettings().minOverallScore || 70,
       imageUrl,
       videoUrl,
       carouselUrls,
@@ -134,9 +138,14 @@ router.post("/", async (req, res) => {
       postUrl: result?.permalink,
     });
   } catch (error) {
-    store.updatePublishStatus(record.id, "failed");
-    res.status(500).json({
+    // An ambiguous outcome (timeout/network drop after the publish POST was
+    // dispatched) may actually be live on Threads — record "unknown", not
+    // "failed", so it isn't blindly retried into a duplicate post.
+    const ambiguous = error instanceof PublishAmbiguousError;
+    store.updatePublishStatus(record.id, ambiguous ? "unknown" : "failed");
+    res.status(ambiguous ? 202 : 500).json({
       error: (error as Error).message,
+      status: ambiguous ? "unknown" : "failed",
       id: record.id,
     });
   }
@@ -193,6 +202,8 @@ router.post("/batch", async (req, res) => {
         text: record.content,
         token: account.token,
         score: record.score,
+        // Same configurable quality gate as the Studio MCP publish tool
+        minScore: getSettings().minOverallScore || 70,
         imageUrl: record.image_url || undefined,
         linkComment: record.link_comment || undefined,
       });
@@ -200,7 +211,10 @@ router.post("/batch", async (req, res) => {
       store.updatePublishStatus(id, "published", result?.id, result?.permalink);
       results.push({ id, success: true, postUrl: result?.permalink });
     } catch (error) {
-      store.updatePublishStatus(id, "failed");
+      // Ambiguous outcome may be live — record "unknown", not "failed", so a
+      // batch retry can't silently double-post.
+      const ambiguous = error instanceof PublishAmbiguousError;
+      store.updatePublishStatus(id, ambiguous ? "unknown" : "failed");
       results.push({ id, success: false, error: (error as Error).message });
     }
   }
@@ -386,7 +400,8 @@ router.get("/analytics/overview", (req, res) => {
 // Content analysis
 router.get("/analytics/content-analysis", (req, res) => {
   const days = Math.min(Math.max(parseInt(req.query.days as string) || 30, 1), 365);
-  const analysis = store.getContentAnalysis(days);
+  const accountId = req.query.account_id as string | undefined;
+  const analysis = store.getContentAnalysis(days, accountId);
   res.json(analysis);
 });
 

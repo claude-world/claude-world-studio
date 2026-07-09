@@ -34,6 +34,20 @@ jobs:
       - name: CLI smoke test
         run: node bin/cli.js help > /dev/null
 
+      - name: Fresh-boot smoke test
+        run: |
+          export STUDIO_USER_DATA_PATH="$RUNNER_TEMP/studio-fresh"
+          npx tsx server/server.ts &
+          SERVER_PID=$!
+          for i in $(seq 1 20); do
+            curl -sf http://127.0.0.1:3001/api/settings > /dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:3001/api/settings > /dev/null
+          curl -sf http://127.0.0.1:3001/ | grep -q "Claude World Studio"
+          test -f "$STUDIO_USER_DATA_PATH/studio.db"
+          kill $SERVER_PID
+
       - name: Package validation
         run: npm pack --dry-run 2>&1 | tail -20
 

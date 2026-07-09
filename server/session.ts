@@ -2,7 +2,7 @@ import type { WSClient, Language, Message, CliCommand } from "./types.js";
 import type { ICliSession, SDKOutputMessage } from "./cli-session.js";
 import { AgentSession, buildSystemPrompt } from "./ai-client.js";
 import { SubprocessCliSession } from "./subprocess-cli-session.js";
-import { getSettings, writeMcpConfigFile } from "./mcp-config.js";
+import { getSettings, writeMcpConfigFile, removeMcpConfigFile } from "./mcp-config.js";
 import store from "./db.js";
 import { logger } from "./logger.js";
 import { registerCleanup } from "./cleanup-registry.js";
@@ -51,6 +51,8 @@ export class Session {
   private hasResult = false;
   private unregisterCleanup: (() => void) | null = null;
   private isClosed = false;
+  /** Temp MCP config file for subprocess CLIs — removed on close (holds credentials) */
+  private mcpConfigPath?: string;
   /** Consecutive stream errors — inspired by Claude Code's retry backoff pattern */
   private consecutiveErrors = 0;
   private static readonly MAX_STREAM_RETRIES = 3;
@@ -100,6 +102,7 @@ export class Session {
           error: (err as Error).message,
         });
       }
+      this.mcpConfigPath = mcpConfigPath;
 
       this.cliSession = new SubprocessCliSession(cliPrimary, cwd, systemPrompt, mcpConfigPath);
       this.cliName = cliPrimary;
@@ -331,5 +334,9 @@ export class Session {
     this.unregisterCleanup?.();
     this.unregisterCleanup = null;
     this.cliSession.close();
+    if (this.mcpConfigPath) {
+      removeMcpConfigFile(this.mcpConfigPath);
+      this.mcpConfigPath = undefined;
+    }
   }
 }

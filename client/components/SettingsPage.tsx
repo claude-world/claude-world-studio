@@ -632,7 +632,18 @@ export function SettingsPage({
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error();
-      setMessage(t.saved);
+      const body: { skipped?: { key: string; reason: string }[] } = await res
+        .json()
+        .catch(() => ({}));
+      const skipped = Array.isArray(body?.skipped) ? body.skipped : [];
+      if (skipped.length > 0) {
+        // The server dropped one or more values (invalid/unknown) — don't let
+        // "Settings saved!" hide that. Report exactly which keys and why.
+        const detail = skipped.map((s) => `${s.key} (${s.reason})`).join(", ");
+        setMessage(`⚠️ ${detail}`);
+      } else {
+        setMessage(t.saved);
+      }
     } catch {
       setMessage(t.errorSaving);
     }
