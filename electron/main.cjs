@@ -1,14 +1,18 @@
 const { app, BrowserWindow, dialog, ipcMain, shell, Menu } = require("electron");
 const path = require("path");
 const http = require("http");
+const net = require("net");
 const fs = require("fs");
 const { spawn } = require("child_process");
 const { autoUpdater } = require("electron-updater");
 const { buildServerSpawnConfig } = require("./server-runtime.cjs");
 const { createDesktopUpdater } = require("./updater.cjs");
 
-const PORT = parseInt(process.env.STUDIO_PORT || process.env.PORT || "3001", 10);
-const SERVER_URL = `http://127.0.0.1:${PORT}`;
+const PREFERRED_PORT = parseInt(process.env.STUDIO_PORT || process.env.PORT || "3001", 10);
+// Resolved to an actually-free port at startup (see findAvailablePort). The
+// server binds this and the window loads it, so they always agree.
+let PORT = PREFERRED_PORT;
+let SERVER_URL = `http://127.0.0.1:${PORT}`;
 
 const electronUserDataPath =
   process.env.STUDIO_ELECTRON_USER_DATA_PATH || process.env.STUDIO_USER_DATA_PATH;
@@ -103,22 +107,26 @@ function startServer() {
   });
 }
 
-// True if something is already answering on the server port before we spawn
-// our own server — e.g. a dev server or an orphaned server from a crashed run.
-// Without this check the window would silently adopt the foreign server while
-// our child dies with EADDRINUSE.
-function probePortInUse() {
+// Can we bind this port on the loopback interface right now? Used to pick a
+// free port so we never fight another server (dev server, an orphaned run, or
+// an unrelated app) for the default — and never silently adopt a foreign one.
+function isPortFree(port) {
   return new Promise((resolve) => {
-    const req = http.get(`${SERVER_URL}/`, (res) => {
-      res.resume();
-      resolve(true);
-    });
-    req.on("error", () => resolve(false));
-    req.setTimeout(1000, () => {
-      req.destroy();
-      resolve(false);
-    });
+    const tester = net
+      .createServer()
+      .once("error", () => resolve(false))
+      .once("listening", () => tester.close(() => resolve(true)))
+      .listen(port, "127.0.0.1");
   });
+}
+
+// Find a bindable port at or after the preferred one, so a busy 3001 (e.g.
+// another local service) transparently falls back instead of failing to launch.
+async function findAvailablePort(preferred, maxTries = 50) {
+  for (let p = preferred; p < preferred + maxTries; p++) {
+    if (await isPortFree(p)) return p;
+  }
+  throw new Error(`No free port found in range ${preferred}-${preferred + maxTries - 1}`);
 }
 
 function waitForServer(retries = 60) {
@@ -371,10 +379,13 @@ app.whenReady().then(async () => {
     });
     buildMenu();
 
-    if (await probePortInUse()) {
-      throw new Error(
-        `Port ${PORT} is already in use by another server (another Studio instance or a dev server). Quit it and relaunch.`
-      );
+    // Pick a free port (falling back from the preferred one if it's taken) so a
+    // busy 3001 doesn't block launch. The server binds this and the window loads
+    // it, so they always match.
+    PORT = await findAvailablePort(PREFERRED_PORT);
+    SERVER_URL = `http://127.0.0.1:${PORT}`;
+    if (PORT !== PREFERRED_PORT) {
+      console.log(`[Electron] Port ${PREFERRED_PORT} in use; using free port ${PORT} instead.`);
     }
 
     startServer();
@@ -413,9 +424,8 @@ app.on("quit", () => {
 // The server child is spawned `detached` (its own process group) so the SIGKILL
 // fallback can take out tsx's child too. The downside: on `npm run electron:dev`,
 // a terminal Ctrl+C (SIGINT) goes only to the foreground group and never reaches
-// the detached server, orphaning it and leaving port 3001 bound — which then
-// trips probePortInUse on the next launch. Kill the whole group on a signal so
-// the port is freed before we exit.
+// the detached server, orphaning it and leaving its port bound. Kill the whole
+// group on a signal so the port is freed before we exit.
 for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
   process.on(sig, () => {
     if (serverProcess && serverProcess.pid) {
