@@ -6,6 +6,7 @@ const useWebSocket =
   typeof useWebSocketImport === "function"
     ? useWebSocketImport
     : ((useWebSocketImport as Record<string, unknown>).default as typeof useWebSocketImport);
+import { messageEpoch } from "./lib/messageTime";
 import { Sidebar } from "./components/Sidebar";
 import { ChatWindow } from "./components/ChatWindow";
 import { FileExplorer } from "./components/FileExplorer";
@@ -182,18 +183,7 @@ export default function App() {
         setMessages((prev) => {
           if (prev.length === 0) return history;
           if (history.length === 0) return prev;
-          const msgTime = (m: Message) => {
-            const raw = m.timestamp || m.created_at;
-            if (!raw) return 0;
-            // History rows carry SQLite `datetime('now')` ("YYYY-MM-DD HH:MM:SS"):
-            // UTC but with no 'T'/'Z', so `new Date()` would parse it as LOCAL time
-            // and skew the comparison against local messages' `toISOString()` values.
-            // Normalize the naive form to explicit UTC before parsing.
-            const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)
-              ? raw.replace(" ", "T") + "Z"
-              : raw;
-            return new Date(iso).getTime();
-          };
+          const msgTime = (m: Message) => messageEpoch(m.timestamp || m.created_at);
           const lastHistoryTime = msgTime(history[history.length - 1]);
           const newerLocal = prev.filter((m) => msgTime(m) > lastHistoryTime);
           return [...history, ...newerLocal];
