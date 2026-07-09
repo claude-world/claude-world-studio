@@ -74,6 +74,7 @@ const T = {
     discardDraft: "丟棄",
     publishing: "發布中...",
     discarding: "丟棄中...",
+    publishFailed: "發布失敗",
   },
   en: {
     title: "Posts Management",
@@ -114,6 +115,7 @@ const T = {
     discardDraft: "Discard",
     publishing: "Publishing...",
     discarding: "Discarding...",
+    publishFailed: "Publish failed",
   },
   ja: {
     title: "投稿管理",
@@ -154,6 +156,7 @@ const T = {
     discardDraft: "破棄",
     publishing: "公開中...",
     discarding: "破棄中...",
+    publishFailed: "公開に失敗しました",
   },
 };
 
@@ -198,6 +201,7 @@ export function AccountPostsPage({
   const [loading, setLoading] = useState(true);
   const [actioningPostId, setActioningPostId] = useState<string | null>(null);
   const [actionType, setActionType] = useState<"publish" | "discard" | null>(null);
+  const [draftError, setDraftError] = useState<{ postId: string; message: string } | null>(null);
 
   const fetchPosts = useCallback(async () => {
     setLoading(true);
@@ -344,15 +348,28 @@ export function AccountPostsPage({
   const handlePublishDraft = async (postId: string) => {
     setActioningPostId(postId);
     setActionType("publish");
+    setDraftError(null);
     try {
-      await fetch("/api/publish/batch", {
+      const res = await fetch("/api/publish/batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: [postId] }),
       });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setDraftError({ postId, message: data?.error || `HTTP ${res.status}` });
+      } else {
+        // Batch endpoint returns per-item results — surface item-level failures
+        // (e.g. "Draft has no quality score") instead of silently doing nothing.
+        const item =
+          data?.results?.find((r: { id?: string }) => r.id === postId) ?? data?.results?.[0];
+        if (item && !item.success) {
+          setDraftError({ postId, message: item.error || t.publishFailed });
+        }
+      }
       await fetchPosts();
-    } catch {
-      /* ignore */
+    } catch (err) {
+      setDraftError({ postId, message: (err as Error).message });
     }
     setActioningPostId(null);
     setActionType(null);
@@ -676,6 +693,22 @@ export function AccountPostsPage({
                   )}
                 </div>
               </div>
+
+              {/* Inline publish error for this draft */}
+              {draftError?.postId === post.id && (
+                <div className="mt-2 flex items-center justify-between gap-2 text-xs px-2 py-1.5 rounded bg-red-500/10 text-red-400">
+                  <span className="break-words">
+                    {t.publishFailed}: {draftError.message}
+                  </span>
+                  <button
+                    onClick={() => setDraftError(null)}
+                    className="shrink-0 text-red-400 hover:text-red-300"
+                    aria-label="Dismiss error"
+                  >
+                    &times;
+                  </button>
+                </div>
+              )}
             </div>
           ))
         )}

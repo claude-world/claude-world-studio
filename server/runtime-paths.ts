@@ -40,8 +40,24 @@ export function getLocalDataDir(): string {
   return path.join(projectRoot, "data");
 }
 
-export function getBundledDbPath(): string {
-  return path.join(projectRoot, "data", "studio.db");
+export function isInsideNodeModules(dir: string = projectRoot): boolean {
+  return dir.split(path.sep).includes("node_modules");
+}
+
+export function getOsUserDataDir(env: NodeJS.ProcessEnv = process.env): string {
+  if (process.platform === "darwin") {
+    return path.join(homedir(), "Library", "Application Support", "Claude World Studio");
+  }
+  if (process.platform === "win32") {
+    return path.join(
+      env.APPDATA || path.join(homedir(), "AppData", "Roaming"),
+      "Claude World Studio"
+    );
+  }
+  return path.join(
+    env.XDG_DATA_HOME || path.join(homedir(), ".local", "share"),
+    "Claude World Studio"
+  );
 }
 
 export function getUserDataDir(env: NodeJS.ProcessEnv = process.env): string {
@@ -49,19 +65,18 @@ export function getUserDataDir(env: NodeJS.ProcessEnv = process.env): string {
     return ensureDir(env.STUDIO_USER_DATA_PATH);
   }
 
-  if (isPackagedRuntime(env)) {
-    return ensureDir(path.join(homedir(), "Library", "Application Support", "Claude World Studio"));
+  // Packaged app, or installed under node_modules (e.g. `npm install -g`):
+  // keep user data outside the package dir so upgrades don't wipe it.
+  if (isPackagedRuntime(env) || isInsideNodeModules()) {
+    return ensureDir(getOsUserDataDir(env));
   }
 
   return ensureDir(getLocalDataDir());
 }
 
 export function getDbPath(env: NodeJS.ProcessEnv = process.env): string {
-  if (isPackagedRuntime(env)) {
-    return path.join(getUserDataDir(env), "studio.db");
-  }
-
-  return path.join(getLocalDataDir(), "studio.db");
+  // getUserDataDir() creates the directory, so better-sqlite3 can always open the DB.
+  return path.join(getUserDataDir(env), "studio.db");
 }
 
 export function getDefaultWorkspace(env: NodeJS.ProcessEnv = process.env): string {

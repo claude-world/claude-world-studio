@@ -215,8 +215,21 @@ runMigration(`ALTER TABLE publish_history ADD COLUMN score REAL`);
 // without DEFAULT leaves existing rows at NULL, which the new /batch guard rejects with
 // "Draft has no quality score" — legacy drafts would be un-publishable after upgrade.
 // 70 matches MIN_PUBLISH_SCORE so the quality gate still holds (score >= min).
+// One-time migration: guarded by a settings-table flag. Without the flag, every server
+// restart would convert fresh NULL-score drafts into publishable score-70 drafts,
+// bypassing the quality gate.
+const SCORE_BACKFILL_FLAG = "migration_publish_score_backfill";
 try {
-  db.prepare(`UPDATE publish_history SET score = 70 WHERE score IS NULL`).run();
+  const backfillDone = db
+    .prepare(`SELECT value FROM settings WHERE key = ?`)
+    .get(SCORE_BACKFILL_FLAG) as { value: string } | undefined;
+  if (!backfillDone) {
+    db.prepare(`UPDATE publish_history SET score = 70 WHERE score IS NULL`).run();
+    db.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`).run(
+      SCORE_BACKFILL_FLAG,
+      new Date().toISOString()
+    );
+  }
 } catch (e: any) {
   // Column absence (fresh DB where migration just created it with no rows) — no-op.
   if (!String(e?.message).includes("no such column")) throw e;
@@ -539,6 +552,12 @@ const stmts = {
   getMemory: db.prepare(`SELECT * FROM agent_memories WHERE id = ?`),
   getContextMemories: db.prepare(
     `SELECT * FROM agent_memories WHERE (account_id = ? OR account_id IS NULL) ORDER BY access_count DESC, created_at DESC LIMIT ?`
+  ),
+  // Used when no accountId is supplied — returns memories across ALL accounts. Binding
+  // NULL to the statement above collapses `(account_id = NULL OR account_id IS NULL)`
+  // to global-only memories, silently dropping per-account entries.
+  getContextMemoriesAllAccounts: db.prepare(
+    `SELECT * FROM agent_memories ORDER BY access_count DESC, created_at DESC LIMIT ?`
   ),
   getMemoriesByType: db.prepare(
     `SELECT * FROM agent_memories WHERE memory_type = ? AND (account_id = ? OR account_id IS NULL) ORDER BY access_count DESC, created_at DESC LIMIT ?`
@@ -1132,10 +1151,14 @@ export const store = {
         )
         .all(...baseParams) as ContentTypeRow[];
 
+      // created_at is stored in UTC (datetime('now')). Convert with SQLite's
+      // 'localtime' modifier so hour/day buckets reflect the server's local
+      // wall clock — "best posting hours" are presented to users as local times
+      // (e.g. Asia/Taipei would otherwise be off by 8 hours).
       const hourPerformance = db
         .prepare(
           `SELECT
-            CAST(strftime('%H', p.created_at) AS INTEGER) as hour,
+            CAST(strftime('%H', p.created_at, 'localtime') AS INTEGER) as hour,
             COUNT(*) as count,
             COALESCE(AVG(c.views), 0) as avg_views,
             COALESCE(AVG(c.likes + c.replies + c.reposts + c.quotes), 0) as avg_engagement
@@ -1149,7 +1172,7 @@ export const store = {
       const dayPerformance = db
         .prepare(
           `SELECT
-            CAST(strftime('%w', p.created_at) AS INTEGER) as day,
+            CAST(strftime('%w', p.created_at, 'localtime') AS INTEGER) as day,
             COUNT(*) as count,
             COALESCE(AVG(c.views), 0) as avg_views,
             COALESCE(AVG(c.likes + c.replies + c.reposts + c.quotes), 0) as avg_engagement
@@ -1235,7 +1258,12 @@ export const store = {
   },
 
   getContextMemories(accountId?: string, limit = 10): AgentMemory[] {
-    return stmts.getContextMemories.all(accountId ?? null, limit) as AgentMemory[];
+    // When no accountId is supplied, omit the filter entirely — same NULL-binding
+    // fix as getMemoriesByType below (binding NULL never matches account_id = ?).
+    if (accountId === undefined) {
+      return stmts.getContextMemoriesAllAccounts.all(limit) as AgentMemory[];
+    }
+    return stmts.getContextMemories.all(accountId, limit) as AgentMemory[];
   },
 
   getMemoriesByType(memoryType: AgentMemoryType, accountId?: string, limit = 20): AgentMemory[] {

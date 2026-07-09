@@ -13,7 +13,7 @@ We will respond within 48 hours and work with you to understand and address the 
 ## Supported Versions
 
 | Version | Supported |
-|---------|-----------|
+| ------- | --------- |
 | Latest  | Yes       |
 
 ## Security Updates

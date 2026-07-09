@@ -1,4 +1,12 @@
-import { chmodSync, existsSync, mkdtempSync, writeFileSync } from "fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "fs";
 import { basename, dirname, isAbsolute, join } from "path";
 import { execFileSync } from "child_process";
 import { tmpdir } from "os";
@@ -153,9 +161,17 @@ export function buildMcpServers(settings: Settings) {
   return servers;
 }
 
+/** Temp dir prefix for per-session MCP config files (contain credentials) */
+const MCP_TMPDIR_PREFIX = "studio-mcp-";
+
+/** Temp dirs created by writeMcpConfigFile in this process, keyed by config file path */
+const mcpConfigDirs = new Map<string, string>();
+
 /**
  * Write MCP server config to a temp JSON file for external CLIs.
  * Returns the absolute path to the config file.
+ * The owning session must call removeMcpConfigFile() on close — the config
+ * contains credentials (cfApiToken / CF_BROWSER_API_KEY).
  */
 export function writeMcpConfigFile(settings: Settings): string {
   const servers = buildMcpServers(settings);
@@ -165,10 +181,58 @@ export function writeMcpConfigFile(settings: Settings): string {
     mcpConfig.mcpServers[name] = config;
   }
 
-  const dir = mkdtempSync(join(tmpdir(), "studio-mcp-"));
+  const dir = mkdtempSync(join(tmpdir(), MCP_TMPDIR_PREFIX));
   chmodSync(dir, 0o700);
   const configPath = join(dir, "mcp-config.json");
   writeFileSync(configPath, JSON.stringify(mcpConfig, null, 2), { encoding: "utf-8", mode: 0o600 });
+  mcpConfigDirs.set(configPath, dir);
   logger.info("MCPConfig", `Config written to ${configPath}`);
   return configPath;
+}
+
+/** Remove the temp dir behind a config file created by writeMcpConfigFile (best-effort). */
+export function removeMcpConfigFile(configPath: string): void {
+  const dir = mcpConfigDirs.get(configPath);
+  mcpConfigDirs.delete(configPath);
+  if (!dir) return;
+  try {
+    rmSync(dir, { recursive: true, force: true });
+  } catch (err) {
+    logger.warn("MCPConfig", `Failed to remove temp config dir ${dir}`, {
+      error: (err as Error).message,
+    });
+  }
+}
+
+/** Stale-dir age threshold: dirs this old can't belong to a live session of another instance */
+const STALE_MCP_DIR_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Best-effort startup sweep of studio-mcp-* temp dirs left behind by previous
+ * server runs (they contain credentials). Only removes dirs older than 24h so
+ * a concurrently running instance's live configs are never touched.
+ */
+export function cleanupStaleMcpConfigDirs(): void {
+  let entries: string[];
+  try {
+    entries = readdirSync(tmpdir());
+  } catch {
+    return;
+  }
+  const now = Date.now();
+  let removed = 0;
+  for (const name of entries) {
+    if (!name.startsWith(MCP_TMPDIR_PREFIX)) continue;
+    const dir = join(tmpdir(), name);
+    try {
+      if (now - statSync(dir).mtimeMs < STALE_MCP_DIR_MS) continue;
+      rmSync(dir, { recursive: true, force: true });
+      removed++;
+    } catch {
+      // Best-effort — skip dirs we can't stat or remove
+    }
+  }
+  if (removed > 0) {
+    logger.info("MCPConfig", `Removed ${removed} stale MCP config temp dir(s)`);
+  }
 }

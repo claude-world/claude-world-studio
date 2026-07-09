@@ -14,6 +14,16 @@ import { test, describe, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { existsSync, mkdtempSync, rmSync, utimesSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, dirname } from "node:path";
+import { EventQueue, SubprocessCliSession } from "../server/subprocess-cli-session.js";
+import {
+  writeMcpConfigFile,
+  removeMcpConfigFile,
+  cleanupStaleMcpConfigDirs,
+} from "../server/mcp-config.js";
+import type { Settings } from "../server/types.js";
 
 // ---------------------------------------------------------------------------
 // 1. SubprocessCliSession — tested through a lightweight inline replica
@@ -265,13 +275,16 @@ function makeKillServerHarness(
 // ---------------------------------------------------------------------------
 
 /**
- * Simulates the retry wait path in TaskScheduler.executeTask():
+ * Simulates the retry wait path in TaskScheduler.executeAttempt():
  *
  *   if (!this.stopped && retryCount < task.max_retries) {
  *     await new Promise(r => setTimeout(r, 30000));   // <-- sleep
  *     if (this.stopped) return earlyExit();           // <-- re-check HERE
- *     return this.executeTask(..., retryCount + 1);
+ *     return { execution, retry: true };              // <-- executeTask() loops
  *   }
+ *
+ * The overlap guard (runningTasks) is held by executeTask() for the whole
+ * lifecycle including retries — it is never released between attempts.
  */
 async function simulateRetryWait(
   stoppedDuringSleep: boolean,
@@ -766,148 +779,311 @@ describe("Scheduler retry: post-sleep stopped re-check", () => {
 
 // ---------------------------------------------------------------------------
 
-describe("SubprocessCliSession: captured queue ref isolation", () => {
+describe("EventQueue (real module): reset/finish lifecycle", () => {
   /**
-   * Replica of the EventQueue + sendMessage queue-capture fix.
+   * Regression tests for the mid-turn wedge: sendMessage() during a running
+   * turn calls eventQueue.reset(); the old reset() discarded a pending waiter
+   * without resolving it, so the consumer's `for await` hung forever and
+   * Session.isListening stayed true permanently.
    *
-   * The fix in subprocess-cli-session.ts captures `const queue = this.eventQueue`
-   * before spawning, so that stale exit/error handlers from a killed process
-   * write to the OLD queue — not the new one created by the next sendMessage() call.
-   *
-   * This harness replicates only the queue-assignment and reset logic.
+   * These import the REAL EventQueue from subprocess-cli-session.ts.
    */
-  type FakeQueue = { id: number; finished: boolean; events: string[] };
 
-  class QueueIsolationHarness {
-    // Simulates this.eventQueue (replaced on each sendMessage via reset())
-    eventQueue: FakeQueue;
-    private queueSeq = 0;
+  function withTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([
+      p.finally(() => clearTimeout(timer)),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(msg)), ms);
+        timer.unref?.();
+      }),
+    ]);
+  }
 
-    constructor() {
-      this.eventQueue = this.makeQueue();
-    }
+  test("reset() keeps a pending waiter — next turn's push resolves it (wedge regression)", async () => {
+    const q = new EventQueue();
+    const iter = q[Symbol.asyncIterator]();
+    const pending = iter.next(); // parks a waiter (buffer is empty)
 
-    private makeQueue(): FakeQueue {
-      return { id: ++this.queueSeq, finished: false, events: [] };
-    }
+    // Mid-turn interruption: a new sendMessage() resets the queue...
+    q.reset();
+    // ...and the new turn's subprocess pushes its first event
+    q.push({ type: "assistant", turn: 2 });
 
-    /**
-     * Returns the captured (old) queue ref and a new current queue,
-     * simulating what happens when sendMessage() is called:
-     *   1. killProcess() on old subprocess (timer fires later)
-     *   2. reset event queue
-     *   3. spawn new subprocess
-     *   4. capture: `const queue = this.eventQueue`  ← the fix
-     */
-    sendMessage(): {
-      capturedQueue: FakeQueue;
-      currentQueue: FakeQueue;
-      simulateOldExit: (event: string) => void;
-    } {
-      // Reset — this replaces the shared queue object's state (in the real
-      // code reset() clears buffer/done/waiting on the same object).
-      // For this replica, we model it as creating a new queue object so we
-      // can distinguish old from new by reference.
-      this.eventQueue = this.makeQueue();
+    const result = await withTimeout(
+      pending,
+      1000,
+      "pending next() never resolved — reset() dropped the waiter (wedge)"
+    );
+    assert.strictEqual(result.done, false);
+    assert.strictEqual((result.value as any).turn, 2);
+  });
 
-      // THE FIX: capture before any async work
+  test("for-await listening loop survives mid-turn reset and ends on next turn's finish", async () => {
+    const q = new EventQueue();
+    const received: any[] = [];
+
+    // Mirrors Session.startListening: one long-lived loop over the queue
+    const loop = (async () => {
+      for await (const ev of q) received.push(ev);
+    })();
+
+    q.push({ id: "turn1-event" });
+    await new Promise((r) => setImmediate(r)); // let the loop consume + park
+
+    // Interruption: new turn resets the queue while the loop is parked
+    q.reset();
+    q.push({ id: "turn2-result", type: "result" });
+    q.finish();
+
+    await withTimeout(loop, 1000, "listening loop wedged after reset()");
+    assert.deepStrictEqual(
+      received.map((e) => e.id),
+      ["turn1-event", "turn2-result"],
+      "loop must receive events from both turns and then terminate"
+    );
+  });
+
+  test("finish() resolves a pending waiter with done:true", async () => {
+    const q = new EventQueue();
+    const iter = q[Symbol.asyncIterator]();
+    const pending = iter.next();
+
+    q.finish();
+
+    const res = await withTimeout(pending, 1000, "finish() did not resolve the pending waiter");
+    assert.strictEqual(res.done, true);
+  });
+
+  test("push after finish is dropped; reset() re-opens the queue for the next turn", async () => {
+    const q = new EventQueue();
+    q.finish();
+    q.push({ id: "dropped" }); // late event from a dead turn — must be ignored
+
+    const it1 = q[Symbol.asyncIterator]();
+    const r1 = await it1.next();
+    assert.strictEqual(r1.done, true, "queue stays done after finish; late push is dropped");
+
+    q.reset();
+    q.push({ id: "turn2" });
+    const it2 = q[Symbol.asyncIterator]();
+    const r2 = await it2.next();
+    assert.strictEqual(r2.done, false);
+    assert.strictEqual((r2.value as any).id, "turn2");
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("SubprocessCliSession (real module): per-turn result lifecycle", () => {
+  function withTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([
+      p.finally(() => clearTimeout(timer)),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(msg)), ms);
+        timer.unref?.();
+      }),
+    ]);
+  }
+
+  async function drain(session: SubprocessCliSession, label: string): Promise<any[]> {
+    const events: any[] = [];
+    await withTimeout(
+      (async () => {
+        for await (const ev of session.getOutputStream()) events.push(ev);
+      })(),
+      2000,
+      `${label}: output stream never finished — session wedged`
+    );
+    return events;
+  }
+
+  test("unsupported CLI emits exactly one result per turn and recovers across turns", async () => {
+    // "aider" is a valid CliCommand but has no CLI_CONFIGS entry, so
+    // sendMessage() takes the no-spawn error path: one result + finish.
+    const session = new SubprocessCliSession("aider", "/tmp", "");
+
+    session.sendMessage("turn 1");
+    const t1 = await drain(session, "turn 1");
+    assert.strictEqual(
+      t1.filter((e) => e.type === "result").length,
+      1,
+      "exactly one result event per turn (no double-result)"
+    );
+
+    // Second turn on the same session: queue reset must allow a fresh
+    // listen cycle (isListening lifecycle recovery)
+    session.sendMessage("turn 2");
+    const t2 = await drain(session, "turn 2");
+    assert.strictEqual(t2.filter((e) => e.type === "result").length, 1);
+
+    session.close();
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("SubprocessCliSession exit handler: supersession guard + single result (replica)", () => {
+  /**
+   * Replica of the per-turn captures installed by sendMessage() around the
+   * exit handler (uses the REAL EventQueue):
+   *
+   *   const queue = this.eventQueue;
+   *   const proc = this.process;
+   *   const turn = { resultEmitted: false };
+   *   proc.on("exit", (code) => {
+   *     if (this.process !== proc) return;          // stale — superseded
+   *     this.process = null;
+   *     if (!turn.resultEmitted) queue.push(result); // synthesize only if needed
+   *     queue.finish();
+   *   });
+   */
+  class ExitGuardHarness {
+    process: object | null = null;
+    eventQueue = new EventQueue();
+
+    /** Mirrors the handler wiring in sendMessage() for one spawned process */
+    installTurn(proc: object) {
+      this.process = proc;
       const queue = this.eventQueue;
-
+      const turn = { resultEmitted: false };
       return {
-        capturedQueue: queue,
-        currentQueue: this.eventQueue, // same ref at this point
-        // Simulates the old process's exit handler firing AFTER the next
-        // sendMessage() has already replaced this.eventQueue again.
-        simulateOldExit: (event: string) => {
-          // Old exit handler uses captured `queue`, NOT `this.eventQueue`
-          queue.events.push(event);
-          queue.finished = true;
+        // stdout line handler pushing a parsed result event
+        emitResultLine: () => {
+          turn.resultEmitted = true;
+          queue.push({ type: "result", subtype: "success" });
+        },
+        // exit handler
+        onExit: (code: number): "stale" | "handled" => {
+          if (this.process !== proc) return "stale";
+          this.process = null;
+          if (!turn.resultEmitted) {
+            turn.resultEmitted = true;
+            queue.push({
+              type: "result",
+              subtype: code === 0 ? "success" : "error",
+            });
+          }
+          queue.finish();
+          return "handled";
         },
       };
     }
   }
 
-  test("captured queue ref isolates old exit handler from new queue", () => {
-    const harness = new QueueIsolationHarness();
+  async function collect(q: EventQueue): Promise<any[]> {
+    const out: any[] = [];
+    for await (const ev of q) out.push(ev);
+    return out;
+  }
 
-    // First sendMessage — simulates spawning process A
-    const firstCall = harness.sendMessage();
+  test("stale exit from a superseded process no-ops (no spurious result, no ref clobber)", async () => {
+    const h = new ExitGuardHarness();
 
-    // Second sendMessage — simulates spawning process B (kills A first)
-    const secondCall = harness.sendMessage();
+    const procA = { name: "A" };
+    const turnA = h.installTurn(procA);
 
-    // Now process A's exit handler fires (stale — A was killed but exits late)
-    firstCall.simulateOldExit("A:exit");
+    // New sendMessage(): kill A, reset queue, spawn B
+    h.eventQueue.reset();
+    const procB = { name: "B" };
+    const turnB = h.installTurn(procB);
 
-    // Process B's exit handler fires (the current one)
-    secondCall.simulateOldExit("B:exit");
+    // A's late exit fires AFTER B was installed
+    assert.strictEqual(turnA.onExit(143), "stale", "superseded exit handler must no-op");
+    assert.strictEqual(h.process, procB, "stale exit must not clobber the new process ref");
 
-    // The captured queues from first and second calls must be different objects
-    assert.notStrictEqual(
-      firstCall.capturedQueue,
-      secondCall.capturedQueue,
-      "each sendMessage() must produce a distinct queue reference"
-    );
+    // B's turn completes normally
+    turnB.emitResultLine();
+    assert.strictEqual(turnB.onExit(0), "handled");
 
-    // A's exit event must have gone to A's queue, not B's
-    assert.deepStrictEqual(
-      firstCall.capturedQueue.events,
-      ["A:exit"],
-      "old exit handler must write to the captured (old) queue"
-    );
-    assert.deepStrictEqual(
-      secondCall.capturedQueue.events,
-      ["B:exit"],
-      "new exit handler must write to the new queue only"
-    );
-
-    // The current eventQueue must be B's queue, uncontaminated by A's exit
+    const events = await collect(h.eventQueue);
     assert.strictEqual(
-      harness.eventQueue,
-      secondCall.capturedQueue,
-      "this.eventQueue must point to the most recent queue"
-    );
-    assert.strictEqual(
-      harness.eventQueue.events.length,
+      events.filter((e) => e.type === "result").length,
       1,
-      "current queue should only contain B's exit event"
+      "only B's result must reach the queue — A's stale exit contributed nothing"
     );
   });
 
-  test("without the fix — using this.eventQueue in old handler — would corrupt the new queue", () => {
-    // This is a negative test that shows WHY the fix matters.
-    // If the exit handler used `this.eventQueue` directly (the bug), both
-    // A's and B's events would land in whatever queue is current at exit time.
-    const harness = new QueueIsolationHarness();
+  test("exit does not synthesize a second result when the CLI already emitted one", async () => {
+    const h = new ExitGuardHarness();
+    const turn = h.installTurn({ name: "A" });
 
-    // Simulate the BUG: old handler captures `this` (the harness) instead of
-    // the queue reference, so it writes to whatever this.eventQueue is now.
-    const firstCallCurrentQueue = harness.eventQueue; // queue A (will be stale)
-    const buggyOldExitHandler = (event: string) => {
-      // BUG: uses harness.eventQueue (current), not captured queue A
-      harness.eventQueue.events.push(event);
-    };
+    turn.emitResultLine(); // CLI emitted its own result (e.g. turn.completed)
+    turn.onExit(0);
 
-    // Second sendMessage replaces eventQueue
-    const secondCall = harness.sendMessage();
-
-    // Now A's stale exit handler fires — with the bug it writes to queue B
-    buggyOldExitHandler("A:exit-late");
-
-    assert.notStrictEqual(
-      firstCallCurrentQueue,
-      harness.eventQueue,
-      "queue should have been replaced by second sendMessage()"
+    const events = await collect(h.eventQueue);
+    assert.strictEqual(
+      events.filter((e) => e.type === "result").length,
+      1,
+      "successful turn must emit exactly ONE result (no turnCount double-increment)"
     );
+  });
 
-    // The bug: A's event ended up in B's queue (the current one)
-    assert.deepStrictEqual(
-      harness.eventQueue.events,
-      ["A:exit-late"],
-      "BUG confirmed: old exit event polluted the new queue when using this.eventQueue"
-    );
+  test("exit synthesizes exactly one result when the CLI emitted none", async () => {
+    const h = new ExitGuardHarness();
+    const turn = h.installTurn({ name: "A" });
 
-    // The fix prevents this by capturing `queue` before the next sendMessage()
+    turn.onExit(1); // process died without emitting a result line
+
+    const events = await collect(h.eventQueue);
+    const results = events.filter((e) => e.type === "result");
+    assert.strictEqual(results.length, 1, "one synthesized result");
+    assert.strictEqual(results[0].subtype, "error", "non-zero exit code maps to error subtype");
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("MCP config temp dir lifecycle (real module)", () => {
+  /** Settings with no MCP paths configured — writeMcpConfigFile still creates a temp dir */
+  const emptySettings: Settings = {
+    language: "en",
+    theme: "light",
+    cfBrowserMode: "cf-api",
+    trendPulseVenvPython: "",
+    cfBrowserVenvPython: "",
+    notebooklmServerPath: "",
+    cfBrowserUrl: "",
+    cfBrowserApiKey: "",
+    cfAccountId: "",
+    cfApiToken: "",
+    defaultWorkspace: "",
+    minOverallScore: 70,
+    minConversationScore: 55,
+    agenticLevel: "standard",
+  };
+
+  test("removeMcpConfigFile deletes the temp dir created by writeMcpConfigFile", () => {
+    const configPath = writeMcpConfigFile(emptySettings);
+    const dir = dirname(configPath);
+    assert.ok(existsSync(configPath), "config file should exist after write");
+
+    removeMcpConfigFile(configPath);
+
+    assert.ok(!existsSync(dir), "temp dir (credentials!) must be removed on session close");
+    // Idempotent — second removal is a no-op
+    assert.doesNotThrow(() => removeMcpConfigFile(configPath));
+  });
+
+  test("cleanupStaleMcpConfigDirs removes >24h-old dirs but keeps fresh ones", () => {
+    // Stale dir from a "previous server run"
+    const stale = mkdtempSync(join(tmpdir(), "studio-mcp-"));
+    const old = new Date(Date.now() - 25 * 60 * 60 * 1000);
+    utimesSync(stale, old, old);
+
+    // Fresh dir (could belong to a concurrently running instance)
+    const fresh = mkdtempSync(join(tmpdir(), "studio-mcp-"));
+
+    try {
+      cleanupStaleMcpConfigDirs();
+
+      assert.ok(!existsSync(stale), "stale dir should be swept at startup");
+      assert.ok(existsSync(fresh), "fresh dir must NOT be touched");
+    } finally {
+      rmSync(stale, { recursive: true, force: true });
+      rmSync(fresh, { recursive: true, force: true });
+    }
   });
 });
 
@@ -999,5 +1175,79 @@ describe("TaskScheduler.executeTask(): stopped guard precedes overlap guard", ()
       "stopped",
       "stopped guard must block execution even with no overlap"
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("TaskScheduler.executeTask(): overlap guard held across retries", () => {
+  /**
+   * Replica of the iterative retry structure in executeTask():
+   *
+   *   this.runningTasks.add(taskId);          // acquired ONCE
+   *   try {
+   *     for (let retryCount = 0; ; retryCount++) {
+   *       const { execution, retry } = await this.executeAttempt(...);
+   *       if (!retry) return execution;
+   *     }
+   *   } finally {
+   *     this.runningTasks.delete(taskId);     // released ONCE
+   *   }
+   *
+   * The old recursive version released + re-acquired the guard around each
+   * retry, so the outer call's finally stripped the guard from the retried
+   * execution — allowing concurrent duplicates.
+   */
+  class RetryLoopHarness {
+    runningTasks = new Set<string>();
+    guardSnapshots: boolean[] = [];
+
+    async executeTask(taskId: string, attempts: Array<{ retry: boolean }>): Promise<string> {
+      if (this.runningTasks.has(taskId)) throw new Error("already running");
+      this.runningTasks.add(taskId);
+      try {
+        for (let retryCount = 0; ; retryCount++) {
+          // Record whether the guard is held at the start of every attempt
+          this.guardSnapshots.push(this.runningTasks.has(taskId));
+          await Promise.resolve(); // simulate async attempt boundary
+          if (!attempts[retryCount].retry) return `done-after-${retryCount + 1}-attempts`;
+        }
+      } finally {
+        this.runningTasks.delete(taskId);
+      }
+    }
+  }
+
+  test("guard is held during every attempt including retries", async () => {
+    const h = new RetryLoopHarness();
+    const result = await h.executeTask("task-1", [
+      { retry: true },
+      { retry: true },
+      { retry: false },
+    ]);
+
+    assert.strictEqual(result, "done-after-3-attempts");
+    assert.deepStrictEqual(
+      h.guardSnapshots,
+      [true, true, true],
+      "guard must be held at the start of every attempt, not just the first"
+    );
+    assert.strictEqual(
+      h.runningTasks.has("task-1"),
+      false,
+      "guard must be released exactly once after the final attempt"
+    );
+  });
+
+  test("concurrent executeTask during a retry backoff is rejected", async () => {
+    const h = new RetryLoopHarness();
+    const first = h.executeTask("task-1", [{ retry: true }, { retry: false }]);
+
+    // While the first lifecycle (attempt + retry) is in flight, a second
+    // trigger for the same task must hit the overlap guard.
+    await assert.rejects(() => h.executeTask("task-1", [{ retry: false }]), /already running/);
+
+    assert.strictEqual(await first, "done-after-2-attempts");
+    assert.strictEqual(h.runningTasks.has("task-1"), false, "guard released after completion");
   });
 });

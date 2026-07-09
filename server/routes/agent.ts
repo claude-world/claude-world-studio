@@ -256,7 +256,14 @@ router.get("/analytics/strategy", (req, res) => {
   const accountId = req.query.accountId ? String(req.query.accountId) : undefined;
 
   try {
-    const report = strategyAgent.runStrategy({ days, accountId, includeCalendar: true });
+    // Read-only: a GET must not save a new "success" memory on every call —
+    // memory persistence happens only in explicit run paths (Studio MCP tools).
+    const report = strategyAgent.runStrategy({
+      days,
+      accountId,
+      includeCalendar: true,
+      persistMemory: false,
+    });
     res.json(report);
   } catch (err) {
     res.status(500).json({ error: "Analytics query failed" });

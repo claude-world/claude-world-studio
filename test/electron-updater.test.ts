@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -9,6 +10,7 @@ const {
   IPC_DOWNLOAD,
   IPC_GET_STATE,
   IPC_INSTALL,
+  UPDATE_STATE_CHANNEL,
   createDesktopUpdater,
   normalizeUpdateErrorMessage,
 } = require("../electron/updater.cjs");
@@ -174,7 +176,74 @@ describe("desktop updater", () => {
     await ipcMain.invoke(IPC_INSTALL);
 
     assert.equal(installCalls, 1);
-    assert.equal(updater.getState().status, "downloaded");
+    assert.equal(updater.getState().status, "installing");
+    assert.equal(updater.getState().message, "Installing update...");
+
+    // A second install request is a no-op once installation has started
+    await ipcMain.invoke(IPC_INSTALL);
+    assert.equal(installCalls, 1);
+  });
+
+  it("times out a hung update check and allows retrying", async () => {
+    const autoUpdater = new FakeUpdater();
+    autoUpdater.checkForUpdates = function () {
+      this.checkCalls += 1;
+      return new Promise(() => {}); // never resolves, emits no events
+    };
+    const ipcMain = createFakeIpcMain();
+
+    const updater = createDesktopUpdater({
+      app: {
+        isPackaged: true,
+        getVersion: () => "2.2.0",
+      },
+      autoUpdater,
+      dialog: { showMessageBox: async () => ({ response: 1 }) },
+      getWindows: () => [],
+      ipcMain,
+      isPackaged: true,
+      platform: "darwin",
+      checkTimeoutMs: 20,
+    });
+
+    void ipcMain.invoke(IPC_CHECK);
+    await tick();
+    assert.equal(updater.getState().status, "checking");
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    assert.equal(updater.getState().status, "error");
+    assert.match(updater.getState().message, /timed out/i);
+
+    // The "checking" guard is released, so a new check can start
+    void ipcMain.invoke(IPC_CHECK);
+    await tick();
+    assert.equal(autoUpdater.checkCalls, 2);
+    assert.equal(updater.getState().status, "checking");
+
+    updater.dispose();
+  });
+
+  it("keeps the sandboxed preload's channel constants in sync", () => {
+    // The preload runs sandboxed and cannot require updater.cjs, so it
+    // carries inline copies of the IPC channel names. Verify they match and
+    // that no relative require sneaks back in (it would abort the preload).
+    const preloadSource = readFileSync(
+      new URL("../electron/preload.cjs", import.meta.url),
+      "utf-8"
+    );
+    assert.ok(
+      !/require\(["']\.{1,2}\//.test(preloadSource),
+      "preload.cjs must not use relative requires — sandboxed preloads cannot resolve them"
+    );
+    for (const channel of [
+      IPC_CHECK,
+      IPC_DOWNLOAD,
+      IPC_GET_STATE,
+      IPC_INSTALL,
+      UPDATE_STATE_CHANNEL,
+    ]) {
+      assert.ok(preloadSource.includes(`"${channel}"`), `preload.cjs missing channel ${channel}`);
+    }
   });
 
   it("maps missing release metadata errors to a friendly message", () => {

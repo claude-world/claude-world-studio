@@ -15,13 +15,34 @@ function parseGlobalFlags(argv) {
   let host = HOST;
   let skipNext = false;
   for (let i = 0; i < argv.length; i++) {
-    if (skipNext) { skipNext = false; continue; }
+    if (skipNext) {
+      skipNext = false;
+      continue;
+    }
     const arg = argv[i];
-    if (arg === "--json") { JSON_OUTPUT = true; continue; }
-    if (arg.startsWith("--port=")) { const v = parseInt(arg.split("=")[1], 10); if (!isNaN(v)) port = v; continue; }
-    if (arg.startsWith("--host=")) { host = arg.split("=")[1]; continue; }
-    if (arg === "--port" && i + 1 < argv.length && /^\d+$/.test(argv[i + 1])) { port = parseInt(argv[i + 1], 10); skipNext = true; continue; }
-    if (arg === "--host" && i + 1 < argv.length && !argv[i + 1].startsWith("-")) { host = argv[i + 1]; skipNext = true; continue; }
+    if (arg === "--json") {
+      JSON_OUTPUT = true;
+      continue;
+    }
+    if (arg.startsWith("--port=")) {
+      const v = parseInt(arg.split("=")[1], 10);
+      if (!isNaN(v)) port = v;
+      continue;
+    }
+    if (arg.startsWith("--host=")) {
+      host = arg.split("=")[1];
+      continue;
+    }
+    if (arg === "--port" && i + 1 < argv.length && /^\d+$/.test(argv[i + 1])) {
+      port = parseInt(argv[i + 1], 10);
+      skipNext = true;
+      continue;
+    }
+    if (arg === "--host" && i + 1 < argv.length && !argv[i + 1].startsWith("-")) {
+      host = argv[i + 1];
+      skipNext = true;
+      continue;
+    }
     args.push(arg);
   }
   return { args, port, host };
@@ -99,7 +120,8 @@ function getFlag(args, name, defaultVal = undefined) {
   const prefix = `--${name}=`;
   for (let i = 0; i < args.length; i++) {
     if (args[i].startsWith(prefix)) return args[i].slice(prefix.length);
-    if (args[i] === `--${name}` && i + 1 < args.length && !args[i + 1].startsWith("--")) return args[i + 1];
+    if (args[i] === `--${name}` && i + 1 < args.length && !args[i + 1].startsWith("--"))
+      return args[i + 1];
   }
   return defaultVal;
 }
@@ -112,33 +134,246 @@ function hasFlag(args, name) {
 
 // serve
 async function cmdServe(args, port, host) {
-  const { spawnSync } = await import("node:child_process");
-  const { existsSync, mkdirSync } = await import("node:fs");
+  const { spawn } = await import("node:child_process");
+  const { existsSync } = await import("node:fs");
   const { join, dirname } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
 
   const __filename = fileURLToPath(import.meta.url);
   const projectDir = join(dirname(__filename), "..");
 
-  // Ensure data directory exists
-  const dataDir = join(projectDir, "data");
-  if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
-
   // Use bundled tsx (works in npm install -g and Electron), fallback to npx
   const tsxBin = join(projectDir, "node_modules", ".bin", "tsx");
   const cmd = existsSync(tsxBin) ? tsxBin : "npx";
   const cmdArgs = existsSync(tsxBin) ? ["server/server.ts"] : ["tsx", "server/server.ts"];
 
-  const result = spawnSync(cmd, cmdArgs, {
+  // The server only serves the web UI when a production build exists in dist/
+  const hasDist = existsSync(join(projectDir, "dist", "index.html"));
+  const url = `http://${host === "0.0.0.0" ? "localhost" : host}:${port}`;
+  if (hasDist) {
+    console.log(`Web UI: ${url}`);
+  } else {
+    console.log(`API server: ${url} (no web UI build found in dist/)`);
+    console.log(`For the dev UI run: npm run dev  (Vite serves it at http://localhost:5173)`);
+  }
+
+  const child = spawn(cmd, cmdArgs, {
     cwd: projectDir,
     stdio: "inherit",
     env: { ...process.env, PORT: String(port), HOST: host },
   });
 
+  child.on("error", (err) => die(`Failed to start server: ${err.message}`));
+  child.on("exit", (code) => process.exit(code ?? 1));
+
+  if (hasFlag(args, "open")) {
+    if (!hasDist) {
+      console.log("--open skipped: no web UI build. Run `npm run build` first.");
+      return;
+    }
+    const ready = await waitForServer(port, host, 15000);
+    if (ready) await openBrowser(url);
+    else console.error(`--open skipped: server did not respond at ${url} within 15s`);
+  }
+}
+
+// Poll the API until the server responds (used by serve --open)
+async function waitForServer(port, host, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      await api("GET", "/api/settings", null, port, host);
+      return true;
+    } catch {
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+  return false;
+}
+
+// Open a URL in the default browser (cross-platform, best effort)
+async function openBrowser(url) {
+  const { spawn } = await import("node:child_process");
+  let cmd, cmdArgs;
+  if (process.platform === "darwin") {
+    cmd = "open";
+    cmdArgs = [url];
+  } else if (process.platform === "win32") {
+    cmd = "cmd";
+    cmdArgs = ["/c", "start", "", url];
+  } else {
+    cmd = "xdg-open";
+    cmdArgs = [url];
+  }
+  try {
+    const child = spawn(cmd, cmdArgs, { stdio: "ignore", detached: true });
+    child.on("error", () => {});
+    child.unref();
+  } catch {
+    // Best effort — the URL is already printed above
+  }
+}
+
+// setup-mcp
+async function cmdSetupMcp(args) {
+  const { spawnSync } = await import("node:child_process");
+  const { existsSync } = await import("node:fs");
+  const { join, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+
+  const scriptPath = join(dirname(fileURLToPath(import.meta.url)), "setup-mcp.sh");
+  if (!existsSync(scriptPath)) die(`setup-mcp.sh not found at ${scriptPath}`);
+
+  const result = spawnSync("bash", [scriptPath, ...args], { stdio: "inherit" });
   if (result.error) {
-    die(`Failed to start server: ${result.error.message}`);
+    if (process.platform === "win32") {
+      console.error("setup-mcp needs bash, which was not found on this system.");
+      console.error("Install Git for Windows (https://gitforwindows.org) or WSL, then run:");
+      console.error(`  bash "${scriptPath}"`);
+      console.error(
+        "Or skip the script and install MCP servers directly with uv (https://docs.astral.sh/uv/)."
+      );
+    } else {
+      console.error(`Could not run bash: ${result.error.message}`);
+    }
+    process.exit(1);
   }
   process.exit(result.status ?? 1);
+}
+
+// doctor
+async function cmdDoctor(args, port, host) {
+  const { spawnSync } = await import("node:child_process");
+  const { mkdirSync, accessSync, constants } = await import("node:fs");
+  const { join, dirname, sep } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const { createRequire } = await import("node:module");
+  const { homedir } = await import("node:os");
+  const net = await import("node:net");
+
+  const projectDir = join(dirname(fileURLToPath(import.meta.url)), "..");
+  const results = [];
+  const add = (level, label, detail = "") => results.push({ level, label, detail });
+
+  // Node version (better-sqlite3@12 + Vite 8 need >= 20.19)
+  const [major, minor] = process.versions.node.split(".").map(Number);
+  if (major > 20 || (major === 20 && minor >= 19)) {
+    add("ok", `Node ${process.version}`, ">= 20.19 required");
+  } else {
+    add(
+      "fail",
+      `Node ${process.version} is too old`,
+      "requires >= 20.19 — install Node 22 (see .nvmrc)"
+    );
+  }
+
+  // better-sqlite3 native module (ABI)
+  try {
+    const req = createRequire(join(projectDir, "package.json"));
+    req("better-sqlite3");
+    add("ok", "better-sqlite3 native module loads");
+  } catch (err) {
+    if (err.code === "MODULE_NOT_FOUND" && /better-sqlite3/.test(err.message)) {
+      add("fail", "better-sqlite3 is not installed", "run: npm install");
+    } else {
+      add(
+        "fail",
+        "better-sqlite3 failed to load (Node ABI mismatch?)",
+        "run: npm rebuild better-sqlite3"
+      );
+    }
+  }
+
+  // claude CLI or ANTHROPIC_API_KEY. shell:true on Windows so the npm-installed
+  // `claude.cmd` shim resolves (bare CreateProcess only appends .exe).
+  const win = process.platform === "win32";
+  const claude = spawnSync("claude", ["--version"], {
+    encoding: "utf8",
+    timeout: 10000,
+    shell: win,
+  });
+  if (!claude.error && claude.status === 0) {
+    add("ok", `claude CLI ${(claude.stdout || "").trim()}`);
+  } else if (process.env.ANTHROPIC_API_KEY) {
+    add("ok", "ANTHROPIC_API_KEY is set", "claude CLI not found; the API key will be used");
+  } else {
+    add(
+      "fail",
+      "No Claude credentials found",
+      "install the CLI (npm i -g @anthropic-ai/claude-code) and run `claude` to log in, or set ANTHROPIC_API_KEY"
+    );
+  }
+
+  // uvx (optional — MCP servers)
+  const uvx = spawnSync("uvx", ["--version"], { encoding: "utf8", timeout: 10000, shell: win });
+  if (!uvx.error && uvx.status === 0) {
+    add("ok", (uvx.stdout || "uvx").trim(), "MCP servers auto-detected");
+  } else {
+    add(
+      "warn",
+      "uvx not found (optional)",
+      "MCP servers need it — install uv: https://docs.astral.sh/uv/ then run: studio setup-mcp"
+    );
+  }
+
+  // Data dir path + writable (mirrors server/runtime-paths.ts resolution)
+  let dataDir;
+  if (process.env.STUDIO_USER_DATA_PATH) {
+    dataDir = process.env.STUDIO_USER_DATA_PATH;
+  } else if (projectDir.split(sep).includes("node_modules")) {
+    dataDir =
+      process.platform === "darwin"
+        ? join(homedir(), "Library", "Application Support", "Claude World Studio")
+        : process.platform === "win32"
+          ? join(
+              process.env.APPDATA || join(homedir(), "AppData", "Roaming"),
+              "Claude World Studio"
+            )
+          : join(
+              process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"),
+              "Claude World Studio"
+            );
+  } else {
+    dataDir = join(projectDir, "data");
+  }
+  try {
+    mkdirSync(dataDir, { recursive: true });
+    accessSync(dataDir, constants.W_OK);
+    add("ok", `data dir ${dataDir}`, "writable");
+  } catch (err) {
+    add("fail", `data dir ${dataDir} is not writable`, err.message);
+  }
+
+  // Port availability
+  const portFree = await new Promise((resolve) => {
+    const srv = net.createServer();
+    srv.once("error", () => resolve(false));
+    srv.once("listening", () => srv.close(() => resolve(true)));
+    srv.listen(port, host);
+  });
+  if (portFree) {
+    add("ok", `port ${port} is free`);
+  } else {
+    add(
+      "warn",
+      `port ${port} is in use`,
+      "Studio may already be running (check: studio status) — or use --port N"
+    );
+  }
+
+  console.log("Claude World Studio — doctor\n");
+  const symbols = { ok: "✓", warn: "!", fail: "✗" };
+  for (const r of results) {
+    console.log(`  ${symbols[r.level]} ${r.label}${r.detail ? ` — ${r.detail}` : ""}`);
+  }
+  console.log("");
+  const fails = results.filter((r) => r.level === "fail").length;
+  const warns = results.filter((r) => r.level === "warn").length;
+  if (fails > 0) {
+    console.log(`${fails} problem(s) found. Fix the items marked ✗ and re-run: studio doctor`);
+    process.exit(1);
+  }
+  console.log(warns > 0 ? "Ready (with warnings)." : "All checks passed.");
 }
 
 // status
@@ -162,11 +397,16 @@ async function cmdStatus(args, port, host) {
 async function cmdSessionList(args, port, host) {
   const sessions = await api("GET", "/api/sessions", null, port, host);
   output(sessions, (list) => {
-    if (list.length === 0) { console.log("No sessions"); return; }
+    if (list.length === 0) {
+      console.log("No sessions");
+      return;
+    }
     console.log(`${"ID".padEnd(38)} ${"Title".padEnd(30)} ${"Status".padEnd(10)} Created`);
     console.log("-".repeat(95));
     for (const s of list) {
-      console.log(`${s.id.padEnd(38)} ${(s.title || "Untitled").slice(0, 28).padEnd(30)} ${(s.status || "active").padEnd(10)} ${s.created_at}`);
+      console.log(
+        `${s.id.padEnd(38)} ${(s.title || "Untitled").slice(0, 28).padEnd(30)} ${(s.status || "active").padEnd(10)} ${s.created_at}`
+      );
     }
   });
 }
@@ -175,7 +415,13 @@ async function cmdSessionList(args, port, host) {
 async function cmdSessionCreate(args, port, host) {
   const title = getFlag(args, "title");
   const workspace = getFlag(args, "workspace", process.cwd());
-  const session = await api("POST", "/api/sessions", { title, workspacePath: workspace }, port, host);
+  const session = await api(
+    "POST",
+    "/api/sessions",
+    { title, workspacePath: workspace },
+    port,
+    host
+  );
   output(session, (s) => {
     console.log(`Created session: ${s.id}`);
     if (s.title) console.log(`  Title: ${s.title}`);
@@ -227,14 +473,18 @@ async function cmdSessionMessages(args, port, host) {
   const messages = await api("GET", `/api/sessions/${id}/messages`, null, port, host);
   const limited = messages.slice(-parseInt(limit, 10));
   output(limited, (msgs) => {
-    if (msgs.length === 0) { console.log("No messages"); return; }
+    if (msgs.length === 0) {
+      console.log("No messages");
+      return;
+    }
     for (const m of msgs) {
       const role = m.role.toUpperCase().padEnd(12);
-      const content = m.role === "tool_use"
-        ? `[${m.tool_name}] ${(m.tool_input || "").slice(0, 80)}`
-        : m.role === "tool_result"
-        ? `[result] ${(m.content || "").slice(0, 80)}`
-        : (m.content || "").slice(0, 120);
+      const content =
+        m.role === "tool_use"
+          ? `[${m.tool_name}] ${(m.tool_input || "").slice(0, 80)}`
+          : m.role === "tool_result"
+            ? `[result] ${(m.content || "").slice(0, 80)}`
+            : (m.content || "").slice(0, 120);
       console.log(`${role} ${content}`);
       if (m.cost_usd) console.log(`             Cost: $${m.cost_usd.toFixed(4)}`);
     }
@@ -270,7 +520,9 @@ async function cmdChat(args, port, host) {
   const cleanup = () => {
     if (!done) {
       done = true;
-      try { ws.close(); } catch {}
+      try {
+        ws.close();
+      } catch {}
     }
   };
 
@@ -286,7 +538,10 @@ async function cmdChat(args, port, host) {
       process.exit(130);
     }
     // Fallback exit if callback doesn't fire within 500ms
-    setTimeout(() => { cleanup(); process.exit(130); }, 500);
+    setTimeout(() => {
+      cleanup();
+      process.exit(130);
+    }, 500);
   });
 
   ws.on("error", (err) => {
@@ -408,11 +663,16 @@ async function cmdInterrupt(args, port, host) {
 async function cmdAccountList(args, port, host) {
   const accounts = await api("GET", "/api/accounts", null, port, host);
   output(accounts, (list) => {
-    if (list.length === 0) { console.log("No accounts"); return; }
+    if (list.length === 0) {
+      console.log("No accounts");
+      return;
+    }
     console.log(`${"ID".padEnd(38)} ${"Name".padEnd(20)} ${"Handle".padEnd(25)} Platform`);
     console.log("-".repeat(95));
     for (const a of list) {
-      console.log(`${a.id.padEnd(38)} ${a.name.slice(0, 18).padEnd(20)} ${a.handle.slice(0, 23).padEnd(25)} ${a.platform}`);
+      console.log(
+        `${a.id.padEnd(38)} ${a.name.slice(0, 18).padEnd(20)} ${a.handle.slice(0, 23).padEnd(25)} ${a.platform}`
+      );
     }
   });
 }
@@ -426,10 +686,25 @@ async function cmdAccountCreate(args, port, host) {
   const userId = getFlag(args, "user-id");
   const style = getFlag(args, "style");
   const persona = getFlag(args, "persona");
-  if (!name || !handle || !platform) die("Usage: account create --name N --handle H --platform P [--token T] [--user-id U] [--style S] [--persona T]");
-  const account = await api("POST", "/api/accounts", {
-    name, handle, platform, token, user_id: userId, style, persona_prompt: persona,
-  }, port, host);
+  if (!name || !handle || !platform)
+    die(
+      "Usage: account create --name N --handle H --platform P [--token T] [--user-id U] [--style S] [--persona T]"
+    );
+  const account = await api(
+    "POST",
+    "/api/accounts",
+    {
+      name,
+      handle,
+      platform,
+      token,
+      user_id: userId,
+      style,
+      persona_prompt: persona,
+    },
+    port,
+    host
+  );
   output(account, (a) => {
     console.log(`Created account: ${a.id}`);
     console.log(`  ${a.name} (${a.handle}) on ${a.platform}`);
@@ -441,13 +716,20 @@ async function cmdAccountUpdate(args, port, host) {
   const id = args[0];
   if (!id) die("Usage: account update <ID> [--name N] [--handle H] [--token T] ...");
   const body = {};
-  const name = getFlag(args, "name"); if (name) body.name = name;
-  const handle = getFlag(args, "handle"); if (handle) body.handle = handle;
-  const platform = getFlag(args, "platform"); if (platform) body.platform = platform;
-  const token = getFlag(args, "token"); if (token) body.token = token;
-  const userId = getFlag(args, "user-id"); if (userId) body.user_id = userId;
-  const style = getFlag(args, "style"); if (style) body.style = style;
-  const persona = getFlag(args, "persona"); if (persona) body.persona_prompt = persona;
+  const name = getFlag(args, "name");
+  if (name) body.name = name;
+  const handle = getFlag(args, "handle");
+  if (handle) body.handle = handle;
+  const platform = getFlag(args, "platform");
+  if (platform) body.platform = platform;
+  const token = getFlag(args, "token");
+  if (token) body.token = token;
+  const userId = getFlag(args, "user-id");
+  if (userId) body.user_id = userId;
+  const style = getFlag(args, "style");
+  if (style) body.style = style;
+  const persona = getFlag(args, "persona");
+  if (persona) body.persona_prompt = persona;
   const account = await api("PUT", `/api/accounts/${id}`, body, port, host);
   output(account, (a) => {
     console.log(`Updated account: ${a.id}`);
@@ -481,7 +763,12 @@ async function cmdSettingsDetect(args, port, host) {
   output(detected, (d) => {
     for (const [k, info] of Object.entries(d)) {
       const status = info.found ? "✓" : "✗";
-      const value = k === "cfBrowserApiKey" ? (info.found ? "(found)" : "(not found)") : (info.value || "(not found)");
+      const value =
+        k === "cfBrowserApiKey"
+          ? info.found
+            ? "(found)"
+            : "(not found)"
+          : info.value || "(not found)";
       console.log(`  ${status} ${k}: ${value}`);
     }
   });
@@ -498,8 +785,28 @@ async function cmdSettingsApply(args, port, host) {
 // settings set
 async function cmdSettingsSet(args, port, host) {
   const body = {};
-  const keys = ["language", "trend-pulse-python", "cf-browser-python", "notebooklm-path", "cf-browser-url", "cf-browser-key", "default-workspace"];
-  const apiKeys = ["language", "trendPulseVenvPython", "cfBrowserVenvPython", "notebooklmServerPath", "cfBrowserUrl", "cfBrowserApiKey", "defaultWorkspace"];
+  const keys = [
+    "language",
+    "trend-pulse-python",
+    "cf-browser-python",
+    "notebooklm-path",
+    "cf-browser-url",
+    "cf-browser-key",
+    "cf-account-id",
+    "cf-api-token",
+    "default-workspace",
+  ];
+  const apiKeys = [
+    "language",
+    "trendPulseVenvPython",
+    "cfBrowserVenvPython",
+    "notebooklmServerPath",
+    "cfBrowserUrl",
+    "cfBrowserApiKey",
+    "cfAccountId",
+    "cfApiToken",
+    "defaultWorkspace",
+  ];
   for (let i = 0; i < keys.length; i++) {
     const val = getFlag(args, keys[i]);
     if (val !== undefined) body[apiKeys[i]] = val;
@@ -525,7 +832,10 @@ async function cmdPublish(args, port, host) {
   const poll = getFlag(args, "poll");
   const linkComment = getFlag(args, "link-comment");
   const tag = getFlag(args, "tag");
-  if (!accountId || !text) die("Usage: publish --account ID --text T [--score N] [--image-url U] [--poll 'A|B'] [--link-comment U] [--tag T]");
+  if (!accountId || !text)
+    die(
+      "Usage: publish --account ID --text T [--score N] [--image-url U] [--poll 'A|B'] [--link-comment U] [--tag T]"
+    );
 
   const body = { accountId, text };
   if (score) body.score = parseInt(score, 10);
@@ -555,11 +865,16 @@ async function cmdHistory(args, port, host) {
   const limit = getFlag(args, "limit", "20");
   const history = await api("GET", `/api/publish/history?limit=${limit}`, null, port, host);
   output(history, (list) => {
-    if (list.length === 0) { console.log("No publish history"); return; }
+    if (list.length === 0) {
+      console.log("No publish history");
+      return;
+    }
     console.log(`${"ID".padEnd(38)} ${"Platform".padEnd(12)} ${"Status".padEnd(12)} Content`);
     console.log("-".repeat(100));
     for (const h of list) {
-      console.log(`${h.id.padEnd(38)} ${h.platform.padEnd(12)} ${h.status.padEnd(12)} ${(h.content || "").slice(0, 40)}`);
+      console.log(
+        `${h.id.padEnd(38)} ${h.platform.padEnd(12)} ${h.status.padEnd(12)} ${(h.content || "").slice(0, 40)}`
+      );
     }
   });
 }
@@ -569,7 +884,13 @@ async function cmdFileList(args, port, host) {
   const sessionId = args[0];
   if (!sessionId) die("Usage: file list <SESSION_ID> [--depth N]");
   const depth = getFlag(args, "depth", "3");
-  const result = await api("GET", `/api/sessions/${sessionId}/files?depth=${depth}`, null, port, host);
+  const result = await api(
+    "GET",
+    `/api/sessions/${sessionId}/files?depth=${depth}`,
+    null,
+    port,
+    host
+  );
   output(result, (r) => {
     console.log(`Workspace: ${r.workspace}`);
     printTree(r.tree, "");
@@ -600,7 +921,13 @@ async function cmdFileRead(args, port, host) {
   const filePath = args[1];
   if (!sessionId || !filePath) die("Usage: file read <SESSION_ID> <PATH>");
   const encodedPath = filePath.split("/").map(encodeURIComponent).join("/");
-  const result = await api("GET", `/api/sessions/${sessionId}/files/${encodedPath}`, null, port, host);
+  const result = await api(
+    "GET",
+    `/api/sessions/${sessionId}/files/${encodedPath}`,
+    null,
+    port,
+    host
+  );
   output(result, (r) => {
     if (typeof r === "string") {
       process.stdout.write(r);
@@ -620,8 +947,10 @@ function showHelp() {
 Usage: studio [--json] [--port N] [--host H] <command> [flags]
 
 Server:
-  serve                                       Start web UI server
+  serve [--open]                              Start server (--open launches the browser)
   status                                      Check server status
+  doctor                                      First-boot preflight checklist
+  setup-mcp [--update] [--venv]               Install/update MCP servers (runs bin/setup-mcp.sh)
 
 Sessions:
   session list                                List active sessions
@@ -651,7 +980,8 @@ Settings:
   settings apply                              Apply detected values
   settings set [--language L]                 Update settings
          [--trend-pulse-python P]
-         [--cf-browser-python P] ...
+         [--cf-browser-python P]
+         [--cf-account-id ID] [--cf-api-token T] ...
 
 Publishing:
   publish --account ID --text T               Publish content
@@ -695,37 +1025,41 @@ const sub = args[1];
 const rest = args.slice(2);
 
 const COMMANDS = {
-  serve:     () => cmdServe(rest, port, host),
-  status:    () => cmdStatus(rest, port, host),
-  session:   {
-    list:     () => cmdSessionList(rest, port, host),
-    create:   () => cmdSessionCreate(rest, port, host),
-    get:      () => cmdSessionGet(rest, port, host),
-    rename:   () => cmdSessionRename(rest, port, host),
-    delete:   () => cmdSessionDelete(rest, port, host),
+  serve: () => cmdServe(args.slice(1), port, host),
+  status: () => cmdStatus(rest, port, host),
+  doctor: () => cmdDoctor(args.slice(1), port, host),
+  "setup-mcp": () => cmdSetupMcp(args.slice(1)),
+  session: {
+    list: () => cmdSessionList(rest, port, host),
+    create: () => cmdSessionCreate(rest, port, host),
+    get: () => cmdSessionGet(rest, port, host),
+    rename: () => cmdSessionRename(rest, port, host),
+    delete: () => cmdSessionDelete(rest, port, host),
     messages: () => cmdSessionMessages(rest, port, host),
   },
-  chat:      () => cmdChat(args.slice(1), port, host),
+  chat: () => cmdChat(args.slice(1), port, host),
   interrupt: () => cmdInterrupt(args.slice(1), port, host),
-  account:   {
-    list:     () => cmdAccountList(rest, port, host),
-    create:   () => cmdAccountCreate(rest, port, host),
-    update:   () => cmdAccountUpdate(rest, port, host),
-    delete:   () => cmdAccountDelete(rest, port, host),
+  account: {
+    list: () => cmdAccountList(rest, port, host),
+    create: () => cmdAccountCreate(rest, port, host),
+    update: () => cmdAccountUpdate(rest, port, host),
+    delete: () => cmdAccountDelete(rest, port, host),
   },
-  settings:  {
-    get:      () => cmdSettingsGet(rest, port, host),
-    detect:   () => cmdSettingsDetect(rest, port, host),
-    apply:    () => cmdSettingsApply(rest, port, host),
-    set:      () => cmdSettingsSet(rest, port, host),
+  settings: {
+    get: () => cmdSettingsGet(rest, port, host),
+    detect: () => cmdSettingsDetect(rest, port, host),
+    apply: () => cmdSettingsApply(rest, port, host),
+    set: () => cmdSettingsSet(rest, port, host),
   },
-  publish:   () => cmdPublish(args.slice(1), port, host),
-  history:   () => cmdHistory(args.slice(1), port, host),
-  file:      {
-    list:     () => cmdFileList(rest, port, host),
-    read:     () => cmdFileRead(rest, port, host),
+  publish: () => cmdPublish(args.slice(1), port, host),
+  history: () => cmdHistory(args.slice(1), port, host),
+  file: {
+    list: () => cmdFileList(rest, port, host),
+    read: () => cmdFileRead(rest, port, host),
   },
-  help:      () => { showHelp(); },
+  help: () => {
+    showHelp();
+  },
 };
 
 async function main() {

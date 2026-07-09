@@ -12,10 +12,10 @@ Content pipeline app: trend discovery, deep research, social publishing — with
 - `server/routes/agent.ts` — REST API for goals, memories, reflections, workflows, matrix-run
 - `server/cleanup-registry.ts` — Centralized cleanup (pattern from Claude Code)
 - `client/` — React 19 + Tailwind UI (Vite build)
-- `client/components/AgentDashboard.tsx` — Goals/Memories/Workflows dashboard page
+- `client/components/AgentDashboard.tsx` — Goals/Workflows/Memory/Strategy dashboard page
 - `client/hooks/` — `useApi` (typed fetch), `useLanguage` (context)
 - `electron/` — Electron desktop wrapper
-- `scripts/` — Build scripts only (no runtime scripts)
+- `scripts/` — Build/test tooling (`electron-build.cjs`, `desktop-smoke.cjs`, `ensure-native-abi.cjs`) plus dev-only `threads_api.py`; nothing here runs at server runtime
 - `.claude/skills/` — Skill definitions for Claude Code
 
 ## Agentic Subsystem (v2.2)
@@ -37,6 +37,17 @@ Content pipeline app: trend discovery, deep research, social publishing — with
 - Yield-point guard in `executeStateMachine` — checks `run.state` after every `await` so abort/pause isn't overridden
 - `markStaleGoalsFailed()` on orchestrator startup — reconciles orphaned active goals from previous server runs
 - `getMemoriesByType()` store method — DB-level `WHERE memory_type = ?` filter; never fetch-then-filter in JS
+- **NULL-binding trap**: `WHERE (account_id = ? OR account_id IS NULL)` with a NULL bind collapses to global-only rows. When a filter param is `undefined`, use a dedicated no-filter statement (see `getContextMemoriesAllAccounts`, `getMemoriesByType`)
+- **One-time migrations**: guard with a settings-table flag (e.g. `migration_publish_score_backfill`) — never write data backfills that re-run on every boot
+- **Quality gate consistency**: every publish entry point (REST `/api/publish`, `/batch`, MCP tool, scheduler) must enforce `settings.minOverallScore` (70 fallback); scheduled tasks additionally raise the gate to `max(setting, task.min_score)` via `createStudioMcpServer({minScore})`. Gates raise, never lower
+- **Never ship the `data` directory or `.env` via electron-builder `files`/`extraResources`** — the live dev DB holds real tokens; this leaked credentials in v1.3.0–v2.0.0 releases
+- `scripts/ensure-native-abi.cjs` (pre dev/test/start + postinstall) — auto-rebuilds better-sqlite3 when `electron:build` leaves an Electron-ABI binary behind
+- Test isolation: set `STUDIO_USER_DATA_PATH` to a mkdtemp dir **before** dynamically importing any DB-touching module (static imports hoist above the env assignment)
+
+### Known Limitations
+
+- Goal pause/resume/abort works only for runs launched via `orchestrator.runGoal` (matrix-run); goals created by `POST /api/agent/goals` or the `create_goal_session` MCP tool return 409 (no in-memory run) and terminate via `markStaleGoalsFailed` on restart
+- `agent_memories_fts` is external-content FTS5 keyed on the implicit rowid of a TEXT-PK table — running `VACUUM` may renumber rowids and desync the index. No code runs VACUUM; don't add one without rebuilding the FTS index afterwards
 
 ### MCP Tools (all 8)
 

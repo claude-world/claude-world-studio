@@ -421,6 +421,25 @@ describe("CreateTaskSchema", () => {
     });
     assert.ok(valid.success);
   });
+
+  it("accepts valid IANA timezones", () => {
+    for (const timezone of ["Asia/Taipei", "America/New_York", "UTC"]) {
+      const result = CreateTaskSchema.safeParse({ ...validTask, timezone });
+      assert.ok(result.success, `expected timezone "${timezone}" to be accepted`);
+    }
+  });
+
+  it("rejects invalid timezones (node-cron 4 throws RangeError on them)", () => {
+    for (const timezone of ["Not/AZone", "Asia/Taipei2", "garbage"]) {
+      const result = CreateTaskSchema.safeParse({ ...validTask, timezone });
+      assert.strictEqual(result.success, false, `expected timezone "${timezone}" to be rejected`);
+    }
+  });
+
+  it("timezone remains optional", () => {
+    const result = CreateTaskSchema.safeParse(validTask);
+    assert.ok(result.success);
+  });
 });
 
 describe("parseBody helper", () => {

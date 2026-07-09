@@ -38,9 +38,14 @@ function maskValue(value: string): string {
 // Get all settings (tokens masked)
 router.get("/", (_req, res) => {
   const settings = getSettings();
-  // Include all DB settings (CLI routing, etc.) that getSettings() doesn't cover
+  // Include all DB settings (CLI routing, etc.) that getSettings() doesn't cover,
+  // but drop internal bookkeeping rows (e.g. migration_* flags) — they are not
+  // user settings and would round-trip back into PUT as "unknown setting".
   const allDbSettings = store.getAllSettings();
   const merged: Record<string, any> = { ...allDbSettings, ...settings };
+  for (const key of Object.keys(merged)) {
+    if (key.startsWith("migration_")) delete merged[key];
+  }
 
   for (const key of SENSITIVE_KEYS) {
     if (merged[key]) {
@@ -367,7 +372,10 @@ router.put("/", (req, res) => {
     "cliPrimary",
     "minOverallScore",
     "minConversationScore",
+    "agenticLevel",
   ];
+
+  const AGENTIC_LEVELS = ["standard", "enhanced", "full"];
 
   const pathKeys = [
     "trendPulseVenvPython",
@@ -376,14 +384,37 @@ router.put("/", (req, res) => {
     "defaultWorkspace",
   ];
 
-  for (const [key, value] of Object.entries(updates)) {
-    if (!allowedKeys.includes(key) || typeof value !== "string") continue;
+  // Keys that were not applied, with reasons — surfaced to the client so
+  // "Settings saved!" doesn't silently hide dropped values.
+  const skipped: { key: string; reason: string }[] = [];
 
-    // Skip masked sensitive values — don't overwrite real keys with masked placeholders
+  for (const [key, rawValue] of Object.entries(updates)) {
+    if (!allowedKeys.includes(key)) {
+      skipped.push({ key, reason: "unknown setting" });
+      continue;
+    }
+    // GET returns some settings as numbers (e.g. minOverallScore); settings are
+    // stored as TEXT, so coerce the numeric round-trip to a string rather than
+    // dropping a valid value the client spread back from GET unchanged.
+    const value = typeof rawValue === "number" ? String(rawValue) : rawValue;
+    if (typeof value !== "string") {
+      skipped.push({ key, reason: "value must be a string" });
+      continue;
+    }
+
+    // Skip masked sensitive values — don't overwrite real keys with masked
+    // placeholders. By-design round-trip from GET, so not reported as skipped.
     if (SENSITIVE_KEYS.includes(key as any) && value.includes("...")) continue;
 
     if (pathKeys.includes(key) && value) {
-      if (!isAbsolute(value) || /[;&|`$(){}]/.test(value)) continue;
+      if (!isAbsolute(value)) {
+        skipped.push({ key, reason: "path must be absolute" });
+        continue;
+      }
+      if (/[;&|`$(){}]/.test(value)) {
+        skipped.push({ key, reason: "path contains invalid characters" });
+        continue;
+      }
     }
 
     if (key === "defaultWorkspace") {
@@ -392,28 +423,46 @@ router.put("/", (req, res) => {
         continue;
       }
       const validation = validateWorkspacePath(value);
-      if (!validation.ok) continue;
+      if (!validation.ok) {
+        skipped.push({ key, reason: validation.error || "invalid workspace path" });
+        continue;
+      }
       store.setSetting(key, validation.realPath);
       continue;
     }
 
     // Validate CLI command names
-    if (key === "cliPrimary" && value && !VALID_CLI_COMMANDS.has(value)) continue;
+    if (key === "cliPrimary" && value && !VALID_CLI_COMMANDS.has(value)) {
+      skipped.push({ key, reason: "unknown CLI command" });
+      continue;
+    }
     if (key === "cliEnabledList" && value) {
       const parts = value.split(",").filter(Boolean);
-      if (!parts.every((p) => VALID_CLI_COMMANDS.has(p))) continue;
+      if (!parts.every((p) => VALID_CLI_COMMANDS.has(p))) {
+        skipped.push({ key, reason: "contains unknown CLI command" });
+        continue;
+      }
     }
 
     // Validate numeric score range
     if ((key === "minOverallScore" || key === "minConversationScore") && value) {
       const n = parseInt(value, 10);
-      if (isNaN(n) || n < 0 || n > 100) continue;
+      if (isNaN(n) || n < 0 || n > 100) {
+        skipped.push({ key, reason: "must be a number between 0 and 100" });
+        continue;
+      }
+    }
+
+    // Validate agentic mode level
+    if (key === "agenticLevel" && !AGENTIC_LEVELS.includes(value)) {
+      skipped.push({ key, reason: "must be one of standard|enhanced|full" });
+      continue;
     }
 
     store.setSetting(key, value);
   }
 
-  res.json({ success: true });
+  res.json({ success: true, skipped });
 });
 
 // POST /api/settings/sync-skills

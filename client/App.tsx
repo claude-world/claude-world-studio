@@ -38,7 +38,7 @@ interface Session {
 
 interface Message {
   id: string;
-  role: "user" | "assistant" | "tool_use" | "tool_result" | "result" | "reflection";
+  role: "user" | "assistant" | "tool_use" | "tool_result" | "result" | "error";
   content: string | null;
   created_at?: string;
   timestamp?: string;
@@ -49,7 +49,6 @@ interface Message {
   toolId?: string;
   tool_id?: string;
   cost_usd?: number;
-  reflectionId?: string;
 }
 
 /** Discriminated union for server→client WebSocket messages */
@@ -68,8 +67,7 @@ type ServerWSMessage =
   | { type: "tool_result"; toolId: string; content: string; sessionId: string }
   | { type: "result"; success: boolean; cost?: number; duration?: number; sessionId: string }
   | { type: "interrupted"; sessionId: string }
-  | { type: "error"; error: string; sessionId?: string }
-  | { type: "reflection"; content: string; reflectionId: string; sessionId: string };
+  | { type: "error"; error: string; sessionId?: string };
 
 function getWsUrl(): string {
   const proto = window.location.protocol === "https:" ? "wss" : "ws";
@@ -147,11 +145,20 @@ export default function App() {
     if (data.theme) setTheme(data.theme as Theme);
   };
 
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     const [data] =
       await apiGet<{ id: string; name: string; handle: string; platform: string }[]>("/accounts");
-    if (data) setAccounts(data);
-  };
+    if (data) {
+      setAccounts(data);
+      // Clear a stale selection when the account was deleted (or "__all__"
+      // no longer applies) so the chat selector can't target a dead account.
+      setTargetAccountId((prev) => {
+        if (prev === "__all__") return data.length > 1 ? prev : "";
+        if (prev && !data.some((a) => a.id === prev)) return "";
+        return prev;
+      });
+    }
+  }, []);
 
   const handleWSMessage = useCallback((message: ServerWSMessage) => {
     // Ignore messages from sessions we're not currently viewing
@@ -166,13 +173,30 @@ export default function App() {
 
       case "history": {
         const history = message.messages || [];
-        // Merge: use history as base, append any optimistic local messages not in history
+        // Invariant: server history is authoritative. Live-streamed messages use
+        // client-generated ids (crypto.randomUUID / tu_*) while history rows carry
+        // DB ids, so id-based merging duplicates every message after a reconnect.
+        // Replace instead, preserving only local messages strictly newer than the
+        // last history row (e.g. an optimistic user message sent while the history
+        // response was in flight). In-flight stream chunks keep appending after.
         setMessages((prev) => {
           if (prev.length === 0) return history;
-          // Find messages added locally after the last history entry
-          const historyIds = new Set(history.map((m: { id: string }) => m.id));
-          const localOnly = prev.filter((m) => !historyIds.has(m.id));
-          return [...history, ...localOnly];
+          if (history.length === 0) return prev;
+          const msgTime = (m: Message) => {
+            const raw = m.timestamp || m.created_at;
+            if (!raw) return 0;
+            // History rows carry SQLite `datetime('now')` ("YYYY-MM-DD HH:MM:SS"):
+            // UTC but with no 'T'/'Z', so `new Date()` would parse it as LOCAL time
+            // and skew the comparison against local messages' `toISOString()` values.
+            // Normalize the naive form to explicit UTC before parsing.
+            const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)
+              ? raw.replace(" ", "T") + "Z"
+              : raw;
+            return new Date(iso).getTime();
+          };
+          const lastHistoryTime = msgTime(history[history.length - 1]);
+          const newerLocal = prev.filter((m) => msgTime(m) > lastHistoryTime);
+          return [...history, ...newerLocal];
         });
         // Restore loading indicator if the session agent is still running
         if (message.running) {
@@ -278,16 +302,14 @@ export default function App() {
       case "error":
         console.error("Server error:", message.error);
         setIsLoading(false);
-        break;
-
-      case "reflection":
+        // Surface the error in the chat — otherwise a message sent into a dead
+        // session silently looks like the agent ignored it.
         setMessages((prev) => [
           ...prev,
           {
-            id: `ref_${message.reflectionId || crypto.randomUUID()}`,
-            role: "reflection",
-            content: message.content,
-            reflectionId: message.reflectionId,
+            id: crypto.randomUUID(),
+            role: "error",
+            content: message.error,
             timestamp: new Date().toISOString(),
           },
         ]);
@@ -297,8 +319,11 @@ export default function App() {
 
   const { sendJsonMessage, readyState, lastJsonMessage } = useWebSocket(getWsUrl, {
     shouldReconnect: () => true,
-    reconnectAttempts: 10,
-    reconnectInterval: 3000,
+    // Retry (practically) forever with capped exponential backoff — a fixed
+    // 10 x 3s budget stranded the UI in a permanent "Reconnecting..." state
+    // after any outage longer than 30s.
+    reconnectAttempts: Number.MAX_SAFE_INTEGER,
+    reconnectInterval: (attempt) => Math.min(1000 * 2 ** attempt, 30000),
   });
 
   const isConnected = readyState === ReadyState.OPEN;
@@ -372,6 +397,7 @@ export default function App() {
   };
 
   const deleteSession = async (sessionId: string) => {
+    if (!window.confirm("Delete this session?")) return;
     const [, err] = await apiDelete(`/sessions/${sessionId}`);
     if (err) return;
     setSessions((prev) => prev.filter((s) => s.id !== sessionId));
@@ -400,24 +426,25 @@ export default function App() {
   const handleSendMessage = (content: string) => {
     if (!selectedSessionId || !isConnected) return;
 
-    setMessages((prev) => {
-      // Auto-update session title from first user message
-      if (prev.length === 0) {
-        const title = content.slice(0, 80).replace(/\n/g, " ");
-        setSessions((ss) => ss.map((s) => (s.id === selectedSessionId ? { ...s, title } : s)));
-        // Persist title to server (fire-and-forget)
-        apiPatch(`/sessions/${selectedSessionId}`, { title });
-      }
-      return [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "user",
-          content,
-          timestamp: new Date().toISOString(),
-        },
-      ];
-    });
+    // Auto-update session title from first user message. Kept OUTSIDE the
+    // setMessages updater — updaters must be pure (StrictMode replays them,
+    // which would fire the PATCH twice).
+    if (messages.length === 0) {
+      const title = content.slice(0, 80).replace(/\n/g, " ");
+      setSessions((ss) => ss.map((s) => (s.id === selectedSessionId ? { ...s, title } : s)));
+      // Persist title to server (fire-and-forget)
+      apiPatch(`/sessions/${selectedSessionId}`, { title });
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        role: "user",
+        content,
+        timestamp: new Date().toISOString(),
+      },
+    ]);
 
     setIsLoading(true);
 
@@ -463,8 +490,20 @@ export default function App() {
   useEffect(() => {
     fetchSessions();
     fetchSettings();
-    fetchAccounts();
   }, []);
+
+  // Refetch accounts on mount and on every page navigation so the chat
+  // target-account selector reflects accounts added/removed in
+  // SocialAccountsPage without a full reload.
+  useEffect(() => {
+    fetchAccounts();
+  }, [activePage, fetchAccounts]);
+
+  // Stable close handlers — PublishDialog's reset logic must not see a new
+  // callback identity on every render while the agent streams.
+  const closePublish = useCallback(() => setShowPublish(false), []);
+  const closePreview = useCallback(() => setPreviewFile(null), []);
+  const backToChat = useCallback(() => setActivePage("chat"), []);
 
   const sidebarContent = (
     <Sidebar
@@ -556,7 +595,7 @@ export default function App() {
             <ErrorBoundary name="Settings">
               <SettingsPage
                 isVisible={showSettings}
-                onClose={() => setActivePage("chat")}
+                onClose={backToChat}
                 language={language}
                 onLanguageChange={handleLanguageChange}
                 desktopUpdateState={desktopUpdater.state}
@@ -567,23 +606,23 @@ export default function App() {
             </ErrorBoundary>
           ) : showSocial ? (
             <ErrorBoundary name="SocialAccounts">
-              <SocialAccountsPage onClose={() => setActivePage("chat")} language={language} />
+              <SocialAccountsPage onClose={backToChat} language={language} />
             </ErrorBoundary>
           ) : showScheduled ? (
             <ErrorBoundary name="ScheduledTasks">
-              <ScheduledTasksPage onClose={() => setActivePage("chat")} language={language} />
+              <ScheduledTasksPage onClose={backToChat} language={language} />
             </ErrorBoundary>
           ) : showAccountPosts ? (
             <ErrorBoundary name="AccountPosts">
-              <AccountPostsPage onClose={() => setActivePage("chat")} language={language} />
+              <AccountPostsPage onClose={backToChat} language={language} />
             </ErrorBoundary>
           ) : showTrafficDashboard ? (
             <ErrorBoundary name="TrafficDashboard">
-              <TrafficDashboardPage onClose={() => setActivePage("chat")} language={language} />
+              <TrafficDashboardPage onClose={backToChat} language={language} />
             </ErrorBoundary>
           ) : showAgentDashboard ? (
             <ErrorBoundary name="AgentDashboard">
-              <AgentDashboard onClose={() => setActivePage("chat")} language={language} />
+              <AgentDashboard onClose={backToChat} language={language} />
             </ErrorBoundary>
           ) : (
             <ErrorBoundary name="Chat">
@@ -628,7 +667,7 @@ export default function App() {
             <FilePreviewModal
               sessionId={previewFile.sessionId}
               filePath={previewFile.relativePath}
-              onClose={() => setPreviewFile(null)}
+              onClose={closePreview}
             />
           </ErrorBoundary>
         )}
@@ -637,7 +676,7 @@ export default function App() {
         <ErrorBoundary name="PublishDialog" fallback={null}>
           <PublishDialog
             isOpen={showPublish}
-            onClose={() => setShowPublish(false)}
+            onClose={closePublish}
             sessionId={selectedSessionId}
           />
         </ErrorBoundary>

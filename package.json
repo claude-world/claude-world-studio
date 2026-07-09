@@ -1,6 +1,6 @@
 {
   "name": "@claude-world/studio",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "type": "module",
   "description": "Claude World Studio - Trend Discovery to Content Publishing Pipeline",
   "main": "electron/main.cjs",
@@ -13,12 +13,15 @@
     "bin/",
     "client/",
     "server/",
-    "scripts/before-pack.js",
+    "dist/",
+    ".claude/skills/",
     "scripts/electron-build.cjs",
+    "scripts/ensure-native-abi.cjs",
     "electron/",
     "postcss.config.js",
     "tsconfig.json",
     "vite.config.ts",
+    ".nvmrc",
     ".env.example"
   ],
   "keywords": [
@@ -33,6 +36,9 @@
   ],
   "author": "Claude World <hello@claude-world.com>",
   "license": "MIT",
+  "engines": {
+    "node": ">=20.19"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/claude-world/claude-world-studio.git"
@@ -42,7 +48,11 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "tsx watch server/server.ts",
     "dev:client": "vite --port 5173",
-    "postinstall": "npm rebuild better-sqlite3 2>/dev/null; true",
+    "predev": "node scripts/ensure-native-abi.cjs",
+    "pretest": "node scripts/ensure-native-abi.cjs",
+    "prestart": "node scripts/ensure-native-abi.cjs",
+    "postinstall": "node scripts/ensure-native-abi.cjs",
+    "prepublishOnly": "npm run build",
     "start": "tsx server/server.ts",
     "build": "vite build",
     "electron:dev": "npm run build && electron .",
@@ -65,7 +75,7 @@
     "asarUnpack": [
       "**"
     ],
-    "electronVersion": "41.1.0",
+    "electronVersion": "41.2.0",
     "electronUpdaterCompatibility": ">=2.16",
     "mac": {
       "category": "public.app-category.developer-tools",
@@ -84,17 +94,11 @@
       ".claude/skills/**/*",
       "electron/**/*",
       "server/**/*",
-      "scripts/**/*",
+      "scripts/electron-build.cjs",
+      "scripts/ensure-native-abi.cjs",
       "dist/index.html",
       "dist/assets/**/*",
-      "data/**/*",
       "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "data",
-        "to": "data"
-      }
     ],
     "publish": [
       {

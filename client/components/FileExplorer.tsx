@@ -159,6 +159,7 @@ export function FileExplorer({ sessionId, isVisible, onToggle, onPreviewFile }: 
   const [tree, setTree] = useState<FileEntry[]>([]);
   const [workspace, setWorkspace] = useState("");
   const [loadingTree, setLoadingTree] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [fileFilter, setFileFilter] = useState("");
 
   const filteredTree = useMemo(() => filterTree(tree, fileFilter), [tree, fileFilter]);
@@ -168,6 +169,7 @@ export function FileExplorer({ sessionId, isVisible, onToggle, onPreviewFile }: 
 
     const controller = new AbortController();
     setLoadingTree(true);
+    setLoadError(false);
 
     fetch(`/api/sessions/${encodeURIComponent(sessionId)}/files`, {
       signal: controller.signal,
@@ -183,6 +185,7 @@ export function FileExplorer({ sessionId, isVisible, onToggle, onPreviewFile }: 
       .catch((err) => {
         if (err.name !== "AbortError") {
           console.error("Failed to load file tree:", err);
+          setLoadError(true);
         }
       })
       .finally(() => setLoadingTree(false));
@@ -225,6 +228,8 @@ export function FileExplorer({ sessionId, isVisible, onToggle, onPreviewFile }: 
       <div role="list" aria-label="File explorer" className="flex-1 overflow-y-auto p-1.5">
         {loadingTree ? (
           <FileTreeSkeleton />
+        ) : loadError ? (
+          <div className="text-xs text-red-500 text-center mt-4">Failed to load files</div>
         ) : filteredTree.length === 0 ? (
           <div className="text-xs text-gray-400 dark:text-gray-500 text-center mt-4">
             No files found

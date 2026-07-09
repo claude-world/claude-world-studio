@@ -55,12 +55,29 @@ export const PublishSchema = z.object({
 });
 
 // Scheduled Tasks
+// IANA timezone check — node-cron 4 throws a RangeError from cron.schedule on an
+// invalid timeZone, which would otherwise land in the DB and break job registration.
+const TimezoneSchema = z
+  .string()
+  .max(50)
+  .refine(
+    (tz) => {
+      try {
+        new Intl.DateTimeFormat("en-US", { timeZone: tz });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: "Invalid timezone (must be a valid IANA timezone, e.g. Asia/Taipei)" }
+  );
+
 export const CreateTaskSchema = z.object({
   name: z.string().min(1).max(200),
   account_id: z.string().min(1),
   prompt_template: z.string().min(1).max(10000),
   schedule: z.string().min(5).max(100),
-  timezone: z.string().max(50).optional(),
+  timezone: TimezoneSchema.optional(),
   enabled: z.union([z.boolean(), z.number().int().min(0).max(1)]).optional(),
   min_score: z.number().min(0).max(100).optional(),
   max_retries: z.number().min(0).max(10).optional(),

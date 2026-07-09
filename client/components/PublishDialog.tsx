@@ -45,6 +45,9 @@ export function PublishDialog({
     [onClose]
   );
 
+  // Reset state ONLY on the closed→open transition. This effect must not depend
+  // on callback identities (App re-renders on every WS message while the agent
+  // streams; a new onClose per render used to wipe the user's text mid-typing).
   useEffect(() => {
     if (!isOpen) return;
     setText(initialText);
@@ -57,8 +60,6 @@ export function PublishDialog({
     setShowAdvanced(false);
     setSelectedAccountId("");
 
-    document.addEventListener("keydown", handleKeyDown);
-
     fetch("/api/accounts")
       .then((r) => (r.ok ? r.json() : []))
       .then((data: Account[]) => {
@@ -69,11 +70,17 @@ export function PublishDialog({
         }
       })
       .catch(() => setAccounts([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
+  // Escape-to-close listener — separate from the reset effect so re-attaching
+  // on callback identity changes is harmless.
+  useEffect(() => {
+    if (!isOpen) return;
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, handleKeyDown]);
 
   if (!isOpen) return null;

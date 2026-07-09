@@ -5,8 +5,6 @@ interface ToolUseBlockProps {
   toolInput: Record<string, unknown>;
   toolId: string;
   onPreviewFile?: (absolutePath: string) => void;
-  /** Optional improvement notes from a following reflection message */
-  reflectionContent?: string;
 }
 
 // Color mapping for MCP server tools
@@ -112,23 +110,15 @@ function isPreviewable(filePath: string): boolean {
   return PREVIEWABLE_EXTS.includes(ext);
 }
 
-export function ToolUseBlock({
-  toolName,
-  toolInput,
-  toolId,
-  onPreviewFile,
-  reflectionContent,
-}: ToolUseBlockProps) {
+export function ToolUseBlock({ toolName, toolInput, toolId, onPreviewFile }: ToolUseBlockProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const colorClass = getToolColor(toolName);
   const badge = getToolBadge(toolName);
 
-  // Agentic studio tools (v2.0) — show a subtle indicator
-  const isAgenticTool =
-    toolName === "mcp__studio__create_goal_session" ||
-    toolName === "mcp__studio__run_reflection_loop" ||
-    toolName === "mcp__studio__search_memory" ||
-    toolName === "mcp__studio__generate_strategy_from_analytics";
+  // Studio MCP tools (all 8: publish_to_threads, get_publish_history,
+  // upload_image, create_goal_session, run_reflection_loop, search_memory,
+  // generate_strategy_from_analytics, run_strategy_agent) — show an indicator
+  const isAgenticTool = toolName.startsWith("mcp__studio__");
 
   const filePath = toolInput.file_path as string | undefined;
   const canPreview =

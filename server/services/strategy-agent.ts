@@ -48,11 +48,16 @@ class StrategyAgent {
   /**
    * Run the full strategy analysis for an account.
    * Queries analytics, retrieves memory, builds calendar + recommendations.
+   *
+   * `persistMemory: false` makes the run read-only (no memory row saved) — used
+   * by the GET /api/agent/analytics/strategy route so repeated reads don't spam
+   * the memory table. Explicit run paths (MCP tools) keep the default (true).
    */
   runStrategy(params: {
     accountId?: string;
     days?: number;
     includeCalendar?: boolean;
+    persistMemory?: boolean;
   }): StrategyReport {
     const days = Math.max(1, Math.min(params.days ?? 30, 365));
 
@@ -71,6 +76,8 @@ class StrategyAgent {
       }));
 
     // ── Best posting hours (top 5 by avg engagement) ───────────────────────
+    // Hours are local wall-clock: db.ts getContentAnalysis converts the UTC
+    // created_at with SQLite's 'localtime' modifier before bucketing.
     const bestHours: number[] = [...(contentAnalysis.hour_performance || [])]
       .sort((a: any, b: any) => b.avg_engagement - a.avg_engagement)
       .slice(0, 5)
@@ -167,7 +174,8 @@ class StrategyAgent {
     }
 
     // ── Save strategy to memory for future recall ──────────────────────────
-    if ((overview.published_posts || 0) > 0) {
+    // Skipped for read-only callers (idempotent GET route) via persistMemory: false.
+    if (params.persistMemory !== false && (overview.published_posts || 0) > 0) {
       memoryService.saveMemory({
         accountId: params.accountId,
         content: `Content strategy (${days}d): ${overview.published_posts} posts, ${engRate}% engagement. Top format: ${topFormats[0]?.format || "text"}. Best hours: ${bestHours

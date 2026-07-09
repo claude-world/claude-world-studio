@@ -320,6 +320,17 @@ function ScoreBadge({ score, minScore }: { score: number | null; minScore?: numb
   );
 }
 
+/**
+ * Parse an integer input value, falling back only for non-numeric input.
+ * Unlike `parseInt(v) || fallback`, this preserves an explicit 0
+ * (e.g. min_score=0, max_retries=0). Empty string -> fallback.
+ */
+function parseIntOr(value: string, fallback: number): number {
+  if (value.trim() === "") return fallback;
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 function cronToHuman(cron: string): string {
   const parts = cron.split(" ");
   if (parts.length !== 5) return cron;
@@ -488,7 +499,7 @@ function TaskForm({
           <input
             type="number"
             value={form.min_score}
-            onChange={(e) => setForm({ ...form, min_score: parseInt(e.target.value) || 80 })}
+            onChange={(e) => setForm({ ...form, min_score: parseIntOr(e.target.value, 80) })}
             min={0}
             max={100}
             className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded text-sm"
@@ -501,7 +512,7 @@ function TaskForm({
           <input
             type="number"
             value={form.max_retries}
-            onChange={(e) => setForm({ ...form, max_retries: parseInt(e.target.value) || 2 })}
+            onChange={(e) => setForm({ ...form, max_retries: parseIntOr(e.target.value, 2) })}
             min={0}
             max={5}
             className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded text-sm"
@@ -514,9 +525,9 @@ function TaskForm({
           <input
             type="number"
             value={form.timeout_s}
-            onChange={(e) => setForm({ ...form, timeout_s: parseInt(e.target.value) || 300 })}
+            onChange={(e) => setForm({ ...form, timeout_s: parseIntOr(e.target.value, 300) })}
             min={60}
-            max={1800}
+            max={600}
             className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded text-sm"
           />
         </div>
@@ -758,6 +769,7 @@ export function ScheduledTasksPage({
   };
 
   const handleDelete = async (id: string) => {
+    if (!window.confirm("Delete this task?")) return;
     try {
       const res = await fetch(`/api/scheduled-tasks/${id}`, { method: "DELETE" });
       if (res.ok) {
