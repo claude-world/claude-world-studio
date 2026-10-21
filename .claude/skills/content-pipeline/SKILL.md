@@ -1,7 +1,7 @@
 ---
 name: content-pipeline
 description: Full-autopilot trend discovery, deep research, and social publishing pipeline. Uses trend-pulse (20 sources), cf-browser (headless Chrome), and notebooklm (research + artifacts) MCP servers. Generates algorithm-optimized content based on Meta's 7 patent-based ranking algorithms. Use when user mentions trending topics, content creation, social media publishing, trend analysis, research pipeline, viral content, content scoring, or Threads posting.
-user_invocable: true
+user-invocable: true
 ---
 
 # Content Pipeline

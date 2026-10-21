@@ -1,4 +1,4 @@
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { query, type Options, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { existsSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -313,11 +313,6 @@ ${viralAgentSkill}
 Be concise but thorough. Explain which tools you're using and why.`;
 }
 
-type UserMessage = {
-  type: "user";
-  message: { role: "user"; content: string };
-};
-
 class QueueClosedError extends Error {
   constructor() {
     super("Queue closed");
@@ -326,9 +321,9 @@ class QueueClosedError extends Error {
 }
 
 class MessageQueue {
-  private messages: UserMessage[] = [];
+  private messages: SDKUserMessage[] = [];
   private waiting: {
-    resolve: (msg: UserMessage) => void;
+    resolve: (msg: SDKUserMessage) => void;
     reject: (err: Error) => void;
   } | null = null;
   private closed = false;
@@ -336,9 +331,10 @@ class MessageQueue {
   push(content: string) {
     if (this.closed) return;
 
-    const msg: UserMessage = {
+    const msg: SDKUserMessage = {
       type: "user",
       message: { role: "user", content },
+      parent_tool_use_id: null,
     };
 
     if (this.waiting) {
@@ -349,13 +345,13 @@ class MessageQueue {
     }
   }
 
-  async *[Symbol.asyncIterator](): AsyncIterableIterator<UserMessage> {
+  async *[Symbol.asyncIterator](): AsyncIterableIterator<SDKUserMessage> {
     while (!this.closed) {
       if (this.messages.length > 0) {
         yield this.messages.shift()!;
       } else {
         try {
-          yield await new Promise<UserMessage>((resolve, reject) => {
+          yield await new Promise<SDKUserMessage>((resolve, reject) => {
             this.waiting = { resolve, reject };
           });
         } catch (err) {
@@ -430,13 +426,13 @@ export class AgentSession implements ICliSession {
       systemPrompt += `\n\n## Resumed Session — Previous Conversation\nThis session was interrupted (app closed or server restarted). Below is the conversation history from before. Continue naturally from where it left off — do NOT repeat or summarize unless the user asks.\n\n${resumeContext}`;
     }
 
-    const options: Record<string, any> = {
+    const options: Options = {
       maxTurns: 50,
       model: "opus",
       // bypassPermissions: intentional — local single-user tool.
       // All tool calls execute without prompting. Do NOT expose to untrusted networks.
       permissionMode: "bypassPermissions",
-      // SDK 0.2 requires this flag alongside permissionMode: "bypassPermissions"
+      // The SDK requires this flag alongside permissionMode: "bypassPermissions"
       allowDangerouslySkipPermissions: true,
       abortController: this.abortController,
       systemPrompt,
@@ -448,14 +444,13 @@ export class AgentSession implements ICliSession {
         "mcp__trend-pulse__get_publish_history",
       ],
       mcpServers: allMcpServers,
-      // Use absolute node path — Electron's PATH doesn't include system node
-      // STUDIO_NODE_PATH is set by electron/main.cjs; process.execPath may point to Electron binary
-      executable: process.env.STUDIO_NODE_PATH || process.execPath,
+      // No `executable`: the SDK spawns its bundled native Claude Code binary,
+      // so no Node runtime path is needed (even under Electron).
     };
 
     // Store the Query handle so we can call .close() on interrupt
     this.queryHandle = query({
-      prompt: this.queue as any,
+      prompt: this.queue,
       options,
     });
     this.outputIterator = this.queryHandle[Symbol.asyncIterator]();

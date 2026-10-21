@@ -1,7 +1,7 @@
 ---
 name: studio
 description: Claude World Studio CLI - full command reference for all CLI operations
-user_invocable: false
+user-invocable: false
 ---
 
 # Claude World Studio CLI

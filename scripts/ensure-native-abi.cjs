@@ -25,8 +25,11 @@ try {
   process.exit(0);
 }
 
+// better-sqlite3 loads its native addon lazily, on the first `new Database()`,
+// so a bare require() succeeds even when the binary was built for another ABI.
 try {
-  req("better-sqlite3");
+  const Database = req("better-sqlite3");
+  new Database(":memory:").close();
   process.exit(0); // ABI matches — done.
 } catch (err) {
   console.error(
@@ -46,10 +49,11 @@ if (rebuild.error || rebuild.status !== 0) {
 }
 
 // Verify in a fresh process (this process already cached the failed dlopen).
-const verify = spawnSync(process.execPath, ["-e", "require('better-sqlite3')"], {
-  cwd: projectRoot,
-  stdio: "inherit",
-});
+const verify = spawnSync(
+  process.execPath,
+  ["-e", "new (require('better-sqlite3'))(':memory:').close()"],
+  { cwd: projectRoot, stdio: "inherit" }
+);
 
 if (verify.status !== 0) {
   console.error("[studio] better-sqlite3 still fails to load after rebuild.");

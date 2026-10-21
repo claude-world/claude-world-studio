@@ -485,7 +485,7 @@ export class TaskScheduler {
           maxTurns: 50,
           model: "sonnet",
           permissionMode: "bypassPermissions",
-          // SDK 0.2 requires this flag alongside permissionMode: "bypassPermissions"
+          // The SDK requires this flag alongside permissionMode: "bypassPermissions"
           allowDangerouslySkipPermissions: true,
           abortController,
           systemPrompt,
@@ -496,7 +496,6 @@ export class TaskScheduler {
             "mcp__trend-pulse__get_publish_history",
           ],
           mcpServers: allMcpServers,
-          executable: (process.env.STUDIO_NODE_PATH || process.execPath) as any,
         },
       });
       // Store query handle so stop() can call .close() to terminate the subprocess

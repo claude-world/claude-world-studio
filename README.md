@@ -1,5 +1,10 @@
 # Claude World Studio
 
+[![npm](https://img.shields.io/npm/v/@claude-world/studio)](https://www.npmjs.com/package/@claude-world/studio)
+[![CI](https://github.com/claude-world/claude-world-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/claude-world/claude-world-studio/actions/workflows/ci.yml)
+[![Node](https://img.shields.io/node/v/@claude-world/studio)](package.json)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 AI-powered content pipeline: from trend discovery to social publishing.
 
 Built with **Claude Agent SDK + MCP** (Model Context Protocol), featuring 3 integrated MCP servers for real-time trends, web scraping, and research automation.
@@ -171,21 +176,21 @@ Full CJK input method support — Enter during Chinese/Japanese character compos
 
 ## Tech Stack
 
-| Layer       | Tech                                          |
-| ----------- | --------------------------------------------- |
-| Frontend    | React 19 + Vite + Tailwind CSS                |
-| Backend     | Express + WebSocket + Claude Agent SDK        |
-| AI Model    | Claude Sonnet 4.6 / Opus 4.6                  |
-| MCP Servers | trend-pulse, cf-browser, notebooklm           |
-| Publishing  | Native TypeScript fetch() → Threads Graph API |
-| Database    | SQLite (better-sqlite3, WAL mode)             |
-| Desktop     | Electron 41                                   |
-| Markdown    | react-markdown + rehype-sanitize              |
+| Layer       | Tech                                                                                     |
+| ----------- | ---------------------------------------------------------------------------------------- |
+| Frontend    | React 19 + Vite 8 + Tailwind CSS 4                                                       |
+| Backend     | Express 5 + WebSocket + Claude Agent SDK 0.3                                             |
+| AI Model    | Claude Opus 5.5 for chat (`opus` alias), Sonnet 5.5 for scheduled tasks (`sonnet` alias) |
+| MCP Servers | trend-pulse, cf-browser, notebooklm                                                      |
+| Publishing  | Native TypeScript fetch() → Threads Graph API                                            |
+| Database    | SQLite (better-sqlite3, WAL mode)                                                        |
+| Desktop     | Electron 44                                                                              |
+| Markdown    | react-markdown + rehype-sanitize                                                         |
 
 ## Prerequisites
 
-- **Node.js** >= 20.19 (see `.nvmrc`; required by better-sqlite3 12 and Vite 8)
-- **Claude Code CLI** installed and authenticated (`npm install -g @anthropic-ai/claude-code`)
+- **Node.js** >= 20.19 to run the npm package; **Node.js 22.22+ or 24+** to develop or build from source (Electron 44 and the dev toolchain need it; `.nvmrc` pins 22). Node 20 is end-of-life, so prefer 22 or 24.
+- **Claude credentials**: log in once with the Claude Code CLI (`npm install -g @anthropic-ai/claude-code`, then run `claude`), or set `ANTHROPIC_API_KEY`. The Agent SDK ships its own Claude Code binary, so the CLI is only needed to sign in.
 - **Python** 3.10+ (for MCP servers — or use `uvx` for zero-config setup)
 
 ---
@@ -211,7 +216,7 @@ Download the latest `.dmg` from [GitHub Releases](https://github.com/claude-worl
 - MCP servers auto-detected via uvx (install [uv](https://docs.astral.sh/uv/) first)
 - All desktop features included: Web UI + MCP + Publishing
 
-> **Requires**: macOS (Apple Silicon). Intel Mac build available on request.
+> **Requires**: macOS 13 Ventura or later on Apple Silicon (Electron 44 dropped macOS 12). Intel Mac build available on request.
 
 ### Option B: npm global
 

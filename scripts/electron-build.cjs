@@ -46,7 +46,7 @@ function getElectronVersion() {
 function rebuildNativeModulesForElectron() {
   const electronVersion = getElectronVersion();
   run(
-    `npx @electron/rebuild@3.7.1 -f -w better-sqlite3 -v ${electronVersion} -a ${process.arch}`
+    `npx @electron/rebuild@4.2.1 -f -w better-sqlite3 -v ${electronVersion} -a ${process.arch}`
   );
   console.log(`[build] Rebuilt better-sqlite3 for Electron ${electronVersion}`);
 }
@@ -76,14 +76,14 @@ function warnIfNotarizationUnconfigured() {
 
 try {
   warnIfNotarizationUnconfigured();
-  run("npm prune --omit=dev --legacy-peer-deps");
+  run("npm prune --omit=dev");
   const size = execSync("du -sm node_modules", { encoding: "utf-8", cwd }).trim();
   console.log(`[build] node_modules after prune: ${size}`);
   rebuildNativeModulesForElectron();
 
   // Use npx to fetch and run electron-builder (since it was pruned)
-  run("npx electron-builder@26.8.1 --mac");
+  run("npx electron-builder@26.15.3 --mac");
 } finally {
   console.log("[build] Restoring all dependencies...");
-  run("npm install --legacy-peer-deps");
+  run("npm install");
 }

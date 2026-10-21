@@ -267,10 +267,12 @@ async function cmdDoctor(args, port, host) {
     );
   }
 
-  // better-sqlite3 native module (ABI)
+  // better-sqlite3 native module (ABI). The addon loads lazily on the first
+  // `new Database()`, so open an in-memory DB to actually exercise it.
   try {
     const req = createRequire(join(projectDir, "package.json"));
-    req("better-sqlite3");
+    const Database = req("better-sqlite3");
+    new Database(":memory:").close();
     add("ok", "better-sqlite3 native module loads");
   } catch (err) {
     if (err.code === "MODULE_NOT_FOUND" && /better-sqlite3/.test(err.message)) {

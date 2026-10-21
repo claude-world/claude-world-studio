@@ -127,8 +127,7 @@ export function resolveWorkspaceFilePath(workspaceRoot: string, relativePath: st
 }
 
 export type WorkspacePathValidation =
-  | { ok: true; path: string; realPath: string }
-  | { ok: false; error: string };
+  { ok: true; path: string; realPath: string } | { ok: false; error: string };
 
 function isInsideBlockedRoot(realPath: string): boolean {
   const normalized = path.resolve(realPath);
