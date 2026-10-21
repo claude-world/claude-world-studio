@@ -1,21 +1,38 @@
 name: Publish to npm
+
 on:
   release:
     types: [published]
+  # Re-publish the version currently on main without cutting a new release.
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # npm provenance (and trusted publishing, once configured on npmjs.com)
+      id-token: write # npm trusted publishing (OIDC) + provenance
     steps:
       - uses: actions/checkout@v7
+
       - uses: actions/setup-node@v7
         with:
           node-version: 24
           registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false # never restore a cache into a release build
+
+      # Trusted publishing needs npm >= 11.5.1; Node 24 bundles 11.19.1 today, but
+      # pin the floor so a toolcache rollback cannot silently fall back to no auth.
+      - name: Upgrade npm for trusted publishing
+        run: |
+          npm install -g npm@latest
+          npm --version
+
       - run: npm ci
+
+      # No NODE_AUTH_TOKEN: the OIDC token minted by id-token: write is the credential.
+      # prepublishOnly builds the client before the tarball is assembled.
       - run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
