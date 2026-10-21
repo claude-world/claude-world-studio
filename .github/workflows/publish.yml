@@ -24,12 +24,19 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false # never restore a cache into a release build
 
-      # Trusted publishing needs npm >= 11.5.1; Node 24 bundles 11.19.1 today, but
-      # pin the floor so a toolcache rollback cannot silently fall back to no auth.
-      - name: Upgrade npm for trusted publishing
+      # Trusted publishing needs npm >= 11.5.1; Node 24 bundles 11.19.1 today.
+      # Verify the floor rather than installing npm@latest: a newer npm blocks
+      # install scripts not listed in allowScripts, which silently leaves
+      # better-sqlite3 without its native binary and fails `npm ci`.
+      - name: Verify npm supports trusted publishing
         run: |
-          npm install -g npm@latest
-          npm --version
+          have=$(npm --version)
+          need=11.5.1
+          echo "npm $have"
+          if [ "$(printf '%s\n%s\n' "$need" "$have" | sort -V | head -1)" != "$need" ]; then
+            echo "npm $have is too old for OIDC trusted publishing (need >= $need)" >&2
+            exit 1
+          fi
 
       - run: npm ci
 
