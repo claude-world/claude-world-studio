@@ -1,6 +1,3 @@
-// NOTE: @typescript-eslint peer range currently declares support up to TypeScript 5.x.
-// TypeScript 6 support is not yet declared in the peer range — this may produce a
-// peer-dependency warning. It is a cosmetic warning only; functionality is unaffected.
 import tseslint from "@typescript-eslint/eslint-plugin";
 import tsparser from "@typescript-eslint/parser";
 import reactHooks from "eslint-plugin-react-hooks";

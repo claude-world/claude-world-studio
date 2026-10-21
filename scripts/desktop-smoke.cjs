@@ -27,7 +27,11 @@ const LATEST_MAC_YML_PATH = path.join(DIST_DIR, "latest-mac.yml");
 const PORT = parseInt(process.env.STUDIO_SMOKE_PORT || "3131", 10);
 const HOST = "127.0.0.1";
 const BASE_URL = `http://${HOST}:${PORT}`;
-const SMOKE_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "studio-desktop-smoke-"));
+// realpath: on macOS os.tmpdir() sits under the /var -> /private/var symlink, while the
+// server reports realpath-resolved workspaces, so compare against the resolved path.
+const SMOKE_ROOT = fs.realpathSync(
+  fs.mkdtempSync(path.join(os.tmpdir(), "studio-desktop-smoke-"))
+);
 const USER_DATA_DIR = path.join(SMOKE_ROOT, "user-data");
 const DEFAULT_WORKSPACE = path.join(SMOKE_ROOT, "workspace");
 const APP_STDOUT_PATH = path.join(SMOKE_ROOT, "app.stdout.log");

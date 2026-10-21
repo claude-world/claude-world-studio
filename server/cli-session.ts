@@ -21,11 +21,7 @@ export type SDKOutputMessage =
       type: "result";
       /** SDK emits specific error subtypes; subprocess parsers emit "error" as catch-all */
       subtype:
-        | "success"
-        | "error"
-        | "error_during_execution"
-        | "error_max_turns"
-        | "error_max_budget_usd";
+        "success" | "error" | "error_during_execution" | "error_max_turns" | "error_max_budget_usd";
       total_cost_usd?: number;
       duration_ms?: number;
     };

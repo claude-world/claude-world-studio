@@ -402,7 +402,7 @@ export class SubprocessCliSession implements ICliSession {
           content: [
             {
               type: "text",
-              text: `Error: Could not start ${this.cliName} CLI. Is it installed?\n\nInstall with:\n- codex: \`npm i -g @openai/codex\`\n- gemini: \`npm i -g @anthropic-ai/gemini-cli\` or \`npm i -g @anthropic-ai/gemini\`\n- opencode: \`go install github.com/opencode-ai/opencode@latest\``,
+              text: `Error: Could not start ${this.cliName} CLI. Is it installed?\n\nInstall with:\n- codex: \`npm i -g @openai/codex\`\n- gemini: \`npm i -g @google/gemini-cli\`\n- opencode: \`go install github.com/opencode-ai/opencode@latest\``,
             },
           ],
         },

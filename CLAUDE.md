@@ -1,6 +1,6 @@
 # Claude World Studio
 
-Content pipeline app: trend discovery, deep research, social publishing — with agentic memory, goals, and strategy (v2.2).
+Content pipeline app: trend discovery, deep research, social publishing — with agentic memory, goals, and strategy (v2.3).
 
 ## Architecture
 
@@ -43,6 +43,7 @@ Content pipeline app: trend discovery, deep research, social publishing — with
 - **Never ship the `data` directory or `.env` via electron-builder `files`/`extraResources`** — the live dev DB holds real tokens; this leaked credentials in v1.3.0–v2.0.0 releases
 - `scripts/ensure-native-abi.cjs` (pre dev/test/start + postinstall) — auto-rebuilds better-sqlite3 when `electron:build` leaves an Electron-ABI binary behind
 - Test isolation: set `STUDIO_USER_DATA_PATH` to a mkdtemp dir **before** dynamically importing any DB-touching module (static imports hoist above the env assignment)
+- **Agent SDK 0.3**: `query()` options are typed with the SDK's `Options`; the SDK spawns its bundled native Claude Code binary (no `executable`/Node path needed, even under Electron). Its peers `@anthropic-ai/sdk` and `@modelcontextprotocol/sdk` are declared as direct dependencies. Models use the `opus`/`sonnet` aliases so they track the current Claude family
 
 ### Known Limitations
 

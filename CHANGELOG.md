@@ -1,5 +1,42 @@
 # Changelog
 
+## [2.3.0] - 2026-10-21
+
+### Changed — Claude Agent SDK 0.3
+
+- **Claude Agent SDK 0.2.141 → 0.3.305.** `query()` options are now typed with the SDK's `Options`, and queued user messages are typed `SDKUserMessage` (with `parent_tool_use_id: null`) instead of being cast to `any`.
+- Removed the `executable` option from both `query()` call sites (chat sessions and the scheduler). The SDK runs its bundled native Claude Code binary, so the Node path it pointed at (Electron's `STUDIO_NODE_PATH`) was already ignored.
+- `@anthropic-ai/sdk` (0.137) and `@modelcontextprotocol/sdk` (1.32.1) are now direct dependencies. They became peer dependencies of the Agent SDK in 0.3.143.
+- SDK 0.3 behavior to know about: MCP servers connect in the background (servers passed in `mcpServers` are still awaited before the first turn), MCP tools can be deferred behind tool search, and SDK sessions use the Task tools instead of `TodoWrite`.
+- Models: chat runs on the `opus` alias (Claude Opus 5.5) and scheduled tasks on `sonnet` (Claude Sonnet 5.5). Aliases follow the current Claude family, so there are no pinned IDs to go stale. A live chat turn on this release resolved to `claude-opus-5-5`.
+- Skill frontmatter now uses `user-invocable`, the key Claude Code reads. The old `user_invocable` key was ignored.
+
+### Security
+
+- Cleared all 71 open Dependabot alerts (2 critical, 34 high, 31 medium, 4 low). `npm audit` reports 0 vulnerabilities. Main fixes: proxy-addr (critical, via Express 5.3), shell-quote (critical, via concurrently 10), Electron 41.2 → 44.9 (17 advisories), hono 4.13 and @hono/node-server 2.1 (via the MCP SDK), fast-uri, ip-address, js-yaml, qs, body-parser, postcss, @xmldom/xmldom, brace-expansion, app-builder-lib 26.15, and builder-util-runtime 9.7 (electron-updater 6.8.9).
+- Two advisories with no upstream fix are removed from the tree through `overrides`: `global-agent` ^4.1.3 drops roarr → sprintf-js (used by electron-builder's Electron download), and `postcss-selector-parser` ^7.1.7 (GHSA-rj75-hqrm-r3gf, via @tailwindcss/typography; the generated `prose` CSS is unchanged). extract-zip is gone because Electron 42+ no longer downloads itself in `postinstall`.
+
+### Changed — Dependencies & tooling
+
+- Electron 41 → 44 (the desktop app now needs macOS 13 or later), electron-builder 26.15, Express 5.3, Vite 8.3, Tailwind CSS 4.3, React 19.3, ESLint 10.13, typescript-eslint 8.72, Prettier 3.9 (three files reformatted), TypeScript 6.0.3, dotenv 18 (`dotenv/config` stays quiet), uuid 14, concurrently 10, lint-staged 17, Playwright 1.64, better-sqlite3 12.11.
+- Held back on purpose: TypeScript 7 (typescript-eslint supports TypeScript < 6.1) and better-sqlite3 13 (needs Node 22, which would raise the runtime floor). The npm package still runs on Node 20.19+. Development and desktop builds need Node 22.22+ or 24+.
+- Removed the unused `autoprefixer` and `@types/node-cron` (node-cron 4 ships its own types), plus the `esbuild` override (tsx already requires esbuild ~0.28).
+- Removed `.npmrc` `legacy-peer-deps`: typescript-eslint now supports TypeScript 6, so peer dependencies resolve cleanly. `scripts/electron-build.cjs` drops the flag and pins @electron/rebuild 4.2.1 and electron-builder 26.15.3.
+
+### Fixed
+
+- Settings page: an effect called `saveCliSettings` before its declaration (flagged by the eslint-plugin-react-hooks 7.1 `immutability` rule). The function now comes first.
+- The "CLI not installed" hint pointed Gemini users at a nonexistent `@anthropic-ai/gemini-cli` package. It now says `npm i -g @google/gemini-cli`.
+- `scripts/ensure-native-abi.cjs` and `studio doctor` never detected a better-sqlite3 ABI mismatch. The native addon loads lazily on the first `new Database()`, so a bare `require()` always succeeded. Both now open an in-memory database: the preflight really rebuilds after `electron:build` or a Node version switch, and doctor reports the mismatch instead of a false pass.
+- `npm run test:desktop-smoke` failed on macOS with a workspace mismatch: its temp folder sat under the `/var` → `/private/var` symlink, while the server reports realpath-resolved workspaces. The script now resolves the temp folder first.
+
+### CI & automation
+
+- GitHub Actions: checkout v7, setup-node v7, codeql-action v4. CI runs on Node 22, 24 and 26 with read-only `contents` permission.
+- Publish workflow: Node 20 → 24 (npm 11), `npm publish --provenance`, and `id-token: write`, so npm trusted publishing works once it is configured on npmjs.com. The v2.2.1 and v2.2.2 publish runs failed inside the `npm publish` step, 2–3 seconds in, after `npm ci` had passed (their logs have expired). Re-running that step as `npm publish --dry-run` with the same Node 20 / npm 10 toolchain builds and packs cleanly, which points to the `NPM_TOKEN` credential rather than the package.
+- Dependabot: monthly schedule with grouped minor/patch updates for npm and GitHub Actions.
+- Dev container: Node 22 image.
+
 ## [2.2.2] - 2026-07-09
 
 ### Fixed — Desktop

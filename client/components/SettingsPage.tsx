@@ -514,6 +514,18 @@ export function SettingsPage({
       .finally(() => setDetectingClis(false));
   }, [isVisible]);
 
+  const saveCliSettings = (primary: string, routing: string, enabled: Set<string>) => {
+    fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        cliPrimary: primary,
+        cliRoutingMode: routing,
+        cliEnabledList: [...enabled].join(","),
+      }),
+    }).catch(() => {});
+  };
+
   // Auto-demote to "primary" mode when only 1 CLI is enabled
   useEffect(() => {
     if (cliEnabledSet.size <= 1 && cliRoutingMode === "auto-dispatch") {
@@ -536,18 +548,6 @@ export function SettingsPage({
       setMessage(t.detectionFailed);
     }
     setDetecting(false);
-  };
-
-  const saveCliSettings = (primary: string, routing: string, enabled: Set<string>) => {
-    fetch("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        cliPrimary: primary,
-        cliRoutingMode: routing,
-        cliEnabledList: [...enabled].join(","),
-      }),
-    }).catch(() => {});
   };
 
   const toggleCliEnabled = (command: string) => {

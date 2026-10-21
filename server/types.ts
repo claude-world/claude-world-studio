@@ -224,13 +224,7 @@ export interface AgentWorkflow {
 }
 
 export type OrchestratorState =
-  | "idle"
-  | "planning"
-  | "executing"
-  | "reflecting"
-  | "complete"
-  | "failed"
-  | "paused";
+  "idle" | "planning" | "executing" | "reflecting" | "complete" | "failed" | "paused";
 
 export interface OrchestratorGoalRun {
   goalId: string;
