@@ -1,18 +1,18 @@
 # Changelog
 
-## [Unreleased]
+## [2.4.0] - 2026-10-22
 
-### Removed
+A first-run release. Installed on a clean Mac, the previous version started, loaded, accepted a prompt — and answered it with the literal text `Not logged in · Please run /login`, styled as the assistant talking and reported as a success. Studio now detects that state, says so plainly, and lets you sign in without opening a terminal. **Signing in is one code paste, not one click**: Studio opens the Claude page in your browser and you paste back the code it shows.
 
-- `STUDIO_NODE_PATH` is no longer set in the server's environment. Nothing has read it since the Agent SDK 0.3 upgrade dropped the `executable` option — the packaged server runs on Electron itself. The packaged-only "Bundled node missing" warning goes with it: it compared `process.execPath` against itself and could never fire.
+The macOS download is also ~18 MB smaller, and a path-containment issue is fixed.
 
-### Added — First run
+### Added — Sign in without a terminal
 
 - **Sign in to Claude from inside Studio.** The Claude account card gains a sign-in button: Studio runs the bundled `claude auth login`, lifts the authorize URL off its stdout, opens it in the system browser, and takes the code the page shows. No terminal. The OAuth flow itself is not reimplemented — the binary runs it.
 - Every way the flow can end is a visible state rather than a spinner: the page failing to appear, the browser being closed or consent refused, a network failure, a 10-minute walk-away, and cancellation. A rejected code **reopens the input with the binary's own message** and the same page stays valid, instead of making the user start over — the real binary prints `Invalid code…` to stderr and asks again rather than exiting, so without that the phase sat on "finishing" indefinitely. A 90-second backstop means it cannot hang even if the binary behaves unexpectedly.
 - The terminal instructions remain below the button as a fallback.
 
-- **Settings now says when `uvx` is missing.** Without it `buildMcpServers()` skips trend-pulse, cf-browser and notebooklm entirely — and logged nothing at all when no paths were configured, so the three headline features silently did nothing while the app looked healthy. The MCP panel showed a green "uvx detected" banner in the positive case and said nothing in the negative one; it now names the affected features, the remedy, and links to the uv install guide (zh-TW / en / ja).
+### Added — First-run honesty
 
 - **Studio now says when Claude is not signed in, instead of letting the agent pretend to answer.** With no credentials the bundled Agent SDK replies to every prompt with the literal text `Not logged in · Please run /login` — delivered as a normal assistant message, with the turn reported as `success: true` and zero cost. `/login` is a Claude Code CLI slash command that does not exist in this app, nothing in the UI mentioned signing in, and the scheduler and quality gates would have counted that turn as a success. Found by installing the packaged app into a scrubbed environment rather than by reading the code.
 - `GET /api/settings/claude-auth` reports sign-in state from the bundled binary's `claude auth status`. A chat turn is now blocked with a real error when there are no credentials, a banner appears on every page until there are, and Settings gains a **Claude account** card with the status and sign-in steps (zh-TW / en / ja).
@@ -20,14 +20,16 @@
 - A probe that fails is never read as "signed out": a broken check must not block a working app. The non-zero exit code `claude auth status` returns when signed out is treated as an answer, not a failure — `test/claude-auth.test.ts` pins that, and fails without the fix.
 - `STUDIO_CLAUDE_BINARY` overrides which Claude Code build is used, for an unusual install or for tests.
 
-### Fixed — Publishing
-
-- **`npm publish` no longer risks shipping the packaged desktop app.** `dist/` is both the vite output and electron-builder's output directory, and the npm `files` list named it wholesale — so a publish from any machine that had run `electron:build` would have uploaded the `.dmg`, the `.zip` and the unpacked `.app`. Measured at **758.6 MB across 3,485 files**; naming `dist/index.html` and `dist/assets/` instead brings it to **402.8 kB across 72 files**, with the client assets, server sources and CLI all still present. CI was never affected — it publishes from a fresh checkout where `dist/` holds only the vite output. `test/packaging.test.ts` now fails if a bare `dist/` comes back.
+- **Settings now says when `uvx` is missing.** Without it `buildMcpServers()` skips trend-pulse, cf-browser and notebooklm entirely — and logged nothing at all when no paths were configured, so the three headline features silently did nothing while the app looked healthy. The MCP panel showed a green "uvx detected" banner in the positive case and said nothing in the negative one; it now names the affected features, the remedy, and links to the uv install guide (zh-TW / en / ja).
 
 ### Security
 
 - **`GET /api/sessions/:id/files/*` no longer reveals whether a file exists outside the workspace.** It called `realpath()` on the caller's path _before_ checking containment, so the status code answered the question for any path on the machine — 403 for a real file, 404 for a missing one. Containment is now decided lexically first, through the existing `resolveWorkspaceFilePath()` helper, and the post-`realpath()` check stays to catch a symlink inside the workspace pointing out of it. The server binds `127.0.0.1` only, so this was reachable by local processes rather than over the network, and no file content was ever disclosed.
 - `test/files-path-traversal.test.ts` adds 19 adversarial cases for that route: `../` traversal, absolute paths outside the workspace, `/etc/passwd`, a sibling directory sharing the workspace's prefix, symlinks pointing out (directory and file), percent-encoded, mixed-case-encoded and double-encoded traversal, an embedded null byte, and backslash separators — plus positive controls so the suite cannot pass by breaking the feature. Requests go through `node:http` rather than `fetch`, because the WHATWG URL parser collapses `..` before it reaches the wire.
+
+### Fixed — Publishing
+
+- **`npm publish` no longer risks shipping the packaged desktop app.** `dist/` is both the vite output and electron-builder's output directory, and the npm `files` list named it wholesale — so a publish from any machine that had run `electron:build` would have uploaded the `.dmg`, the `.zip` and the unpacked `.app`. Measured at **758.6 MB across 3,485 files**; naming `dist/index.html` and `dist/assets/` instead brings it to **402.8 kB across 72 files**, with the client assets, server sources and CLI all still present. CI was never affected — it publishes from a fresh checkout where `dist/` holds only the vite output. `test/packaging.test.ts` now fails if a bare `dist/` comes back.
 
 ### Changed — Desktop package size
 
@@ -44,6 +46,10 @@
 - `server/runtime-paths.ts` gained `getProjectRoot()`, and it is now the only module allowed to derive a project-relative path from `import.meta.url`. Bundling collapses every module's `import.meta.url` onto the bundle's path, so `server.ts` (`../dist`, `../client`) and `routes/settings.ts` (`../../mcp-servers`, `../../.env`) would otherwise have resolved one directory too high. `db.ts` and `ai-client.ts` had dead `__dirname` locals; both are gone.
 - `scripts/desktop-smoke.cjs` now checks the shipped tree before launching: the bundle and client assets are unpacked, `tsx`/`esbuild`/`@anthropic-ai/sdk` are absent, the better-sqlite3 addon is present, and the Agent SDK loads and builds an MCP tool inside the packaged app's own runtime.
 - The npm package is unchanged: it still ships `server/` and runs `tsx server/server.ts` from `bin/cli.js`.
+
+### Removed
+
+- `STUDIO_NODE_PATH` is no longer set in the server's environment. Nothing has read it since the Agent SDK 0.3 upgrade dropped the `executable` option — the packaged server runs on Electron itself. The packaged-only "Bundled node missing" warning goes with it: it compared `process.execPath` against itself and could never fire.
 
 ## [2.3.0] - 2026-10-21
 
