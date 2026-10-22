@@ -116,11 +116,14 @@ function buildServerSpawnConfig({
 
   const runtimePaths = getPackagedRuntimePaths(app, projectDir, env, resourcesPath);
   const runtimeNodePath = execPath;
-  const tsxCli = path.join(projectDir, "node_modules", "tsx", "dist", "cli.mjs");
+  // Packaged builds run the esbuild bundle (scripts/build-server.cjs), not tsx
+  // on TypeScript — that is what lets the release drop tsx and the rest of the
+  // dependencies only our own code imports.
+  const serverEntry = path.join(projectDir, "server-dist", "server.mjs");
 
   return {
     spawnCmd: runtimeNodePath,
-    spawnArgs: [tsxCli, "server/server.ts"],
+    spawnArgs: [serverEntry],
     spawnEnv: {
       ...env,
       ELECTRON_RUN_AS_NODE: "1",

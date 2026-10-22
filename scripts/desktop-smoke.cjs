@@ -169,6 +169,88 @@ function quitApp() {
   });
 }
 
+const RESOURCES_DIR = path.join(APP_BUNDLE_PATH, "Contents", "Resources");
+const UNPACKED_DIR = path.join(RESOURCES_DIR, "app.asar.unpacked");
+
+/**
+ * The release ships an esbuild bundle instead of the TypeScript sources plus
+ * tsx, and drops every production dependency only our own code imported. Check
+ * the shipped tree directly: a packaging regression here is invisible until the
+ * app is installed on a machine that has no node_modules to fall back on.
+ */
+function verifyPackagedLayout() {
+  const serverBundle = path.join(UNPACKED_DIR, "server-dist", "server.mjs");
+  if (!fs.existsSync(serverBundle)) {
+    throw new Error(`Bundled server missing: ${serverBundle}`);
+  }
+  if (!fs.existsSync(path.join(UNPACKED_DIR, "dist", "index.html"))) {
+    throw new Error("Client assets must be unpacked next to the bundled server");
+  }
+  for (const dropped of ["tsx", "esbuild", path.join("@anthropic-ai", "sdk")]) {
+    const strayPath = path.join(UNPACKED_DIR, "node_modules", dropped);
+    if (fs.existsSync(strayPath)) {
+      throw new Error(`Packaged app still ships node_modules/${dropped}`);
+    }
+  }
+  const addon = path.join(
+    UNPACKED_DIR,
+    "node_modules",
+    "better-sqlite3",
+    "build",
+    "Release",
+    "better_sqlite3.node"
+  );
+  if (!fs.existsSync(addon)) {
+    throw new Error(`better-sqlite3 native addon missing: ${addon}`);
+  }
+}
+
+/**
+ * Load the Agent SDK and build a Studio-style MCP tool inside the packaged
+ * tree, using the app's own Electron-as-node runtime. The running server only
+ * proves its own import graph resolves; this covers the modules the SDK pulls
+ * in lazily when a session actually starts (MCP server, zod schema conversion),
+ * which is exactly what trimming node_modules could break.
+ */
+function verifyPackagedAgentSdk() {
+  const probe = [
+    "const { pathToFileURL } = require('node:url');",
+    "const path = require('node:path');",
+    `const nm = ${JSON.stringify(path.join(UNPACKED_DIR, "node_modules"))};`,
+    "const load = (p) => import(pathToFileURL(path.join(nm, p)).href);",
+    "(async () => {",
+    "  const [sdk, zodMod] = await Promise.all([",
+    "    load('@anthropic-ai/claude-agent-sdk/sdk.mjs'),",
+    "    load('zod/index.js'),",
+    "  ]);",
+    "  const z = zodMod.z || zodMod.default;",
+    "  const server = sdk.createSdkMcpServer({",
+    "    name: 'smoke', version: '1.0.0',",
+    "    tools: [sdk.tool('echo', 'echo', { text: z.string() }, async () => ({ content: [] }))],",
+    "  });",
+    "  if (!server || server.type !== 'sdk') throw new Error('unexpected MCP server: ' + JSON.stringify(server && server.type));",
+    "  console.log('agent-sdk-ok');",
+    "})().catch((err) => { console.error(err && err.stack || String(err)); process.exit(1); });",
+  ].join("\n");
+
+  const result = spawnSync(APP_PATH, ["-e", probe], {
+    encoding: "utf-8",
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+    timeout: 60000,
+  });
+  if (result.status !== 0 || !String(result.stdout).includes("agent-sdk-ok")) {
+    throw new Error(
+      [
+        "Agent SDK failed to load from the packaged tree (a trimmed dependency?).",
+        (result.stdout || "").trim(),
+        (result.stderr || "").trim(),
+      ]
+        .filter(Boolean)
+        .join("\n")
+    );
+  }
+}
+
 function verifyPackagedAppSignature() {
   const result = spawnSync(
     "codesign",
@@ -209,7 +291,9 @@ async function main() {
   if (!zipArtifact) {
     throw new Error(`macOS zip artifact missing in ${DIST_DIR}`);
   }
+  verifyPackagedLayout();
   verifyPackagedAppSignature();
+  verifyPackagedAgentSdk();
 
   const openOutput = [];
   let appExited = false;

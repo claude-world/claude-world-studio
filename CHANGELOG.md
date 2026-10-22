@@ -7,6 +7,22 @@
 - **`GET /api/sessions/:id/files/*` no longer reveals whether a file exists outside the workspace.** It called `realpath()` on the caller's path _before_ checking containment, so the status code answered the question for any path on the machine — 403 for a real file, 404 for a missing one. Containment is now decided lexically first, through the existing `resolveWorkspaceFilePath()` helper, and the post-`realpath()` check stays to catch a symlink inside the workspace pointing out of it. The server binds `127.0.0.1` only, so this was reachable by local processes rather than over the network, and no file content was ever disclosed.
 - `test/files-path-traversal.test.ts` adds 19 adversarial cases for that route: `../` traversal, absolute paths outside the workspace, `/etc/passwd`, a sibling directory sharing the workspace's prefix, symlinks pointing out (directory and file), percent-encoded, mixed-case-encoded and double-encoded traversal, an embedded null byte, and backslash separators — plus positive controls so the suite cannot pass by breaking the feature. Requests go through `node:http` rather than `fetch`, because the WHATWG URL parser collapses `..` before it reaches the wire.
 
+### Changed — Desktop package size
+
+- **The packaged server is now a single esbuild bundle.** `npm run electron:build` compiles `server/server.ts` to `server-dist/server.mjs` (1.5 MB, 207 modules, target `node24` — the Node that Electron 44 embeds), and the app spawns that with Electron-as-node instead of running `tsx` over the TypeScript sources. `app.asar.unpacked` holds 3,140 files instead of 6,807.
+- `asarUnpack` is no longer `["**"]`. Only what the server subprocess opens by real path is unpacked — `server-dist/`, the client `dist/`, `.claude/skills/`, `node_modules/` and `package.json`; `electron/` now stays inside the asar.
+- `build.files` stops shipping the production dependencies that only our own code imported (`ws`, `uuid`, `node-cron`, `dotenv`) and the toolchain they needed at runtime (`tsx`, `esbuild`, `@esbuild/*`). `better-sqlite3`, `zod`, `@anthropic-ai/claude-agent-sdk` and the Agent SDK's own runtime closure stay external: the SDK finds its CLI binary with `createRequire(import.meta.url).resolve()`, and `tool()` validates schemas with the zod instance it imports itself.
+- `@anthropic-ai/sdk` is no longer packaged. It is a types-only peer of the Agent SDK — it appears in `sdk.d.ts` and nowhere in the SDK's runtime JavaScript. `test/packaging.test.ts` re-checks that on every SDK upgrade.
+- better-sqlite3 ships only `lib/` plus `build/Release/better_sqlite3.node`. Its vendored SQLite sources and node-gyp intermediates (`deps/`, `build/Release/obj*`, `sqlite3.a`, the `@electron/rebuild` cache in `bin/`) were ~26 MB of build output in every release.
+- Net effect on the macOS arm64 build: **`app.asar.unpacked` 354.0 MB → 297.2 MB (−56.8 MB), the installed `.app` 659.0 MB → 599.9 MB, `.dmg` 271.2 MB → 253.2 MB, `.zip` 274.8 MB → 254.8 MB.** The download shrinks less than the tree because the Agent SDK's 260 MB native `claude` binary dominates both artifacts and barely compresses, while the removed JavaScript and vendored C compress well.
+- Still 260 MB of the download is `@anthropic-ai/claude-agent-sdk-darwin-arm64/claude`. Nothing here touches it.
+
+### Changed — Internals
+
+- `server/runtime-paths.ts` gained `getProjectRoot()`, and it is now the only module allowed to derive a project-relative path from `import.meta.url`. Bundling collapses every module's `import.meta.url` onto the bundle's path, so `server.ts` (`../dist`, `../client`) and `routes/settings.ts` (`../../mcp-servers`, `../../.env`) would otherwise have resolved one directory too high. `db.ts` and `ai-client.ts` had dead `__dirname` locals; both are gone.
+- `scripts/desktop-smoke.cjs` now checks the shipped tree before launching: the bundle and client assets are unpacked, `tsx`/`esbuild`/`@anthropic-ai/sdk` are absent, the better-sqlite3 addon is present, and the Agent SDK loads and builds an MCP tool inside the packaged app's own runtime.
+- The npm package is unchanged: it still ships `server/` and runs `tsx server/server.ts` from `bin/cli.js`.
+
 ## [2.3.0] - 2026-10-21
 
 ### Changed — Claude Agent SDK 0.3

@@ -5,6 +5,14 @@ import { homedir } from "os";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Dev runs this file as `<root>/server/runtime-paths.ts`; the packaged desktop
+// app runs the esbuild bundle as `<root>/server-dist/server.mjs`. Both sit one
+// directory below the project root, so this single `..` holds in either layout.
+//
+// Bundling collapses every module's `import.meta.url` onto the bundle's own
+// path, so this is the ONLY place the server may derive a project-relative
+// path from `import.meta.url` — everything else must call getProjectRoot().
 const projectRoot = path.join(__dirname, "..");
 
 const BLOCKED_WORKSPACE_ROOTS = [
@@ -34,6 +42,11 @@ function ensureDir(dirPath: string): string {
 
 export function isPackagedRuntime(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.STUDIO_PACKAGED === "1" || __dirname.includes("app.asar");
+}
+
+/** Repository root in dev, app root (`…/app.asar.unpacked`) when packaged. */
+export function getProjectRoot(): string {
+  return projectRoot;
 }
 
 export function getLocalDataDir(): string {

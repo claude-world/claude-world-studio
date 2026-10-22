@@ -51,10 +51,8 @@ describe("electron packaged runtime", () => {
     });
 
     assert.strictEqual(result.spawnCmd, packagedExecPath);
-    assert.deepStrictEqual(result.spawnArgs, [
-      path.join(projectDir, "node_modules", "tsx", "dist", "cli.mjs"),
-      "server/server.ts",
-    ]);
+    // Packaged builds run the esbuild bundle, not tsx on TypeScript.
+    assert.deepStrictEqual(result.spawnArgs, [path.join(projectDir, "server-dist", "server.mjs")]);
     assert.strictEqual(result.spawnEnv.ELECTRON_RUN_AS_NODE, "1");
     assert.strictEqual(result.spawnEnv.STUDIO_NODE_PATH, packagedExecPath);
     assert.strictEqual(

@@ -86,8 +86,9 @@ function startServer() {
     cwd: projectDir,
     env: spawnEnv,
     stdio: ["pipe", "pipe", "pipe"],
-    // POSIX: give tsx its own process group so the SIGKILL fallback can kill
-    // the real server (tsx's child) too, not just the tsx wrapper.
+    // POSIX: own process group, so the SIGKILL fallback kills the whole tree.
+    // Dev still runs through tsx, which spawns the real server as its child —
+    // killing only the wrapper would leave the port bound.
     detached: process.platform !== "win32",
   });
 
@@ -309,8 +310,8 @@ function killServer() {
     proc.kill("SIGTERM");
 
     // Force kill after 3s if SIGTERM didn't work. On POSIX, kill the whole
-    // process group (spawned detached) so tsx's server child dies too and
-    // doesn't keep the port bound.
+    // process group (spawned detached) so the dev tsx wrapper's server child
+    // dies too and doesn't keep the port bound.
     forceKillTimer = setTimeout(() => {
       try {
         if (process.platform !== "win32" && proc.pid) {
@@ -422,7 +423,7 @@ app.on("quit", () => {
 });
 
 // The server child is spawned `detached` (its own process group) so the SIGKILL
-// fallback can take out tsx's child too. The downside: on `npm run electron:dev`,
+// fallback can take out the dev tsx wrapper's child too. The downside: on `npm run electron:dev`,
 // a terminal Ctrl+C (SIGINT) goes only to the foreground group and never reaches
 // the detached server, orphaning it and leaving its port bound. Kill the whole
 // group on a signal so the port is freed before we exit.

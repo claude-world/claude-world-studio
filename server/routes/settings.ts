@@ -6,11 +6,15 @@ import { promisify } from "util";
 import path from "path";
 
 const execFileAsync = promisify(execFile);
-import { fileURLToPath } from "url";
 import store from "../db.js";
 import { getSettings } from "../mcp-config.js";
 import { logger } from "../logger.js";
-import { getDefaultWorkspace, getSkillsDir, validateWorkspacePath } from "../runtime-paths.js";
+import {
+  getDefaultWorkspace,
+  getProjectRoot,
+  getSkillsDir,
+  validateWorkspacePath,
+} from "../runtime-paths.js";
 
 const { join, dirname, isAbsolute } = path;
 
@@ -23,8 +27,7 @@ function hasUvx(): boolean {
     return false;
   }
 }
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const projectRoot = getProjectRoot();
 
 const router = Router();
 
@@ -85,7 +88,7 @@ router.get("/detect", (_req, res) => {
   const home = process.env.HOME || "";
   const workspace = getSettings().defaultWorkspace || getDefaultWorkspace();
 
-  const projectMcp = join(__dirname, "../../mcp-servers");
+  const projectMcp = join(projectRoot, "mcp-servers");
   const searchRoots = [
     projectMcp,
     workspace,
@@ -135,7 +138,7 @@ router.get("/detect", (_req, res) => {
       join(root, "cf-browser/.env"),
       join(root, "cf-browser/worker/.env"),
     ]),
-    join(__dirname, "../../.env"),
+    join(projectRoot, ".env"),
   ];
   for (const envPath of cfEnvCandidates) {
     if (existsSync(envPath)) {
@@ -190,7 +193,7 @@ router.post("/detect/apply", (_req, res) => {
       join(root, "cf-browser/.env"),
       join(root, "cf-browser/worker/.env"),
     ]),
-    join(__dirname, "../../.env"),
+    join(projectRoot, ".env"),
   ];
   for (const envPath of cfEnvCandidates) {
     if (existsSync(envPath)) {
