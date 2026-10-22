@@ -8,6 +8,10 @@
 
 ### Added — First run
 
+- **Sign in to Claude from inside Studio.** The Claude account card gains a sign-in button: Studio runs the bundled `claude auth login`, lifts the authorize URL off its stdout, opens it in the system browser, and takes the code the page shows. No terminal. The OAuth flow itself is not reimplemented — the binary runs it.
+- Every way the flow can end is a visible state rather than a spinner: the page failing to appear, the browser being closed or consent refused, a network failure, a 10-minute walk-away, and cancellation. A rejected code **reopens the input with the binary's own message** and the same page stays valid, instead of making the user start over — the real binary prints `Invalid code…` to stderr and asks again rather than exiting, so without that the phase sat on "finishing" indefinitely. A 90-second backstop means it cannot hang even if the binary behaves unexpectedly.
+- The terminal instructions remain below the button as a fallback.
+
 - **Settings now says when `uvx` is missing.** Without it `buildMcpServers()` skips trend-pulse, cf-browser and notebooklm entirely — and logged nothing at all when no paths were configured, so the three headline features silently did nothing while the app looked healthy. The MCP panel showed a green "uvx detected" banner in the positive case and said nothing in the negative one; it now names the affected features, the remedy, and links to the uv install guide (zh-TW / en / ja).
 
 - **Studio now says when Claude is not signed in, instead of letting the agent pretend to answer.** With no credentials the bundled Agent SDK replies to every prompt with the literal text `Not logged in · Please run /login` — delivered as a normal assistant message, with the turn reported as `success: true` and zero cost. `/login` is a Claude Code CLI slash command that does not exist in this app, nothing in the UI mentioned signing in, and the scheduler and quality gates would have counted that turn as a success. Found by installing the packaged app into a scrubbed environment rather than by reading the code.
