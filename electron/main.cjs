@@ -76,11 +76,6 @@ function startServer() {
 
   console.log(`[Electron] PATH for server: ${mergedPath.split(":").slice(0, 5).join(":")}...`);
   console.log(`[Electron] Runtime node: ${runtimeNodePath}`);
-  if (app.isPackaged && !fs.existsSync(runtimeNodePath)) {
-    console.warn(
-      `[Electron] Bundled node missing, falling back to runtime path: ${runtimeNodePath}`
-    );
-  }
   console.log(`[Electron] Starting server: ${path.basename(spawnCmd)} ${spawnArgs.join(" ")}`);
   serverProcess = spawn(spawnCmd, spawnArgs, {
     cwd: projectDir,

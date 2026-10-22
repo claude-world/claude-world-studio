@@ -54,7 +54,9 @@ describe("electron packaged runtime", () => {
     // Packaged builds run the esbuild bundle, not tsx on TypeScript.
     assert.deepStrictEqual(result.spawnArgs, [path.join(projectDir, "server-dist", "server.mjs")]);
     assert.strictEqual(result.spawnEnv.ELECTRON_RUN_AS_NODE, "1");
-    assert.strictEqual(result.spawnEnv.STUDIO_NODE_PATH, packagedExecPath);
+    // Nothing reads STUDIO_NODE_PATH: the Agent SDK dropped `executable`
+    // in 0.3 and the packaged server runs on Electron itself.
+    assert.strictEqual(result.spawnEnv.STUDIO_NODE_PATH, undefined);
     assert.strictEqual(
       result.spawnEnv.STUDIO_USER_DATA_PATH,
       path.join(appDataDir, "Claude World Studio")

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Removed
+
+- `STUDIO_NODE_PATH` is no longer set in the server's environment. Nothing has read it since the Agent SDK 0.3 upgrade dropped the `executable` option — the packaged server runs on Electron itself. The packaged-only "Bundled node missing" warning goes with it: it compared `process.execPath` against itself and could never fire.
+
 ### Added — First run
 
 - **Settings now says when `uvx` is missing.** Without it `buildMcpServers()` skips trend-pulse, cf-browser and notebooklm entirely — and logged nothing at all when no paths were configured, so the three headline features silently did nothing while the app looked healthy. The MCP panel showed a green "uvx detected" banner in the positive case and said nothing in the negative one; it now names the affected features, the remedy, and links to the uv install guide (zh-TW / en / ja).
