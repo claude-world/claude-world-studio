@@ -252,6 +252,21 @@ describe("desktop packaging", () => {
       "npm package needs tsx at runtime"
     );
   });
+
+  it("never lets the npm tarball swallow the electron-builder output", () => {
+    // dist/ is both the vite output and electron-builder's output directory, so
+    // a bare "dist/" in files puts the .dmg, the .zip and the unpacked .app into
+    // `npm publish` from any machine that has run electron:build — 758 MB the
+    // last time it was measured. Name the vite artifacts instead.
+    const npmFiles = packageJson.files as string[];
+    assert.ok(
+      !npmFiles.includes("dist/") && !npmFiles.includes("dist"),
+      'files must not contain a bare "dist/" — it would ship the packaged desktop app'
+    );
+    for (const entry of ["dist/index.html", "dist/assets/"]) {
+      assert.ok(npmFiles.includes(entry), `files must ship ${entry} (the vite build output)`);
+    }
+  });
 });
 
 describe("packaged bundle hygiene", () => {
