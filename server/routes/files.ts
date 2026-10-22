@@ -1,8 +1,8 @@
 import { Router } from "express";
-import fs from "fs";
 import fsp from "fs/promises";
 import path from "path";
 import store from "../db.js";
+import { resolveWorkspaceFilePath } from "../runtime-paths.js";
 
 const MAX_DEPTH = 5;
 const MAX_TEXT_BYTES = 100 * 1024;
@@ -107,36 +107,26 @@ router.get("/:sessionId/files/*filepath", async (req, res) => {
     return res.status(400).json({ error: "File path required" });
   }
 
-  // Support absolute paths — restricted to workspace only
-  const isAbsolute = filePath.startsWith("/");
-  const requestedPath = isAbsolute ? filePath : path.resolve(session.workspace_path, filePath);
+  // Decide containment lexically, BEFORE touching the filesystem. realpath()
+  // on a caller-supplied path answers "does this exist?" for anything on the
+  // machine through the status code (403 for a real file, 404 for a missing
+  // one), which turned this route into a filesystem probe for any local
+  // process. path.resolve() also normalises `..` and absolute paths, so one
+  // check covers both forms. See test/files-path-traversal.test.ts.
+  let requestedPath: string;
+  try {
+    requestedPath = resolveWorkspaceFilePath(session.workspace_path, filePath);
+  } catch {
+    return res.status(403).json({ error: "Path traversal not allowed" });
+  }
 
   try {
+    // Second check, after symlinks are followed: a link inside the workspace
+    // may still point out of it, which the lexical check above cannot see.
     const resolvedPath = await fsp.realpath(requestedPath);
-
-    if (isAbsolute) {
-      // Absolute paths: restrict to workspace only
-      const resolvedBase = await fsp.realpath(session.workspace_path);
-      const allowedRoots = [resolvedBase];
-
-      const isAllowed = allowedRoots.some((root) => {
-        try {
-          const resolvedRoot = fs.realpathSync(root);
-          return resolvedPath === resolvedRoot || resolvedPath.startsWith(resolvedRoot + path.sep);
-        } catch {
-          return false;
-        }
-      });
-
-      if (!isAllowed) {
-        return res.status(403).json({ error: "Absolute path not in allowed directories" });
-      }
-    } else {
-      // Relative paths: verify within workspace (original security check)
-      const resolvedBase = await fsp.realpath(session.workspace_path);
-      if (resolvedPath !== resolvedBase && !resolvedPath.startsWith(resolvedBase + path.sep)) {
-        return res.status(403).json({ error: "Path traversal not allowed" });
-      }
+    const resolvedBase = await fsp.realpath(session.workspace_path);
+    if (resolvedPath !== resolvedBase && !resolvedPath.startsWith(resolvedBase + path.sep)) {
+      return res.status(403).json({ error: "Path traversal not allowed" });
     }
 
     const stat = await fsp.stat(resolvedPath);

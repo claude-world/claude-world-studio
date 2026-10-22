@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Security
+
+- **`GET /api/sessions/:id/files/*` no longer reveals whether a file exists outside the workspace.** It called `realpath()` on the caller's path _before_ checking containment, so the status code answered the question for any path on the machine — 403 for a real file, 404 for a missing one. Containment is now decided lexically first, through the existing `resolveWorkspaceFilePath()` helper, and the post-`realpath()` check stays to catch a symlink inside the workspace pointing out of it. The server binds `127.0.0.1` only, so this was reachable by local processes rather than over the network, and no file content was ever disclosed.
+- `test/files-path-traversal.test.ts` adds 19 adversarial cases for that route: `../` traversal, absolute paths outside the workspace, `/etc/passwd`, a sibling directory sharing the workspace's prefix, symlinks pointing out (directory and file), percent-encoded, mixed-case-encoded and double-encoded traversal, an embedded null byte, and backslash separators — plus positive controls so the suite cannot pass by breaking the feature. Requests go through `node:http` rather than `fetch`, because the WHATWG URL parser collapses `..` before it reaches the wire.
+
 ## [2.3.0] - 2026-10-21
 
 ### Changed — Claude Agent SDK 0.3
