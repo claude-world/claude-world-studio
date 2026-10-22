@@ -11,6 +11,12 @@ import { getSettings } from "../mcp-config.js";
 import { logger } from "../logger.js";
 import { getClaudeAuthStatus } from "../services/claude-auth.js";
 import {
+  cancelLogin,
+  getLoginState,
+  startLogin,
+  submitLoginCode,
+} from "../services/claude-login.js";
+import {
   getDefaultWorkspace,
   getProjectRoot,
   getSkillsDir,
@@ -95,6 +101,35 @@ router.get("/claude-auth", async (req, res) => {
     email: status.email,
     probeError: status.probeError,
   });
+});
+
+// In-app sign-in. The renderer opens the returned URL with window.open, which
+// electron/main.cjs routes to shell.openExternal, then posts back the code the
+// browser shows. See server/services/claude-login.ts.
+router.post("/claude-auth/login", (_req, res) => {
+  res.json(startLogin());
+});
+
+router.get("/claude-auth/login", (_req, res) => {
+  const state = getLoginState();
+  if (!state) return res.status(404).json({ error: "No sign-in in progress" });
+  res.json(state);
+});
+
+router.post("/claude-auth/login/code", (req, res) => {
+  const code = typeof req.body?.code === "string" ? req.body.code.trim() : "";
+  if (!code) return res.status(400).json({ error: "Code required" });
+  if (code.length > 512) return res.status(400).json({ error: "Code too long" });
+
+  const state = submitLoginCode(code);
+  if (!state) return res.status(404).json({ error: "No sign-in in progress" });
+  res.json(state);
+});
+
+router.delete("/claude-auth/login", (_req, res) => {
+  const state = cancelLogin();
+  if (!state) return res.status(404).json({ error: "No sign-in in progress" });
+  res.json(state);
 });
 
 // Auto-detect installed MCP tools
