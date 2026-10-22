@@ -19,8 +19,10 @@ import { AccountPostsPage } from "./components/AccountPostsPage";
 import { TrafficDashboardPage } from "./components/TrafficDashboardPage";
 import { AgentDashboard } from "./components/AgentDashboard";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { ClaudeSetupBanner } from "./components/ClaudeSetupBanner";
 import { apiGet, apiPost, apiPut, apiPatch, apiDelete } from "./hooks/useApi";
 import { useDesktopUpdater } from "./hooks/useDesktopUpdater";
+import { useClaudeAuth } from "./hooks/useClaudeAuth";
 import { LanguageProvider } from "./hooks/useLanguage";
 
 export type Language = "zh-TW" | "en" | "ja";
@@ -494,6 +496,7 @@ export default function App() {
   const closePublish = useCallback(() => setShowPublish(false), []);
   const closePreview = useCallback(() => setPreviewFile(null), []);
   const backToChat = useCallback(() => setActivePage("chat"), []);
+  const claudeAuth = useClaudeAuth();
 
   const sidebarContent = (
     <Sidebar
@@ -580,75 +583,84 @@ export default function App() {
         )}
 
         {/* Main content */}
-        <div className="flex-1 flex min-w-0" role="main">
-          {showSettings ? (
-            <ErrorBoundary name="Settings">
-              <SettingsPage
-                isVisible={showSettings}
-                onClose={backToChat}
-                language={language}
-                onLanguageChange={handleLanguageChange}
-                desktopUpdateState={desktopUpdater.state}
-                onCheckForUpdates={desktopUpdater.checkForUpdates}
-                onDownloadUpdate={desktopUpdater.downloadUpdate}
-                onInstallUpdate={desktopUpdater.installUpdate}
-              />
-            </ErrorBoundary>
-          ) : showSocial ? (
-            <ErrorBoundary name="SocialAccounts">
-              <SocialAccountsPage onClose={backToChat} language={language} />
-            </ErrorBoundary>
-          ) : showScheduled ? (
-            <ErrorBoundary name="ScheduledTasks">
-              <ScheduledTasksPage onClose={backToChat} language={language} />
-            </ErrorBoundary>
-          ) : showAccountPosts ? (
-            <ErrorBoundary name="AccountPosts">
-              <AccountPostsPage onClose={backToChat} language={language} />
-            </ErrorBoundary>
-          ) : showTrafficDashboard ? (
-            <ErrorBoundary name="TrafficDashboard">
-              <TrafficDashboardPage onClose={backToChat} language={language} />
-            </ErrorBoundary>
-          ) : showAgentDashboard ? (
-            <ErrorBoundary name="AgentDashboard">
-              <AgentDashboard onClose={backToChat} language={language} />
-            </ErrorBoundary>
-          ) : (
-            <ErrorBoundary name="Chat">
-              <>
-                <ChatWindow
-                  sessionId={selectedSessionId}
-                  messages={messages}
-                  isConnected={isConnected}
-                  isLoading={isLoading}
-                  onSendMessage={handleSendMessage}
-                  onInterrupt={handleInterrupt}
-                  onShowFiles={() => setShowFiles(!showFiles)}
-                  onShowPublish={() => setShowPublish(true)}
-                  onNewSession={createSession}
-                  onPreviewFile={handlePreviewFile}
-                  workspacePath={sessions.find((s) => s.id === selectedSessionId)?.workspace_path}
-                  showFilesActive={showFiles}
+        <div className="flex-1 flex flex-col min-w-0" role="main">
+          {/* Shown until Claude has credentials — otherwise the agent answers
+              every prompt with "Not logged in" and nothing explains why. */}
+          <ClaudeSetupBanner
+            show={claudeAuth.needsSetup && !showSettings}
+            onOpenSettings={() => setActivePage("settings")}
+          />
+          <div className="flex-1 flex min-w-0 min-h-0">
+            {showSettings ? (
+              <ErrorBoundary name="Settings">
+                <SettingsPage
+                  isVisible={showSettings}
+                  onClose={backToChat}
                   language={language}
-                  accounts={accounts}
-                  targetAccountId={targetAccountId}
-                  onTargetAccountChange={setTargetAccountId}
-                  cliName={cliName}
+                  onLanguageChange={handleLanguageChange}
+                  claudeAuth={claudeAuth}
+                  desktopUpdateState={desktopUpdater.state}
+                  onCheckForUpdates={desktopUpdater.checkForUpdates}
+                  onDownloadUpdate={desktopUpdater.downloadUpdate}
+                  onInstallUpdate={desktopUpdater.installUpdate}
                 />
-
-                {/* FileExplorer - hidden on mobile, visible on md+ when toggled */}
-                <div className="hidden md:contents">
-                  <FileExplorer
+              </ErrorBoundary>
+            ) : showSocial ? (
+              <ErrorBoundary name="SocialAccounts">
+                <SocialAccountsPage onClose={backToChat} language={language} />
+              </ErrorBoundary>
+            ) : showScheduled ? (
+              <ErrorBoundary name="ScheduledTasks">
+                <ScheduledTasksPage onClose={backToChat} language={language} />
+              </ErrorBoundary>
+            ) : showAccountPosts ? (
+              <ErrorBoundary name="AccountPosts">
+                <AccountPostsPage onClose={backToChat} language={language} />
+              </ErrorBoundary>
+            ) : showTrafficDashboard ? (
+              <ErrorBoundary name="TrafficDashboard">
+                <TrafficDashboardPage onClose={backToChat} language={language} />
+              </ErrorBoundary>
+            ) : showAgentDashboard ? (
+              <ErrorBoundary name="AgentDashboard">
+                <AgentDashboard onClose={backToChat} language={language} />
+              </ErrorBoundary>
+            ) : (
+              <ErrorBoundary name="Chat">
+                <>
+                  <ChatWindow
                     sessionId={selectedSessionId}
-                    isVisible={showFiles}
-                    onToggle={() => setShowFiles(!showFiles)}
-                    onPreviewFile={handleExplorerPreview}
+                    messages={messages}
+                    isConnected={isConnected}
+                    isLoading={isLoading}
+                    onSendMessage={handleSendMessage}
+                    onInterrupt={handleInterrupt}
+                    onShowFiles={() => setShowFiles(!showFiles)}
+                    onShowPublish={() => setShowPublish(true)}
+                    onNewSession={createSession}
+                    onPreviewFile={handlePreviewFile}
+                    workspacePath={sessions.find((s) => s.id === selectedSessionId)?.workspace_path}
+                    showFilesActive={showFiles}
+                    language={language}
+                    accounts={accounts}
+                    targetAccountId={targetAccountId}
+                    onTargetAccountChange={setTargetAccountId}
+                    cliName={cliName}
                   />
-                </div>
-              </>
-            </ErrorBoundary>
-          )}
+
+                  {/* FileExplorer - hidden on mobile, visible on md+ when toggled */}
+                  <div className="hidden md:contents">
+                    <FileExplorer
+                      sessionId={selectedSessionId}
+                      isVisible={showFiles}
+                      onToggle={() => setShowFiles(!showFiles)}
+                      onPreviewFile={handleExplorerPreview}
+                    />
+                  </div>
+                </>
+              </ErrorBoundary>
+            )}
+          </div>
         </div>
 
         {/* File preview modal */}

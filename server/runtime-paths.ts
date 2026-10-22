@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, realpathSync, statSync } from "fs";
 import path from "path";
+import { createRequire } from "module";
 import { fileURLToPath } from "url";
 import { homedir } from "os";
 
@@ -47,6 +48,39 @@ export function isPackagedRuntime(env: NodeJS.ProcessEnv = process.env): boolean
 /** Repository root in dev, app root (`…/app.asar.unpacked`) when packaged. */
 export function getProjectRoot(): string {
   return projectRoot;
+}
+
+/**
+ * Absolute path to the Claude Code binary the Agent SDK ships with, or null
+ * when the platform package is missing.
+ *
+ * Resolved exactly the way the SDK resolves it — `createRequire(import.meta.url)`
+ * against the platform package — so it keeps working inside the esbuild bundle,
+ * where `import.meta.url` is `server-dist/server.mjs`, one level above the app's
+ * node_modules. Resolution is module lookup, not a project-relative path, which
+ * is why it belongs here with the other `import.meta.url` use rather than in a
+ * caller (see the comment on projectRoot).
+ */
+export function getBundledClaudePath(env: NodeJS.ProcessEnv = process.env): string | null {
+  // Escape hatch: point at another Claude Code build. Also the seam the auth
+  // tests use to drive the signed-in / signed-out / unreadable cases.
+  if (env.STUDIO_CLAUDE_BINARY) {
+    return existsSync(env.STUDIO_CLAUDE_BINARY) ? env.STUDIO_CLAUDE_BINARY : null;
+  }
+
+  const require = createRequire(import.meta.url);
+  const base = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`;
+  // Linux ships a separate musl build; the SDK tries both names.
+  for (const pkg of [base, `${base}-musl`]) {
+    try {
+      const dir = path.dirname(require.resolve(`${pkg}/package.json`));
+      const binary = path.join(dir, process.platform === "win32" ? "claude.exe" : "claude");
+      if (existsSync(binary)) return binary;
+    } catch {
+      // Not installed for this platform — try the next name.
+    }
+  }
+  return null;
 }
 
 export function getLocalDataDir(): string {

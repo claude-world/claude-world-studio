@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added — First run
+
+- **Studio now says when Claude is not signed in, instead of letting the agent pretend to answer.** With no credentials the bundled Agent SDK replies to every prompt with the literal text `Not logged in · Please run /login` — delivered as a normal assistant message, with the turn reported as `success: true` and zero cost. `/login` is a Claude Code CLI slash command that does not exist in this app, nothing in the UI mentioned signing in, and the scheduler and quality gates would have counted that turn as a success. Found by installing the packaged app into a scrubbed environment rather than by reading the code.
+- `GET /api/settings/claude-auth` reports sign-in state from the bundled binary's `claude auth status`. A chat turn is now blocked with a real error when there are no credentials, a banner appears on every page until there are, and Settings gains a **Claude account** card with the status and sign-in steps (zh-TW / en / ja).
+- `ANTHROPIC_API_KEY` users are unaffected — the probe reports them as signed in.
+- A probe that fails is never read as "signed out": a broken check must not block a working app. The non-zero exit code `claude auth status` returns when signed out is treated as an answer, not a failure — `test/claude-auth.test.ts` pins that, and fails without the fix.
+- `STUDIO_CLAUDE_BINARY` overrides which Claude Code build is used, for an unusual install or for tests.
+
 ### Fixed — Publishing
 
 - **`npm publish` no longer risks shipping the packaged desktop app.** `dist/` is both the vite output and electron-builder's output directory, and the npm `files` list named it wholesale — so a publish from any machine that had run `electron:build` would have uploaded the `.dmg`, the `.zip` and the unpacked `.app`. Measured at **758.6 MB across 3,485 files**; naming `dist/index.html` and `dist/assets/` instead brings it to **402.8 kB across 72 files**, with the client assets, server sources and CLI all still present. CI was never affected — it publishes from a fresh checkout where `dist/` holds only the vite output. `test/packaging.test.ts` now fails if a bare `dist/` comes back.

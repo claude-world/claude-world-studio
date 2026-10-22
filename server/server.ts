@@ -22,6 +22,7 @@ import { rateLimiter } from "./middleware/rate-limiter.js";
 import { logger } from "./logger.js";
 import { registerCleanup, runAllCleanups } from "./cleanup-registry.js";
 import { getProjectRoot } from "./runtime-paths.js";
+import { primeClaudeAuthStatus } from "./services/claude-auth.js";
 
 const projectRoot = getProjectRoot();
 
@@ -98,6 +99,11 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 // Best-effort sweep of credential-bearing MCP config temp dirs left by
 // previous server runs (live dirs are removed by Session.close()).
 cleanupStaleMcpConfigDirs();
+
+// Warm the Claude sign-in check in the background. The first probe pages in a
+// 260 MB binary and takes ~2s; doing it now means the setup banner and the
+// first chat turn both read a warm cache.
+primeClaudeAuthStatus();
 
 // Session management (long-lived agent sessions)
 const sessions: Map<string, Session> = new Map();
