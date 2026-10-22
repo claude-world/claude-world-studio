@@ -16,6 +16,9 @@ const T = {
     apply: "套用",
     found: "找到",
     uvxDetected: "uvx 已偵測 — MCP 伺服器自動設定，不需要手動路徑。",
+    uvxMissing: "找不到 uvx — 趨勢探索、網頁研究與 NotebookLM 無法使用。",
+    uvxMissingHow: "安裝 uv（內含 uvx）後，再按一次「掃描系統」。",
+    uvxInstallLink: "安裝 uv",
     aiCodingClis: "AI 編碼 CLI",
     scanningSystem: "掃描系統中...",
     detected: "已偵測",
@@ -91,6 +94,9 @@ const T = {
     apply: "Apply",
     found: "found",
     uvxDetected: "uvx detected — MCP servers auto-configured, no manual paths needed.",
+    uvxMissing: "uvx not found — trend discovery, web research and NotebookLM are unavailable.",
+    uvxMissingHow: 'Install uv (it provides uvx), then press "Scan system" again.',
+    uvxInstallLink: "Install uv",
     aiCodingClis: "AI Coding CLIs",
     scanningSystem: "Scanning system...",
     detected: "detected",
@@ -167,6 +173,9 @@ const T = {
     apply: "適用",
     found: "検出",
     uvxDetected: "uvx 検出 — MCP サーバーは自動設定済み、手動パスは不要です。",
+    uvxMissing: "uvx が見つかりません — トレンド探索・Web リサーチ・NotebookLM は利用できません。",
+    uvxMissingHow: "uv（uvx を含む）をインストールしてから「システムをスキャン」を押してください。",
+    uvxInstallLink: "uv をインストール",
     aiCodingClis: "AI コーディング CLI",
     scanningSystem: "システムをスキャン中...",
     detected: "検出済み",
@@ -725,6 +734,28 @@ export function SettingsPage({
                 tooltipNotFound={t.tooltipNotFound}
               />
               <span>{t.uvxDetected}</span>
+            </div>
+          )}
+          {/* The negative case used to be silent: with no uvx the three MCP
+              servers are skipped and the features simply do nothing. */}
+          {Object.keys(detected).length > 0 && !detected["uvxAvailable"]?.found && (
+            <div className="mt-2 px-3 py-2 bg-amber-100 border border-amber-300 rounded-md flex items-start gap-2 text-xs text-amber-900 dark:bg-amber-900/50 dark:border-amber-600 dark:text-amber-200">
+              <StatusDot
+                found={false}
+                tooltipFound={t.tooltipDetected}
+                tooltipNotFound={t.tooltipNotFound}
+              />
+              <span className="min-w-0">
+                {t.uvxMissing} {t.uvxMissingHow}{" "}
+                <a
+                  href="https://docs.astral.sh/uv/getting-started/installation/"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="underline font-medium"
+                >
+                  {t.uvxInstallLink}
+                </a>
+              </span>
             </div>
           )}
           {Object.keys(detected).length > 0 && (
