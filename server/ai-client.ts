@@ -1,7 +1,5 @@
 import { query, type Options, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { existsSync, readFileSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
 import { buildMcpServers, getSettings } from "./mcp-config.js";
 import { createStudioMcpServer } from "./services/studio-mcp.js";
 import { memoryService } from "./services/memory-service.js";
@@ -9,9 +7,6 @@ import store from "./db.js";
 import type { AgenticMode, Language, SocialAccount } from "./types.js";
 import type { ICliSession } from "./cli-session.js";
 import { getSkillCandidatePaths } from "./runtime-paths.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 /** Load the threads-viral-agent SKILL.md on demand (strip frontmatter) */
 function loadViralAgentSkill(): string {

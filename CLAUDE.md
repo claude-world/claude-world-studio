@@ -15,7 +15,8 @@ Content pipeline app: trend discovery, deep research, social publishing — with
 - `client/components/AgentDashboard.tsx` — Goals/Workflows/Memory/Strategy dashboard page
 - `client/hooks/` — `useApi` (typed fetch), `useLanguage` (context)
 - `electron/` — Electron desktop wrapper
-- `scripts/` — Build/test tooling (`electron-build.cjs`, `desktop-smoke.cjs`, `ensure-native-abi.cjs`) plus dev-only `threads_api.py`; nothing here runs at server runtime
+- `server-dist/` — Build output: the packaged server bundle (git-ignored, see Desktop packaging)
+- `scripts/` — Build/test tooling (`build-server.cjs`, `electron-build.cjs`, `desktop-smoke.cjs`, `ensure-native-abi.cjs`) plus dev-only `threads_api.py`; nothing here runs at server runtime
 - `.claude/skills/` — Skill definitions for Claude Code
 
 ## Agentic Subsystem (v2.2)
@@ -63,6 +64,18 @@ Content pipeline app: trend discovery, deep research, social publishing — with
 | `generate_strategy_from_analytics` | Inline analytics strategy (number[] hours)        |
 | `run_strategy_agent`               | Full StrategyAgent pipeline with calendar         |
 
+## Desktop Packaging
+
+The packaged app runs **one esbuild bundle**, not the TypeScript sources. `scripts/build-server.cjs` compiles `server/server.ts` → `server-dist/server.mjs`; `electron/server-runtime.cjs` spawns that with Electron-as-node. Rules that keep it working:
+
+- **Only `runtime-paths.ts` may read `import.meta.url`.** Bundling collapses every module's `import.meta.url` onto the bundle's path, so a per-file `__dirname` silently resolves to the wrong depth. Use `getProjectRoot()` instead. The bundle must stay exactly one directory below the app root for that to hold — `test/packaging.test.ts` asserts it
+- **`EXTERNAL` in `scripts/build-server.cjs` is load-bearing.** `better-sqlite3` is a native addon; `@anthropic-ai/claude-agent-sdk` locates its CLI binary with `createRequire(import.meta.url).resolve()`, so it only works from a real package directory; `zod` must be a single instance shared with the SDK, whose `tool()` helper converts schemas with its own copy
+- **`build.files` can only _exclude_ under `node_modules`.** electron-builder's `getNodeModuleFileMatcher` keeps just the `!` patterns and prepends `**/*`, so a re-include after `!node_modules/**/*` is silently dropped — write a deny-list, never an allow-list, for dependencies
+- **esbuild's ESM output has no `require`.** `scripts/build-server.cjs` prepends a `createRequire` banner; without it, esbuild's `__require` shim throws the first time bundled CommonJS reaches a dynamic require
+- `test/packaging.test.ts` recomputes the runtime dependency closure and fails if an exclusion covers something the app resolves on disk — or if a new dependency ships without being needed
+- `npm run test:desktop-smoke` checks the shipped tree (bundle unpacked, `tsx`/`esbuild`/`@anthropic-ai/sdk` absent, better-sqlite3 addon present, Agent SDK loads) before exercising the running app
+- The **npm package is separate** and still ships `server/` + runs `tsx server/server.ts`; `tsx` stays a production dependency for it
+
 ## Key Design Rules
 
 1. **No Python runtime dependencies**: Publishing uses native TypeScript `fetch()`, not Python scripts. The `threads_api.py` is a dev-only tool, not used by the server.
@@ -81,6 +94,7 @@ Content pipeline app: trend discovery, deep research, social publishing — with
 npm run dev              # Start dev server + Vite
 npm run build            # Build client
 npm run typecheck        # TypeScript check
+npm run build:server     # Bundle server/ → server-dist/server.mjs (esbuild)
 npm run electron:dev     # Electron dev mode
-npm run electron:build   # Production .dmg
+npm run electron:build   # Production .dmg (build + build:server + package)
 ```

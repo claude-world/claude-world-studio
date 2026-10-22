@@ -5,7 +5,6 @@ import { createServer } from "http";
 import { WebSocketServer } from "ws";
 import path from "path";
 import fs from "fs";
-import { fileURLToPath } from "url";
 import type { WSClient, IncomingWSMessage } from "./types.js";
 import store from "./db.js";
 import { Session } from "./session.js";
@@ -22,9 +21,9 @@ import { TaskScheduler } from "./services/scheduler.js";
 import { rateLimiter } from "./middleware/rate-limiter.js";
 import { logger } from "./logger.js";
 import { registerCleanup, runAllCleanups } from "./cleanup-registry.js";
+import { getProjectRoot } from "./runtime-paths.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const projectRoot = getProjectRoot();
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 // Security: bind to localhost only — this server runs bypassPermissions
@@ -46,16 +45,16 @@ app.use(express.json({ limit: "1mb" }));
 // Serve built assets in production, raw client in dev
 // Static assets must be served BEFORE the rate limiter so that CSS/JS/images
 // don't consume the API rate budget.
-const distDir = path.join(__dirname, "../dist");
+const distDir = path.join(projectRoot, "dist");
 if (fs.existsSync(distDir)) {
   app.use(express.static(distDir));
   app.get("/", (_req, res) => {
     res.sendFile(path.join(distDir, "index.html"));
   });
 } else {
-  app.use("/client", express.static(path.join(__dirname, "../client")));
+  app.use("/client", express.static(path.join(projectRoot, "client")));
   app.get("/", (_req, res) => {
-    res.sendFile(path.join(__dirname, "../client/index.html"));
+    res.sendFile(path.join(projectRoot, "client", "index.html"));
   });
 }
 
