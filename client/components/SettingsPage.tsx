@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import type { Language } from "../App";
 import { DesktopUpdateCard } from "./DesktopUpdateCard";
+import { ClaudeAccountCard } from "./ClaudeAccountCard";
 import type { DesktopUpdateState } from "../hooks/useDesktopUpdater";
+import type { UseClaudeAuth } from "../hooks/useClaudeAuth";
 
 const T = {
   "zh-TW": {
@@ -238,6 +240,7 @@ interface SettingsPageProps {
   onClose: () => void;
   language: Language;
   onLanguageChange: (lang: Language) => void;
+  claudeAuth: UseClaudeAuth;
   desktopUpdateState: DesktopUpdateState;
   onCheckForUpdates: () => void | Promise<unknown>;
   onDownloadUpdate: () => void | Promise<unknown>;
@@ -449,6 +452,7 @@ export function SettingsPage({
   onClose,
   language,
   onLanguageChange,
+  claudeAuth,
   desktopUpdateState,
   onCheckForUpdates,
   onDownloadUpdate,
@@ -675,6 +679,12 @@ export function SettingsPage({
       </div>
 
       <div className="p-6 max-w-2xl space-y-8">
+        <ClaudeAccountCard
+          status={claudeAuth.status}
+          loading={claudeAuth.loading}
+          onRecheck={() => void claudeAuth.refresh()}
+        />
+
         <DesktopUpdateCard
           language={language}
           state={desktopUpdateState}

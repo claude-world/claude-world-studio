@@ -6,6 +6,15 @@ import { getSettings, writeMcpConfigFile, removeMcpConfigFile } from "./mcp-conf
 import store from "./db.js";
 import { logger } from "./logger.js";
 import { registerCleanup } from "./cleanup-registry.js";
+import { isDefinitelySignedOut } from "./services/claude-auth.js";
+
+/**
+ * Shown in the chat when there are no Claude credentials. Deliberately names
+ * Settings rather than a terminal command: the Settings page carries the
+ * instructions, so there is one place to look and one place to improve.
+ */
+const NOT_SIGNED_IN_ERROR =
+  "Not signed in to Claude. Claude World Studio needs an Anthropic account before the agent can run — open Settings to sign in.";
 
 /**
  * Build a compact conversation recap from previous messages.
@@ -191,6 +200,41 @@ export class Session {
       sessionId: this.sessionId,
     });
 
+    // The bundled Agent SDK answers "Not logged in · Please run /login" as if
+    // it were the assistant, and reports the turn as a success. Catch that
+    // here so the user gets a real error instead. Only the Claude path is
+    // gated — the other CLIs carry their own credentials.
+    if (this.cliName === "claude") {
+      void this.forwardWhenAuthenticated(content);
+      return;
+    }
+
+    this.forward(content);
+  }
+
+  private async forwardWhenAuthenticated(content: string): Promise<void> {
+    let signedOut = false;
+    try {
+      signedOut = await isDefinitelySignedOut();
+    } catch {
+      // Never let a failed probe block a working app.
+      signedOut = false;
+    }
+
+    if (this.isClosed) return;
+
+    if (signedOut) {
+      logger.warn("Session", `Blocked a turn in ${this.sessionId}: Claude is not signed in`);
+      this.broadcastError(NOT_SIGNED_IN_ERROR);
+      this.broadcast({ type: "result", success: false, sessionId: this.sessionId });
+      this.hasResult = true;
+      return;
+    }
+
+    this.forward(content);
+  }
+
+  private forward(content: string): void {
     this.cliSession.sendMessage(content);
 
     if (!this.isListening) {

@@ -9,6 +9,7 @@ const execFileAsync = promisify(execFile);
 import store from "../db.js";
 import { getSettings } from "../mcp-config.js";
 import { logger } from "../logger.js";
+import { getClaudeAuthStatus } from "../services/claude-auth.js";
 import {
   getDefaultWorkspace,
   getProjectRoot,
@@ -81,6 +82,19 @@ router.get("/pick-folder", async (_req, res) => {
   } catch {
     res.json({ path: "" }); // User cancelled
   }
+});
+
+// Is the bundled Claude Code signed in? Drives the setup banner — without
+// credentials the agent answers every prompt with "Not logged in · Please run
+// /login" and still reports success, so the UI has to say so itself.
+router.get("/claude-auth", async (req, res) => {
+  const status = await getClaudeAuthStatus({ refresh: req.query.refresh === "1" });
+  res.json({
+    loggedIn: status.loggedIn,
+    authMethod: status.authMethod,
+    email: status.email,
+    probeError: status.probeError,
+  });
 });
 
 // Auto-detect installed MCP tools
