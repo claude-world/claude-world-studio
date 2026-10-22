@@ -64,6 +64,15 @@ Content pipeline app: trend discovery, deep research, social publishing — with
 | `generate_strategy_from_analytics` | Inline analytics strategy (number[] hours)        |
 | `run_strategy_agent`               | Full StrategyAgent pipeline with calendar         |
 
+## Security Scanning (CodeQL)
+
+Code scanning is at **0 open alerts**. Two rules were triaged on 2026-10-22; the reasons live on the alerts themselves, summarised here so nobody re-derives them:
+
+- **`js/path-injection` — `server/routes/files.ts`, dismissed false positive.** The file route checks containment twice: `resolveWorkspaceFilePath()` lexically, before any filesystem call, and a `realpath()` comparison after it, to catch a symlink inside the workspace pointing out. CodeQL does not model the helper as a barrier, so it still flags the `realpath()` call. `test/files-path-traversal.test.ts` refuses 12 traversal variants and keeps 5 positive controls — **run it whenever that route changes**
+- **`js/missing-rate-limiting` ×8 — dismissed.** `server/middleware/rate-limiter.ts` is hand-rolled (120 req/60 s per IP, covered by `test/rate-limiter.test.ts`) and CodeQL only models a fixed set of limiter libraries, so it flags routes that already sit behind `app.use(rateLimiter)` — those are false positives. The two `app.get("/")` handlers in `server.ts` genuinely do precede the limiter, deliberately, so page assets don't consume the API budget; they serve one static `index.html`, so those are "won't fix"
+- Both dismissals rest on the server binding **`127.0.0.1` only** (verified with `lsof`: a single `TCP 127.0.0.1:<port>` socket, no wildcard, and a refused connect to the host's LAN address). **If that ever changes, revisit both.**
+- **Editing a flagged line re-fingerprints its alert**: CI goes red with a "new" alert that is the same finding. Re-dismiss with the same reason — don't reshape working code to satisfy the scanner
+
 ## Desktop Packaging
 
 The packaged app runs **one esbuild bundle**, not the TypeScript sources. `scripts/build-server.cjs` compiles `server/server.ts` → `server-dist/server.mjs`; `electron/server-runtime.cjs` spawns that with Electron-as-node. Rules that keep it working:
