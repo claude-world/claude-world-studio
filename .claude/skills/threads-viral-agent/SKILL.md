@@ -20,15 +20,17 @@ Autonomous agent: trend discovery → source verification → patent-optimized c
 
 ## Accounts & Tokens
 
-Tokens in `.env` at skill root (auto-loaded by all scripts, no manual export needed):
+Account IDs and tokens live in `.env` at skill root (auto-loaded by all scripts, no
+manual export needed). Each account is addressed by a suffix — `CW`, `LF` — and the
+scripts read every value from the environment, never from this file:
 
-| Account              | Threads ID          | IG ID               | Token vars                        |
-| -------------------- | ------------------- | ------------------- | --------------------------------- |
-| @claude.world.taiwan | `26105870269107920` | `26911598668443478` | `THREADS_TOKEN_CW`, `IG_TOKEN_CW` |
-| @lucasfutures        | `25104893002544779` | `25337739812567565` | `THREADS_TOKEN_LF`, `IG_TOKEN_LF` |
+| Suffix | Threads user ID   | Threads token      | IG user ID   | IG token      |
+| ------ | ----------------- | ------------------ | ------------ | ------------- |
+| `CW`   | `THREADS_USER_CW` | `THREADS_TOKEN_CW` | `IG_USER_CW` | `IG_TOKEN_CW` |
+| `LF`   | `THREADS_USER_LF` | `THREADS_TOKEN_LF` | `IG_USER_LF` | `IG_TOKEN_LF` |
 
-- **App ID**: `875447821838410` (`THREADS_APP_ID`)
-- **Token expiry**: 60 days, current ~2026-05-11
+- **App ID**: `THREADS_APP_ID`
+- **Token expiry**: 60 days
 - **Renew**: `python3 scripts/threads_oauth.py auth-url` → authorize → `full --code CODE`
 - **Select account**: `--account cw` or `--account lf`
 
