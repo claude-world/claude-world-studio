@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed — Publishing
+
+- **`npm publish` no longer risks shipping the packaged desktop app.** `dist/` is both the vite output and electron-builder's output directory, and the npm `files` list named it wholesale — so a publish from any machine that had run `electron:build` would have uploaded the `.dmg`, the `.zip` and the unpacked `.app`. Measured at **758.6 MB across 3,485 files**; naming `dist/index.html` and `dist/assets/` instead brings it to **402.8 kB across 72 files**, with the client assets, server sources and CLI all still present. CI was never affected — it publishes from a fresh checkout where `dist/` holds only the vite output. `test/packaging.test.ts` now fails if a bare `dist/` comes back.
+
 ### Security
 
 - **`GET /api/sessions/:id/files/*` no longer reveals whether a file exists outside the workspace.** It called `realpath()` on the caller's path _before_ checking containment, so the status code answered the question for any path on the machine — 403 for a real file, 404 for a missing one. Containment is now decided lexically first, through the existing `resolveWorkspaceFilePath()` helper, and the post-`realpath()` check stays to catch a symlink inside the workspace pointing out of it. The server binds `127.0.0.1` only, so this was reachable by local processes rather than over the network, and no file content was ever disclosed.
