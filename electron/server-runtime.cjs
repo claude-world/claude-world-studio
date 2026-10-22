@@ -135,7 +135,6 @@ function buildServerSpawnConfig({
       STUDIO_DEFAULT_WORKSPACE: runtimePaths.workspaceDir,
       STUDIO_SKILLS_PATH: runtimePaths.skillsDir,
       STUDIO_BUNDLED_SKILLS_PATH: runtimePaths.bundledSkillsDir,
-      STUDIO_NODE_PATH: runtimeNodePath,
     },
     mergedPath,
     runtimeNodePath,
