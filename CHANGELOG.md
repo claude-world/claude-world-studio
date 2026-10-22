@@ -4,6 +4,8 @@
 
 ### Added — First run
 
+- **Settings now says when `uvx` is missing.** Without it `buildMcpServers()` skips trend-pulse, cf-browser and notebooklm entirely — and logged nothing at all when no paths were configured, so the three headline features silently did nothing while the app looked healthy. The MCP panel showed a green "uvx detected" banner in the positive case and said nothing in the negative one; it now names the affected features, the remedy, and links to the uv install guide (zh-TW / en / ja).
+
 - **Studio now says when Claude is not signed in, instead of letting the agent pretend to answer.** With no credentials the bundled Agent SDK replies to every prompt with the literal text `Not logged in · Please run /login` — delivered as a normal assistant message, with the turn reported as `success: true` and zero cost. `/login` is a Claude Code CLI slash command that does not exist in this app, nothing in the UI mentioned signing in, and the scheduler and quality gates would have counted that turn as a success. Found by installing the packaged app into a scrubbed environment rather than by reading the code.
 - `GET /api/settings/claude-auth` reports sign-in state from the bundled binary's `claude auth status`. A chat turn is now blocked with a real error when there are no credentials, a banner appears on every page until there are, and Settings gains a **Claude account** card with the status and sign-in steps (zh-TW / en / ja).
 - `ANTHROPIC_API_KEY` users are unaffected — the probe reports them as signed in.
