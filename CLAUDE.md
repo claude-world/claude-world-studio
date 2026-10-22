@@ -73,6 +73,14 @@ Code scanning is at **0 open alerts**. Two rules were triaged on 2026-10-22; the
 - Both dismissals rest on the server binding **`127.0.0.1` only** (verified with `lsof`: a single `TCP 127.0.0.1:<port>` socket, no wildcard, and a refused connect to the host's LAN address). **If that ever changes, revisit both.**
 - **Editing a flagged line re-fingerprints its alert**: CI goes red with a "new" alert that is the same finding. Re-dismiss with the same reason — don't reshape working code to satisfy the scanner
 
+## Releasing a Desktop Build
+
+- **Staple the DMG, then recompute `latest-mac.yml`.** `xcrun stapler staple` rewrites the DMG, so the sha512 and size electron-builder wrote before stapling no longer match. The manifest is not re-checked at build time and nothing fails locally — the breakage lands later, on users whose installed app tries to auto-update. Recompute the hash **from the stapled file** and diff it against the manifest before uploading. This has cost time twice (v2.3.0, then again at v2.4.0 planning)
+- Verify the artifact, not the config: `spctl --assess --type execute` on the `.app` must say `accepted / Notarized Developer ID`, and `xcrun stapler validate` must pass on both the `.app` and the `.dmg`
+- **Content-audit the built artifact before upload.** `app.asar.unpacked` must contain exactly `.claude/`, `dist/`, `node_modules/`, `package.json`, `server-dist/` — no `data/`, no `*.db`, no `.env`, no keys. Releases v1.3.0–v2.0.0 shipped a live SQLite DB with real tokens; the `files` allow-list is what prevents a repeat, so check the output rather than trusting it
+- Build from a clean checkout. `dist/` is both the vite output and electron-builder's output directory, so a stale local tree can mix artifacts
+- Release assets use the dashed `safeArtifactName` (`Claude-World-Studio-<version>-arm64.dmg`), and `latest-mac.yml` must be uploaded with them or auto-update breaks
+
 ## Desktop Packaging
 
 The packaged app runs **one esbuild bundle**, not the TypeScript sources. `scripts/build-server.cjs` compiles `server/server.ts` → `server-dist/server.mjs`; `electron/server-runtime.cjs` spawns that with Electron-as-node. Rules that keep it working:
