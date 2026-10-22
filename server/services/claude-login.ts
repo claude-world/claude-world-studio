@@ -47,6 +47,12 @@ const CODE_TIMEOUT_MS = 10 * 60_000;
  * endless spinner this flow exists to avoid.
  */
 const FINISH_TIMEOUT_MS = 90_000;
+/**
+ * Codes are checked upstream by Anthropic, not here, but an unbounded retry
+ * loop would still let anything that can reach the loopback port drive the
+ * child process indefinitely. A fumbled paste or two is normal; ten is not.
+ */
+const MAX_CODE_ATTEMPTS = 10;
 
 interface ActiveLogin {
   id: string;
@@ -59,6 +65,7 @@ interface ActiveLogin {
   urlTimer: NodeJS.Timeout;
   codeTimer?: NodeJS.Timeout;
   finishTimer?: NodeJS.Timeout;
+  attempts: number;
 }
 
 let active: ActiveLogin | null = null;
@@ -147,6 +154,7 @@ export function startLogin(): LoginState {
     child,
     stdout: "",
     stderr: "",
+    attempts: 0,
     urlTimer: setTimeout(() => {
       finish(login, "failed", "Timed out waiting for the sign-in page. Check your connection.");
     }, URL_TIMEOUT_MS),
@@ -218,6 +226,12 @@ export function startLogin(): LoginState {
 export function submitLoginCode(code: string): LoginState | null {
   if (!active) return null;
   if (active.phase !== "awaiting_code") return snapshot(active);
+
+  active.attempts += 1;
+  if (active.attempts > MAX_CODE_ATTEMPTS) {
+    finish(active, "failed", "Too many attempts. Start the sign-in again.");
+    return snapshot(active);
+  }
 
   active.phase = "finishing";
   active.error = undefined;

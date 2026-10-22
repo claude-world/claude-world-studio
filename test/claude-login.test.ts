@@ -150,6 +150,21 @@ describe("in-app Claude sign-in", () => {
     assert.match(state.error || "", /not found/i);
   });
 
+  it("stops an unbounded retry loop", async () => {
+    process.env.STUDIO_CLAUDE_BINARY = stub("flood.sh", RETRIES_ON_BAD_CODE);
+    login.startLogin();
+    await waitForPhase("awaiting_code");
+
+    for (let i = 0; i < 12; i++) {
+      if (login.getLoginState()?.phase === "failed") break;
+      login.submitLoginCode(`bad-${i}`);
+      await waitForPhase("awaiting_code", 3000).catch(() => {});
+    }
+
+    assert.strictEqual(login.getLoginState()?.phase, "failed");
+    assert.match(login.getLoginState()?.error || "", /Too many attempts/);
+  });
+
   it("ignores a code when no sign-in is running", () => {
     assert.strictEqual(login.submitLoginCode("stray"), null);
     assert.strictEqual(login.getLoginState(), null);
